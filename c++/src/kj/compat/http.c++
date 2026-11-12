@@ -1723,6 +1723,10 @@ public:
 
   inline const HttpHeaders& getHeaders() const { return headers; }
 
+  Promise<size_t> cancelBodyReadOnDestruction(Promise<size_t> read) {
+    return bodyReadCanceler.wrap(kj::mv(read));
+  }
+
   Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) {
     // Read message body data.
 
@@ -1850,6 +1854,10 @@ private:
   kj::Promise<void> messageReadQueue = kj::READY_NOW;
   // Resolves when all previous HTTP messages have completed, allowing the next pipelined message
   // to be read.
+
+  // Cancel retained entity-body reads before the HTTP parser's buffers and queues are destroyed.
+  // Keep this as the last data member: body wrappers can outlive this connection object.
+  kj::Canceler bodyReadCanceler;
 
   enum class HeaderType {
     MESSAGE,
@@ -2048,7 +2056,43 @@ public:
     }
   }
 
+  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+    KJ_REQUIRE(!readInProgress, "already reading");
+    readInProgress = true;
+    KJ_DEFER(readInProgress = false);
+
+    if (finished && pendingRead == kj::none && bufferedStart == bufferedEnd) co_return 0;
+    size_t total = 0;
+    while (maxBytes > 0) {
+      prepareRead(maxBytes);
+      KJ_IF_SOME(pending, pendingRead) {
+        bufferedEnd = co_await pending.addBranch();
+        pendingRead = kj::none;
+        bufferedStart = 0;
+      }
+      if (bufferedStart == bufferedEnd) co_return total;
+      auto amount = kj::min(maxBytes, bufferedEnd - bufferedStart);
+      memcpy(buffer, readBuffer.begin() + bufferedStart, amount);
+      bufferedStart += amount;
+      onBytesRead(amount);
+      buffer = reinterpret_cast<byte*>(buffer) + amount;
+      maxBytes -= amount;
+      total += amount;
+      if (total >= minBytes) co_return total;
+    }
+    co_return total;
+  }
+
+  Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
+    // Let pipes and promised outputs adopt the pump before reserving this input for a reader.
+    KJ_IF_SOME(promise, output.tryPumpFrom(*this, amount)) {
+      return kj::mv(promise);
+    }
+    return pumpToImpl(output, amount);
+  }
+
   Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+    if (pendingRead != kj::none || bufferedStart != bufferedEnd) return kj::none;
     if (finished) {
       // Already reached the end of the entity body; EOF is a valid synchronous answer.
       //
@@ -2060,6 +2104,10 @@ public:
   }
 
 protected:
+  virtual Promise<size_t> tryReadImpl(void* buffer, size_t minBytes, size_t maxBytes) = 0;
+
+  virtual void onBytesRead(size_t amount) {}
+
   HttpInputStreamImpl& getInner() {
     KJ_IF_SOME(i, weakInner) {
       return i;
@@ -2083,6 +2131,50 @@ protected:
 private:
   kj::Maybe<HttpInputStreamImpl&> weakInner;
   bool finished = false;
+  bool readInProgress = false;
+  kj::Array<byte> readBuffer;
+  size_t bufferedStart = 0;
+  size_t bufferedEnd = 0;
+  // Declared after the buffer so any pending read is canceled before its storage is destroyed.
+  kj::Maybe<kj::ForkedPromise<size_t>> pendingRead;
+
+  void prepareRead(uint64_t maxBytes) {
+    if (bufferedStart != bufferedEnd || pendingRead != kj::none || finished) return;
+    if (readBuffer.size() == 0) readBuffer = kj::heapArray<byte>(32768);
+    // The retained parser read owns its storage and survives cancellation of a public caller,
+    // while the connection-owned canceler stops it before HTTP parser storage is destroyed.
+    // Capture the connection before the read can reach EOF and detach this body wrapper.
+    auto& inner = getInner();
+    pendingRead = inner.cancelBodyReadOnDestruction(
+        tryReadImpl(readBuffer.begin(), 1, kj::min(maxBytes, readBuffer.size()))).fork();
+  }
+
+  Promise<uint64_t> pumpToImpl(AsyncOutputStream& output, uint64_t amount) {
+    KJ_REQUIRE(!readInProgress, "already reading");
+    readInProgress = true;
+    KJ_DEFER(readInProgress = false);
+
+    uint64_t total = 0;
+    while (total < amount) {
+      prepareRead(amount - total);
+      KJ_IF_SOME(pending, pendingRead) {
+        bufferedEnd = co_await pending.addBranch();
+        pendingRead = kj::none;
+        bufferedStart = 0;
+      }
+      if (bufferedStart == bufferedEnd) co_return total;
+      auto writeAmount = kj::min(amount - total, bufferedEnd - bufferedStart);
+      auto data = readBuffer.slice(bufferedStart, bufferedStart + writeAmount);
+      // Match read-then-write pumping: once handed to the output these bytes are consumed,
+      // even if that write later fails or is canceled. A later drain must never replay them.
+      bufferedStart += writeAmount;
+      onBytesRead(writeAmount);
+      total += writeAmount;
+      if (!output.tryWriteSync(data)) co_await output.write(data);
+    }
+    co_return total;
+  }
+
 };
 
 class HttpNullEntityReader final: public HttpEntityBodyReader {
@@ -2097,7 +2189,7 @@ public:
     doneReading();
   }
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  Promise<size_t> tryReadImpl(void* buffer, size_t minBytes, size_t maxBytes) override {
     return constPromise<size_t, 0>();
   }
 
@@ -2116,7 +2208,7 @@ public:
   HttpConnectionCloseEntityReader(HttpInputStreamImpl& inner)
       : HttpEntityBodyReader(inner) {}
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  Promise<size_t> tryReadImpl(void* buffer, size_t minBytes, size_t maxBytes) override {
     if (alreadyDone()) co_return 0;
 
     auto amount = co_await getInner().tryRead(buffer, minBytes, maxBytes);
@@ -2132,15 +2224,15 @@ class HttpFixedLengthEntityReader final: public HttpEntityBodyReader {
 
 public:
   HttpFixedLengthEntityReader(HttpInputStreamImpl& inner, size_t length)
-      : HttpEntityBodyReader(inner), length(length) {
+      : HttpEntityBodyReader(inner), length(length), remainingLength(length) {
     if (length == 0) doneReading();
   }
 
   Maybe<uint64_t> tryGetLength() override {
-    return length;
+    return remainingLength;
   }
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  Promise<size_t> tryReadImpl(void* buffer, size_t minBytes, size_t maxBytes) override {
     KJ_REQUIRE(clean, "can't read more data after a previous read didn't complete");
     clean = false;
 
@@ -2184,66 +2276,12 @@ public:
     }
   }
 
-  Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
-    // SUBTLE: Before we go and implement pumpTo() ourselves, let's try to call
-    //   output.tryPumpFrom(). This is not because we think `output` might have some sort of
-    //   optimization that recognizes `HttpFixedLengthEntityReader` specifically, but rather
-    //   because if `output` never actually gets hooked up to anything, we'd like to avoid marking
-    //   ourselves dirty. In particular, if `output` is a PromisedOutputStream or one end of an
-    //   `AsyncPipe`, then its `tryPumpFrom()` will return a promise that first waits to find out
-    //   where the output will eventually flow to, then calls `input.pumpTo()` to pump directly to
-    //   that destination. That call to `pumpTo()` comes right back to *this* object, but with
-    //   a new `output`. Eventually, when we get hooked up to a stream whose `tryPumpFrom()`
-    //   returns null, THEN we have found our final destination, and we can mark ourselves dirty.
-    //
-    //   If we don't do this, there are cases where we'll set `clean = false` too soon, even though
-    //   the pump ends up being canceled before it actually connects to anything. This in turn
-    //   breaks the logic which tries to discard the request body if the app never read it -- we
-    //   can't discard the request body if we don't know how much there is to discard, and if
-    //   `clean = false` then we must assume we don't know.
-    KJ_IF_SOME(promise, output.tryPumpFrom(*this, amount)) {
-      return kj::mv(promise);
-    } else {
-      return pumpToImpl(output, amount);
-    }
-  }
-
 private:
   size_t length;
+  size_t remainingLength;
   bool clean = true;
 
-  Promise<uint64_t> pumpToImpl(AsyncOutputStream& output, uint64_t amount) {
-    KJ_REQUIRE(clean, "can't read more data after a previous read didn't complete");
-    clean = false;
-
-    // Clamp to the expected length.
-    if (amount > length) amount = length;
-
-    if (amount == 0) {
-      clean = true;
-      co_return 0;
-    }
-
-    auto actual = co_await getInner().pumpTo(output, amount);
-    length -= actual;
-
-    if (length == 0) {
-      doneReading();
-    } else if (actual < amount) {
-      // We hit EOF before pumping what was expected, but this means the stream ended prematurely
-      // without reaching the expected content-length, so throw an exception instead.
-      size_t expectedLength = length + actual;
-      kj::throwRecoverableException(KJ_EXCEPTION(
-        DISCONNECTED,
-        "premature EOF in HTTP entity body; did not reach Content-Length",
-        expectedLength,
-        actual
-      ));
-    }
-
-    clean = true;
-    co_return actual;
-  }
+  void onBytesRead(size_t amount) override { remainingLength -= amount; }
 };
 
 class HttpChunkedEntityReader final: public HttpEntityBodyReader {
@@ -2253,7 +2291,7 @@ public:
   HttpChunkedEntityReader(HttpInputStreamImpl& inner)
       : HttpEntityBodyReader(inner) {}
 
-  Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+  Promise<size_t> tryReadImpl(void* buffer, size_t minBytes, size_t maxBytes) override {
     KJ_REQUIRE(clean, "can't read more data after a previous read didn't complete");
     clean = false;
 
