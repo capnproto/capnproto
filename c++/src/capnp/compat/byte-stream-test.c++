@@ -680,6 +680,51 @@ KJ_TEST("Unbounded pump into a bounded pump's substream") {
   KJ_EXPECT(exactPointerWriter.receivedBuffer == nullptr);
 }
 
+KJ_TEST("KJ -> ByteStream RPC -> KJ pipe -> ByteStream -> KJ with shortening started mid-write") {
+  // The client writes to a ByteStream over RPC while the server starts pumping it into a second
+  // ByteStream it hosts itself. The bytes must come out in order whichever turn the pump starts on.
+  for (uint turnsBeforePump = 0; turnsBeforePump < 32; turnsBeforePump++) {
+    KJ_CONTEXT(turnsBeforePump);
+
+    kj::EventLoop eventLoop;
+    kj::WaitScope waitScope(eventLoop);
+    ByteStreamFactory factory;
+
+    auto backPipe = kj::newOneWayPipe();
+    auto middlePipe = kj::newOneWayPipe();
+
+    auto rpcConnection = kj::newTwoWayPipe();
+    capnp::TwoPartyClient client(*rpcConnection.ends[0]);
+    capnp::TwoPartyClient server(*rpcConnection.ends[1],
+        factory.kjToCapnp(kj::mv(middlePipe.out)),
+        rpc::twoparty::Side::SERVER);
+    auto stream = client.bootstrap().castAs<ByteStream>();
+    auto backWrapped = factory.capnpToKj(factory.kjToCapnp(kj::mv(backPipe.out)));
+
+    char received[9] = {};
+    auto readPromise = backPipe.in->tryRead(received, sizeof(received), sizeof(received));
+    waitScope.poll();
+
+    kj::Vector<kj::Promise<void>> writes;
+    for (auto text: {"foo"_kj, "bar"_kj, "baz"_kj}) {
+      auto req = stream.writeRequest();
+      req.setBytes(text.asBytes());
+      writes.add(req.send().eagerlyEvaluate(nullptr));
+    }
+    waitScope.poll(turnsBeforePump);
+
+    auto pumpPromise = middlePipe.in->pumpTo(*backWrapped).eagerlyEvaluate(nullptr);
+
+    KJ_ASSERT(readPromise.poll(waitScope));
+    KJ_ASSERT(readPromise.wait(waitScope) == sizeof(received));
+    KJ_EXPECT(kj::heapString(received, sizeof(received)) == "foobarbaz");
+    for (auto& write: writes) {
+      write.wait(waitScope);
+    }
+  }
+}
+
+
 KJ_TEST("KJ -> ByteStream RPC -> KJ promise stream -> ByteStream -> KJ") {
   // Test what happens if we queue up several requests on a ByteStream and then it resolves to
   // a shorter path.

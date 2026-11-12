@@ -1966,20 +1966,6 @@ private:
         return kj::READY_NOW;
       }
 
-      // If we're resolving to anonther promise that is itself already resolved, skip past it.
-      //
-      // Note that `writeDescriptor()`, below, will also do this. However, before we call
-      // `writeDescriptor()`, we're going to implemnet an optimization where if we resolve to
-      // another promise (which is itself *not* resolved), we may reuse the same table entry
-      // without sending a `Resolve` at all (see below).
-      for (;;) {
-        KJ_IF_SOME(inner, resolution->getResolved()) {
-          resolution = inner.addRef();
-        } else {
-          break;
-        }
-      }
-
       // Update the export table to point at this object instead.  We know that our entry in the
       // export table is still live because when it is destroyed the asynchronous resolution task
       // (i.e. this code) is canceled.
