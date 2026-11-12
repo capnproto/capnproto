@@ -317,8 +317,9 @@ void JsonCodec::encode(DynamicValue::Reader input, Type type, JsonValue::Builder
       KJ_IF_SOME(field, which) {
         // Even if the union field is null, if it is not the default field of the union then we
         // have to print it anyway.
-        unionFieldIsNull = !structValue.has(field, impl->hasMode);
-        if (field.getProto().getDiscriminantValue() != 0 || !unionFieldIsNull) {
+        unionFieldIsNull = !structValue.has(field, HasMode::NON_NULL);
+        if (field.getProto().getDiscriminantValue() != 0 ||
+            structValue.has(field, impl->hasMode)) {
           ++fieldCount;
         } else {
           which = kj::none;
