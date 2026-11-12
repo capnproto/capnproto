@@ -31,6 +31,10 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/resource.h>
+#if __linux__
+#include <sys/prctl.h>
+#endif
 #else
 #include <process.h>
 #endif
@@ -107,6 +111,16 @@ bool expectSignal(Maybe<int> signal, FunctionParam<void()> code) noexcept {
   KJ_SYSCALL(child = fork());
   if (child == 0) {
     resetCrashHandlers();
+
+    // The child is expected to die of the signal, so its core dump would only be noise, and the
+    // system's core handler can take seconds to produce one.
+    struct rlimit noCore = {0, 0};
+    setrlimit(RLIMIT_CORE, &noCore);
+#if __linux__
+    // Linux still runs a core_pattern pipe handler at a zero limit; this stops the dump itself.
+    prctl(PR_SET_DUMPABLE, 0);
+#endif
+
     code();
     _exit(0);
   }
