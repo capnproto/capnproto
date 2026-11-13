@@ -926,6 +926,60 @@ KJ_TEST("cross-thread event cancel requested while destination thread being dest
   })();
 }
 
+KJ_TEST("cross-thread event canceled while destination thread is disconnecting it") {
+  // If the requesting thread cancels an event while the destination thread is destroying its
+  // EventLoop, the requesting thread waits for Executor::Impl::disconnect() to finish the event.
+  // disconnect() queues a DISCONNECTED reply to the requesting thread, which must be unlinked
+  // before the event is freed.
+
+  MutexGuarded<kj::Maybe<const Executor&>> executor;  // to get the Executor from the other thread
+  Own<PromiseFulfiller<void>> fulfiller;  // accessed only from the subthread
+
+  enum Stage { RUNNING, DISCONNECTING, CANCELING };
+  MutexGuarded<Stage> stage(RUNNING);
+
+  Thread thread([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    auto paf = newPromiseAndFulfiller<void>();
+    fulfiller = kj::mv(paf.fulfiller);
+
+    *executor.lockExclusive() = getCurrentThreadExecutor();
+
+    // Wait for other thread to start a cross-thread task, then exit the event loop.
+    paf.promise.wait(waitScope);
+  });
+
+  ([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    const Executor* exec;
+    {
+      auto lock = executor.lockExclusive();
+      lock.wait([&](kj::Maybe<const Executor&> value) { return value != kj::none; });
+      exec = &KJ_ASSERT_NONNULL(*lock);
+    }
+
+    auto promise = exec->executeAsync([&]() -> Promise<void> {
+      fulfiller->fulfill();
+      return Promise<void>(kj::NEVER_DONE).attach(kj::defer([&]() {
+        // disconnect() destroys the task while the event is still executing, after marking the
+        // executor as disconnected. Hold it there while we cancel the event.
+        auto lock = stage.lockExclusive();
+        *lock = DISCONNECTING;
+        lock.wait([](Stage value) { return value == CANCELING; });
+      }));
+    });
+
+    stage.lockExclusive().wait([](Stage value) { return value == DISCONNECTING; });
+    *stage.lockExclusive() = CANCELING;
+
+    // Cancel the promise. This usually happens before disconnect() resumes, so we wait for it to
+    // finish the event.
+    promise = nullptr;
+  })();
+}
+
 KJ_TEST("cross-thread fulfiller") {
   MutexGuarded<Maybe<Own<PromiseFulfiller<int>>>> fulfillerMutex;
 
