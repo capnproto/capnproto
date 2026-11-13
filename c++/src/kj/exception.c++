@@ -63,12 +63,34 @@
 #endif
 
 #if __linux__ && KJ_HAS_BACKTRACE && \
+    (KJ_HAS_COMPILER_FEATURE(address_sanitizer) || defined(__SANITIZE_ADDRESS__) || \
+     KJ_HAS_COMPILER_FEATURE(thread_sanitizer) || defined(__SANITIZE_THREAD__))
+// ASan and TSan intercept backtrace().
+#define KJ_BACKTRACE_INTERCEPTED 1
+#else
+#define KJ_BACKTRACE_INTERCEPTED 0
+#endif
+
+#ifndef KJ_BACKTRACE_WITH_UNWINDER
+// The sanitizers' backtrace() interceptor takes a scratch buffer from the sanitizer's internal
+// allocator, under a spin lock that a thread cannot take twice. A signal handler that traces a
+// thread interrupted while it held that lock, as it briefly does in every backtrace() call, would
+// spin forever. So under ASan we call the unwinder directly, as glibc's backtrace() does,
+// bypassing the interceptor.
+//
+// TSan delivers crash signals such as SIGSEGV at once too, but doing so under TSan isn't safe in
+// the first place: the handler's instrumented code takes a TSan lock that the interrupted thread
+// may hold, so it can deadlock before it gets here. Define this to 1 to bypass the interceptor
+// anyway, or to 0 to keep it under ASan.
+#if __linux__ && KJ_HAS_BACKTRACE && \
     (KJ_HAS_COMPILER_FEATURE(address_sanitizer) || defined(__SANITIZE_ADDRESS__))
-// ASan intercepts backtrace() and takes a scratch buffer from its internal allocator, under a spin
-// lock that a thread cannot take twice. A signal handler that traces a thread interrupted while it
-// held that lock, as it briefly does in every backtrace() call, would spin forever. So under ASan
-// we call the unwinder directly, as glibc's backtrace() does, bypassing the interceptor.
 #define KJ_BACKTRACE_WITH_UNWINDER 1
+#else
+#define KJ_BACKTRACE_WITH_UNWINDER 0
+#endif
+#endif
+
+#if KJ_BACKTRACE_WITH_UNWINDER
 #include <unwind.h>
 #endif
 
@@ -489,9 +511,8 @@ size_t saturatingAdd(size_t a, size_t b) {
 }
 
 ArrayPtr<void* const> trimStackTrace(ArrayPtr<void* const> trace, size_t ignoreCount) {
-#if __linux__ && KJ_HAS_BACKTRACE && \
-    (KJ_HAS_COMPILER_FEATURE(thread_sanitizer) || defined(__SANITIZE_THREAD__))
-  // TSan adds a backtrace() interceptor frame. Under ASan we bypass the interceptor.
+#if KJ_BACKTRACE_INTERCEPTED && !KJ_BACKTRACE_WITH_UNWINDER
+  // The sanitizer's backtrace() interceptor adds a frame.
   constexpr size_t interceptorFrames = 1;
 #else
   constexpr size_t interceptorFrames = 0;

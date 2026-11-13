@@ -60,7 +60,8 @@ void countTraceFromSignal(int) {
 KJ_TEST("stack trace from a signal that interrupted a stack trace") {
   // A crash handler traces whatever its thread was doing, which is often taking a stack trace for
   // an exception. Under ASan, backtrace()'s interceptor would then spin forever on a lock that the
-  // interrupted thread holds.
+  // interrupted thread holds. (TSan delivers SIGUSR2 only once the thread leaves its runtime, so
+  // there this passes either way.)
   struct sigaction action = {};
   action.sa_handler = &countTraceFromSignal;
   KJ_SYSCALL(sigaction(SIGUSR2, &action, nullptr));
