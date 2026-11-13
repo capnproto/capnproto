@@ -378,6 +378,49 @@ TEST(Common, CanConvert) {
   static_assert(!canConvert<const void*, void*>(), "failure");
 }
 
+struct CfBase { virtual ~CfBase() noexcept(false) {} };
+struct CfDerived: public CfBase {};
+struct CfPrivateDerived: private CfBase {};
+struct CfExplicit { explicit CfExplicit(int) {} };
+struct CfAggregate { int a; };
+struct CfThrowingDtor { CfThrowingDtor(int) {} ~CfThrowingDtor() noexcept(false) {} };
+
+KJ_TEST("ConstructibleFrom uses direct-initialization semantics") {
+  // Ordinary conversions.
+  static_assert(_::ConstructibleFrom<int, int>);
+  static_assert(_::ConstructibleFrom<int, long>);
+  static_assert(_::ConstructibleFrom<long, int&>);
+  static_assert(_::ConstructibleFrom<int&, int&>);
+  static_assert(_::ConstructibleFrom<const int&, int&>);
+  static_assert(_::ConstructibleFrom<const int&, long>);
+  static_assert(_::ConstructibleFrom<int&&, int>);
+  static_assert(_::ConstructibleFrom<CfBase*, CfDerived*>);
+  static_assert(_::ConstructibleFrom<CfBase&, CfDerived&>);
+  static_assert(_::ConstructibleFrom<const void*, int*>);
+  static_assert(_::ConstructibleFrom<CfExplicit, int>);
+  static_assert(_::ConstructibleFrom<CfAggregate, CfAggregate&>);
+  static_assert(_::ConstructibleFrom<CfThrowingDtor, int>);
+
+  // Conversions only a C-style cast would perform.
+  static_assert(!_::ConstructibleFrom<int&, const int&>);          // const_cast
+  static_assert(!_::ConstructibleFrom<int*, const int*>);          // const_cast
+  static_assert(!_::ConstructibleFrom<int&, long&>);               // reinterpret_cast
+  static_assert(!_::ConstructibleFrom<long, int*>);                // reinterpret_cast
+  static_assert(!_::ConstructibleFrom<void*, int>);                // reinterpret_cast
+  static_assert(!_::ConstructibleFrom<CfDerived*, CfBase*>);       // static_cast downcast
+  static_assert(!_::ConstructibleFrom<CfDerived&, CfBase&>);       // static_cast downcast
+  static_assert(!_::ConstructibleFrom<CfBase*, CfPrivateDerived*>);  // inaccessible base
+  static_assert(!_::ConstructibleFrom<int&, int>);
+  static_assert(!_::ConstructibleFrom<int&&, int&>);
+
+  // Constraints built on ConstructibleFrom reject these as well.
+  static_assert(!canConvert<CfBase*, _::NullableValue<CfDerived*>>());
+  static_assert(!_::ConstructibleFrom<_::NullableValue<CfDerived*>, CfBase*>);
+  static_assert(_::ConstructibleFrom<_::NullableValue<CfBase*>, CfDerived*>);
+  static_assert(!_::NoThrowConstructibleFrom<int&, const int&>);
+  static_assert(!_::NoThrowConstructibleFrom<CfDerived*, CfBase*>);
+}
+
 KJ_TEST("isNoThrowMoveConstructible") {
   static_assert(_::NoThrowConstructibleFrom<int, int>);
 
