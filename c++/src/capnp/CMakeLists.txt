@@ -213,10 +213,10 @@ if(NOT CAPNP_LITE)
   if(WIN32)
     # On Windows platforms symlinks are not guaranteed to support. Also different version of CMake handle create_symlink in a different way.
     # The most portable way in this case just copy the file.
-    install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E copy \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_BINDIR}/capnp${CMAKE_EXECUTABLE_SUFFIX}\" \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_BINDIR}/capnpc${CMAKE_EXECUTABLE_SUFFIX}\")")
+    install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E copy \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin/capnp${CMAKE_EXECUTABLE_SUFFIX}\" \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin/capnpc${CMAKE_EXECUTABLE_SUFFIX}\")")
   else()
     # Symlink capnpc -> capnp
-    install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E create_symlink capnp${CMAKE_EXECUTABLE_SUFFIX} \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_BINDIR}/capnpc${CMAKE_EXECUTABLE_SUFFIX}\")")
+    install(CODE "execute_process(COMMAND \"${CMAKE_COMMAND}\" -E create_symlink capnp${CMAKE_EXECUTABLE_SUFFIX} \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin/capnpc${CMAKE_EXECUTABLE_SUFFIX}\")")
   endif()
 endif()  # NOT CAPNP_LITE
 
