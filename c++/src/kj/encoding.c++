@@ -261,7 +261,7 @@ Array<To> coerceTo(Array<From>&& array) {
   static_assert(sizeof(To) == sizeof(From), "incompatible coercion");
   Array<wchar_t> result;
   memcpy((void*)&result, &array, sizeof(array));
-  memset((void*)&array, 0, sizeof(array));
+  kj::ctor(array);  // `result` owns the buffer now; reset `array` without disposing it.
   return result;
 }
 

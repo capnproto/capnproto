@@ -925,7 +925,7 @@ TEST(Orphans, ReferenceExternalData) {
     byte data[50];
   };
 
-  memset(data, 0x55, sizeof(data));
+  kj::arrayPtr(data).fill(0x55);
 
   auto orphan = builder.getOrphanage().referenceExternalData(Data::Builder(data, sizeof(data)));
 
@@ -993,7 +993,7 @@ TEST(Orphans, ReferenceExternalData_NoZeroOnSet) {
     byte data[50];
   };
 
-  memset(data, 0x55, sizeof(data));
+  kj::arrayPtr(data).fill(0x55);
 
   MallocMessageBuilder builder;
   auto root = builder.getRoot<TestAllTypes>();
@@ -1016,7 +1016,7 @@ TEST(Orphans, ReferenceExternalData_NoZeroImmediateAbandon) {
     byte data[50];
   };
 
-  memset(data, 0x55, sizeof(data));
+  kj::arrayPtr(data).fill(0x55);
 
   MallocMessageBuilder builder;
   builder.getOrphanage().referenceExternalData(Data::Builder(data, sizeof(data)));
@@ -1030,7 +1030,7 @@ TEST(Orphans, TruncateData) {
   MallocMessageBuilder message;
   auto orphan = message.getOrphanage().newOrphan<Data>(17);
   auto builder = orphan.get();
-  memset(builder.begin(), 123, builder.size());
+  builder.fill(123);
 
   EXPECT_EQ(4, message.getSegmentsForOutput()[0].size());
   orphan.truncate(2);
@@ -1051,7 +1051,7 @@ TEST(Orphans, ExtendData) {
   MallocMessageBuilder message;
   auto orphan = message.getOrphanage().newOrphan<Data>(17);
   auto builder = orphan.get();
-  memset(builder.begin(), 123, builder.size());
+  builder.fill(123);
 
   EXPECT_EQ(4, message.getSegmentsForOutput()[0].size());
   orphan.truncate(27);
@@ -1073,7 +1073,7 @@ TEST(Orphans, ExtendDataCopy) {
   MallocMessageBuilder message;
   auto orphan = message.getOrphanage().newOrphan<Data>(17);
   auto builder = orphan.get();
-  memset(builder.begin(), 123, builder.size());
+  builder.fill(123);
 
   auto orphan2 = message.getOrphanage().newOrphan<Data>(1);
   orphan2.get()[0] = 32;
@@ -1113,7 +1113,7 @@ TEST(Orphans, TruncateText) {
   MallocMessageBuilder message;
   auto orphan = message.getOrphanage().newOrphan<Text>(17);
   auto builder = orphan.get();
-  memset(builder.begin(), 'a', builder.size());
+  builder.asArray().fill('a');
 
   EXPECT_EQ(4, message.getSegmentsForOutput()[0].size());
   orphan.truncate(2);
@@ -1134,7 +1134,7 @@ TEST(Orphans, ExtendText) {
   MallocMessageBuilder message;
   auto orphan = message.getOrphanage().newOrphan<Text>(17);
   auto builder = orphan.get();
-  memset(builder.begin(), 'a', builder.size());
+  builder.asArray().fill('a');
 
   EXPECT_EQ(4, message.getSegmentsForOutput()[0].size());
   orphan.truncate(27);
@@ -1156,7 +1156,7 @@ TEST(Orphans, ExtendTextCopy) {
   MallocMessageBuilder message;
   auto orphan = message.getOrphanage().newOrphan<Text>(17);
   auto builder = orphan.get();
-  memset(builder.begin(), 'a', builder.size());
+  builder.asArray().fill('a');
 
   auto orphan2 = message.getOrphanage().newOrphan<Data>(1);
   orphan2.get()[0] = 32;

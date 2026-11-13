@@ -9,6 +9,7 @@ Checks: >
   custom-arrayptr-first-copyfrom,
   custom-arrayptr-singleton,
   custom-arrayptr-slice-zero,
+  custom-ban-memset,
   custom-dtor-throw-during-unwind,
   custom-uninitialized-array,
   custom-use-rc-arc-deref
@@ -236,4 +237,15 @@ CustomChecks:
     Diagnostic:
       - BindName: throw
         Message: "exception thrown in a destructor terminates the process if the destructor runs during unwind; use KJ_DTOR_ASSERT() etc. for checks, or wrap in KJ_DTOR_CALL()"
+        Level: Warning
+
+  # Opt-in. memset() takes an untyped pointer and a byte count that nothing checks against the
+  # object it writes. Zero objects with `{}` initializers or kj::memzero(), fill arrays with
+  # kj::ArrayPtr::fill().
+  - Name: ban-memset
+    Query: |
+      match callExpr(callee(functionDecl(hasName("memset")))).bind("call")
+    Diagnostic:
+      - BindName: call
+        Message: "memset function should not be used directly, use kj::ArrayPtr<T>::fill(), kj::memzero<T>() or {} initializer"
         Level: Warning

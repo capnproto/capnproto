@@ -3430,7 +3430,7 @@ constexpr bool isDisallowedInCoroutine() {
 template<typename T, typename = EnableIf<KJ_HAS_TRIVIAL_CONSTRUCTOR(T)>>
 inline void memzero(T& t) {
   // Zero-initialize memory region belonging to t. Type-safe wrapper around `memset`.
-  memset(&t, 0, sizeof(T));
+  memset(&t, 0, sizeof(T));  // NOLINT(*-ban-memset)
 }
 
 namespace _ {

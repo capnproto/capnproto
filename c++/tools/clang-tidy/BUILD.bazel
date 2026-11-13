@@ -28,6 +28,7 @@ CUSTOM_CHECKS = [
     "arrayptr-first-copyfrom",
     "arrayptr-singleton",
     "arrayptr-slice-zero",
+    "ban-memset",
     "uninitialized-array",
     "use-rc-arc-deref",
 ]

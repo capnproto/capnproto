@@ -105,8 +105,7 @@ bool checkForQemuEpollPwaitBug() {
   KJ_SYSCALL(pthread_sigmask(SIG_BLOCK, &mask, &origMask));
   KJ_DEFER(KJ_SYSCALL(pthread_sigmask(SIG_SETMASK, &origMask, nullptr)));
 
-  struct sigaction action;
-  memset(&action, 0, sizeof(action));
+  struct sigaction action{};
   action.sa_sigaction = &qemuBugTestSignalHandler;
   action.sa_flags = SA_SIGINFO;
 
@@ -178,7 +177,7 @@ TEST(AsyncUnixTest, SignalWithValue) {
   WaitScope waitScope(loop);
 
   union sigval value;
-  memset(&value, 0, sizeof(value));
+  kj::memzero(value);
   value.sival_int = 123;
   KJ_SYSCALL_HANDLE_ERRORS(sigqueue(getpid(), SIGURG, value)) {
     case ENOSYS:
@@ -215,7 +214,7 @@ TEST(AsyncUnixTest, SignalWithPointerValue) {
   WaitScope waitScope(loop);
 
   union sigval value;
-  memset(&value, 0, sizeof(value));
+  kj::memzero(value);
   value.sival_ptr = &port;
   KJ_SYSCALL_HANDLE_ERRORS(sigqueue(getpid(), SIGURG, value)) {
     case ENOSYS:
@@ -614,8 +613,7 @@ TEST(AsyncUnixTest, UrgentObserver) {
 
   // Spawn a TCP server
   auto serverFd = KJ_SYSCALL_FD(socket(AF_INET, SOCK_STREAM, 0));
-  sockaddr_in saddr;
-  memset(&saddr, 0, sizeof(saddr));
+  sockaddr_in saddr{};
   saddr.sin_family = AF_INET;
   saddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   KJ_SYSCALL(bind(serverFd, reinterpret_cast<sockaddr*>(&saddr), sizeof(saddr)));
@@ -764,8 +762,7 @@ TEST(AsyncUnixTest, InterruptedTimer) {
   if (signal(SIGALRM, &dummySignalHandler) == SIG_ERR) {
     KJ_FAIL_SYSCALL("signal(SIGALRM)", errno);
   }
-  struct itimerval itv;
-  memset(&itv, 0, sizeof(itv));
+  struct itimerval itv{};
   itv.it_value.tv_usec = 50000 * OS_SLOWNESS_FACTOR;  // signal after 50ms
   setitimer(ITIMER_REAL, &itv, nullptr);
 
@@ -1035,7 +1032,7 @@ KJ_TEST("UnixEventPort poll for signals") {
 
 void testRtSignals(UnixEventPort& port, WaitScope& waitScope, bool doPoll) {
   union sigval value;
-  memset(&value, 0, sizeof(value));
+  kj::memzero(value);
 
   // Queue three copies of the signal upfront.
   for (uint i = 0; i < 3; i++) {
@@ -1120,8 +1117,7 @@ KJ_TEST("UnixEventPoll::getPollableFd() for external waiting") {
   kj::WaitScope ws(loop);
 
   auto portIsReady = [&port](int timeout = 0) {
-    struct pollfd pfd;
-    memset(&pfd, 0, sizeof(pfd));
+    struct pollfd pfd{};
     pfd.events = POLLIN;
     pfd.fd = port.getPollableFd();
 
@@ -1276,8 +1272,7 @@ KJ_TEST("UnixEventPort only wakes for write space while awaiting writability") {
   kj::WaitScope ws(loop);
 
   auto portIsReady = [&port]() {
-    struct pollfd pfd;
-    memset(&pfd, 0, sizeof(pfd));
+    struct pollfd pfd{};
     pfd.events = POLLIN;
     pfd.fd = port.getPollableFd();
 

@@ -405,15 +405,15 @@ struct WireHelpers {
   }
 
   static KJ_ALWAYS_INLINE(void zeroMemory(word* ptr, WordCountN<29> count)) {
-    if (count != ZERO * WORDS) memset(ptr, 0, unbound(count * BYTES_PER_WORD / BYTES));
+    zeroMemory(reinterpret_cast<byte*>(ptr), count * BYTES_PER_WORD);
   }
 
   static KJ_ALWAYS_INLINE(void zeroMemory(WirePointer* ptr, WirePointerCountN<29> count)) {
-    if (count != ZERO * POINTERS) memset(ptr, 0, unbound(count * BYTES_PER_POINTER / BYTES));
+    zeroMemory(reinterpret_cast<byte*>(ptr), count * BYTES_PER_POINTER);
   }
 
   static KJ_ALWAYS_INLINE(void zeroMemory(WirePointer* ptr)) {
-    memset(ptr, 0, sizeof(*ptr));
+    kj::arrayPtr(reinterpret_cast<byte*>(ptr), sizeof(*ptr)).fill(0);
   }
 
   template <typename T>
