@@ -1057,6 +1057,26 @@ capnp::HttpService::Client HttpOverCapnpFactory::kjToCapnp(kj::Own<kj::HttpServi
 
 // =======================================================================================
 
+kj::Own<kj::WebSocket> HttpOverCapnpFactory::connectWebSocket(
+    kj::FunctionParam<capnp::WebSocket::Client(capnp::WebSocket::Client)> exchange) {
+  // This mirrors HttpServiceResponseImpl::acceptWebSocket().
+  auto pipe = kj::newWebSocketPipe();
+  auto shorteningPaf = kj::newPromiseAndFulfiller<kj::Promise<Capability::Client>>();
+  // If `exchange` throws, its capability may live on, as ~KjToCapnpWebSocketAdapter() would
+  // leave it.
+  KJ_ON_SCOPE_FAILURE(shorteningPaf.fulfiller->fulfill(kj::NEVER_DONE));
+
+  // The capability owns its end of the pipe, so it doesn't need to be canceled later: dropping
+  // the returned WebSocket, which owns the other end, has the same effect.
+  auto peer = exchange(kj::heap<CapnpToKjWebSocketAdapter>(
+      kj::mv(pipe.ends[0]), kj::mv(shorteningPaf.promise)));
+
+  return kj::heap<KjToCapnpWebSocketAdapter>(
+      kj::mv(pipe.ends[1]), kj::mv(peer), kj::mv(shorteningPaf.fulfiller));
+}
+
+// =======================================================================================
+
 static constexpr uint64_t COMMON_TEXT_ANNOTATION = 0x857745131db6fc83ull;
 // Type ID of `commonText` from `http.capnp`.
 // TODO(cleanup): Cap'n Proto should auto-generate constants for these.
