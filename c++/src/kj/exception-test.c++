@@ -58,15 +58,9 @@ TEST(Exception, TrimSourceFilename) {
 }
 
 TEST(Exception, RunCatchingExceptions) {
-  bool recovered = false;
   Maybe<Exception> e = kj::runCatchingExceptions([&]() {
-    KJ_FAIL_ASSERT("foo") {
-      break;
-    }
-    recovered = true;
+    KJ_FAIL_ASSERT("foo");
   });
-
-  EXPECT_FALSE(recovered);
 
   KJ_IF_SOME(ex, e) {
     EXPECT_EQ("foo", ex.getDescription());
@@ -127,9 +121,7 @@ TEST(Exception, UnwindDetector) {
   // If another exception is happening, ThrowingDestructor's destructor's exception is squelched.
   e = kj::runCatchingExceptions([&]() {
     ThrowingDestructor t;
-    KJ_FAIL_ASSERT("baz") {
-      break;
-    }
+    KJ_FAIL_ASSERT("baz");
   });
 
   KJ_IF_SOME(ex, e) {

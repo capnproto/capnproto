@@ -54,10 +54,7 @@ Path PathPtr::clone() {
 }
 
 Path Path::parse(StringPtr path) {
-  KJ_REQUIRE(!path.startsWith("/"), "expected a relative path, got absolute", path) {
-    // When exceptions are disabled, go on -- the leading '/' will end up ignored.
-    break;
-  }
+  KJ_REQUIRE(!path.startsWith("/"), "expected a relative path, got absolute", path);
   return evalImpl(Vector<String>(countParts(path)), path);
 }
 
@@ -197,10 +194,8 @@ Path Path::evalWin32(StringPtr pathText) && {
 String PathPtr::toWin32StringImpl(bool absolute, bool forApi) const {
   if (parts.size() == 0) {
     // Special-case empty path.
-    KJ_REQUIRE(!absolute, "absolute path is missing disk designator") {
-      break;
-    }
-    return absolute ? kj::str("\\\\") : kj::str(".");
+    KJ_REQUIRE(!absolute, "absolute path is missing disk designator");
+    return kj::str(".");
   }
 
   bool isUncPath = false;
@@ -250,17 +245,10 @@ String PathPtr::toWin32StringImpl(bool absolute, bool forApi) const {
     if (leadingSlash) *ptr++ = '\\';
     leadingSlash = true;
 
-    KJ_REQUIRE(!Path::isWin32Special(p), "path cannot contain DOS reserved name", p) {
-      // Recover by blotting out the name with invalid characters which Win32 syscalls will reject.
-      for (size_t i = 0; i < p.size(); i++) {
-        *ptr++ = '|';
-      }
-      goto skip;
-    }
+    KJ_REQUIRE(!Path::isWin32Special(p), "path cannot contain DOS reserved name", p);
 
     memcpy(ptr, p.begin(), p.size());
     ptr += p.size();
-  skip:;
   }
 
   KJ_ASSERT(ptr == result.end());
@@ -276,11 +264,7 @@ String PathPtr::toWin32StringImpl(bool absolute, bool forApi) const {
       } else {
         KJ_FAIL_REQUIRE(
             "colons are prohibited in win32 paths to avoid triggering alternate data streams",
-            result) {
-          // Recover by using a different character which we know Win32 syscalls will reject.
-          result[i] = '|';
-          break;
-        }
+            result);
       }
     }
   }
@@ -293,15 +277,6 @@ Array<wchar_t> PathPtr::forWin32Api(bool absolute) const {
 }
 
 // -----------------------------------------------------------------------------
-
-String Path::stripNul(String input) {
-  kj::Vector<char> output(input.size());
-  for (char c: input) {
-    if (c != '\0') output.add(c);
-  }
-  output.add('\0');
-  return String(output.releaseAsArray());
-}
 
 void Path::validatePart(StringPtr part) {
   KJ_REQUIRE(part != "" && part != "." && part != "..", "invalid path component", part);
@@ -316,18 +291,11 @@ void Path::evalPart(Vector<String>& parts, ArrayPtr<const char> part) {
   } else if (part.size() == 1 && part[0] == '.') {
     // Refers to current directory; ignore.
   } else if (part.size() == 2 && part[0] == '.' && part [1] == '.') {
-    KJ_REQUIRE(parts.size() > 0, "can't use \"..\" to break out of starting directory") {
-      // When exceptions are disabled, ignore.
-      return;
-    }
+    KJ_REQUIRE(parts.size() > 0, "can't use \"..\" to break out of starting directory");
     parts.removeLast();
   } else {
     auto str = heapString(part);
-    KJ_REQUIRE(strlen(str.begin()) == str.size(), "NUL character in path component", str) {
-      // When exceptions are disabled, strip out '\0' chars.
-      str = stripNul(kj::mv(str));
-      break;
-    }
+    KJ_REQUIRE(strlen(str.begin()) == str.size(), "NUL character in path component", str);
     parts.add(kj::mv(str));
   }
 }
@@ -390,12 +358,7 @@ Path Path::evalWin32Impl(Vector<String>&& parts, StringPtr path, bool fromApi) {
       // *two* components of the path).
       parts.truncate(2);
     } else {
-      KJ_FAIL_REQUIRE("must specify drive letter", path) {
-        // Recover by assuming C drive.
-        parts.clear();
-        parts.add(kj::str("c:"));
-        break;
-      }
+      KJ_FAIL_REQUIRE("must specify drive letter", path);
     }
   } else if ((path.size() == 2 || (path.size() > 2 && path[2] == '\\')) &&
              isWin32Drive(path.first(2))) {
@@ -553,8 +516,7 @@ FsNode::Metadata ReadableDirectory::lstat(PathPtr path) const {
   KJ_IF_SOME(meta, tryLstat(path)) {
     return meta;
   } else {
-    KJ_FAIL_REQUIRE("no such file or directory", path) { break; }
-    return FsNode::Metadata();
+    KJ_FAIL_REQUIRE("no such file or directory", path);
   }
 }
 
@@ -562,8 +524,7 @@ Own<const ReadableFile> ReadableDirectory::openFile(PathPtr path) const {
   KJ_IF_SOME(file, tryOpenFile(path)) {
     return kj::mv(file);
   } else {
-    KJ_FAIL_REQUIRE("no such file", path) { break; }
-    return newInMemoryFile(nullClock());
+    KJ_FAIL_REQUIRE("no such file", path);
   }
 }
 
@@ -571,8 +532,7 @@ Own<const ReadableDirectory> ReadableDirectory::openSubdir(PathPtr path) const {
   KJ_IF_SOME(dir, tryOpenSubdir(path)) {
     return kj::mv(dir);
   } else {
-    KJ_FAIL_REQUIRE("no such directory", path) { break; }
-    return newInMemoryDirectory(nullClock());
+    KJ_FAIL_REQUIRE("no such directory", path);
   }
 }
 
@@ -580,8 +540,7 @@ String ReadableDirectory::readlink(PathPtr path) const {
   KJ_IF_SOME(p, tryReadlink(path)) {
     return kj::mv(p);
   } else {
-    KJ_FAIL_REQUIRE("not a symlink", path) { break; }
-    return kj::str(".");
+    KJ_FAIL_REQUIRE("not a symlink", path);
   }
 }
 
@@ -589,14 +548,14 @@ Own<const File> Directory::openFile(PathPtr path, WriteMode mode) const {
   KJ_IF_SOME(f, tryOpenFile(path, mode)) {
     return kj::mv(f);
   } else if (has(mode, WriteMode::CREATE) && !has(mode, WriteMode::MODIFY)) {
-    KJ_FAIL_REQUIRE("file already exists", path) { break; }
+    KJ_FAIL_REQUIRE("file already exists", path);
   } else if (has(mode, WriteMode::MODIFY) && !has(mode, WriteMode::CREATE)) {
-    KJ_FAIL_REQUIRE("file does not exist", path) { break; }
+    KJ_FAIL_REQUIRE("file does not exist", path);
   } else if (!has(mode, WriteMode::MODIFY) && !has(mode, WriteMode::CREATE)) {
-    KJ_FAIL_ASSERT("neither WriteMode::CREATE nor WriteMode::MODIFY was given", path) { break; }
+    KJ_FAIL_ASSERT("neither WriteMode::CREATE nor WriteMode::MODIFY was given", path);
   } else {
     // Shouldn't happen.
-    KJ_FAIL_ASSERT("tryOpenFile() returned null despite no preconditions", path) { break; }
+    KJ_FAIL_ASSERT("tryOpenFile() returned null despite no preconditions", path);
   }
   return newInMemoryFile(nullClock());
 }
@@ -605,14 +564,14 @@ Own<AppendableFile> Directory::appendFile(PathPtr path, WriteMode mode) const {
   KJ_IF_SOME(f, tryAppendFile(path, mode)) {
     return kj::mv(f);
   } else if (has(mode, WriteMode::CREATE) && !has(mode, WriteMode::MODIFY)) {
-    KJ_FAIL_REQUIRE("file already exists", path) { break; }
+    KJ_FAIL_REQUIRE("file already exists", path);
   } else if (has(mode, WriteMode::MODIFY) && !has(mode, WriteMode::CREATE)) {
-    KJ_FAIL_REQUIRE("file does not exist", path) { break; }
+    KJ_FAIL_REQUIRE("file does not exist", path);
   } else if (!has(mode, WriteMode::MODIFY) && !has(mode, WriteMode::CREATE)) {
-    KJ_FAIL_ASSERT("neither WriteMode::CREATE nor WriteMode::MODIFY was given", path) { break; }
+    KJ_FAIL_ASSERT("neither WriteMode::CREATE nor WriteMode::MODIFY was given", path);
   } else {
     // Shouldn't happen.
-    KJ_FAIL_ASSERT("tryAppendFile() returned null despite no preconditions", path) { break; }
+    KJ_FAIL_ASSERT("tryAppendFile() returned null despite no preconditions", path);
   }
   return newFileAppender(newInMemoryFile(nullClock()));
 }
@@ -621,14 +580,14 @@ Own<const Directory> Directory::openSubdir(PathPtr path, WriteMode mode) const {
   KJ_IF_SOME(f, tryOpenSubdir(path, mode)) {
     return kj::mv(f);
   } else if (has(mode, WriteMode::CREATE) && !has(mode, WriteMode::MODIFY)) {
-    KJ_FAIL_REQUIRE("directory already exists", path) { break; }
+    KJ_FAIL_REQUIRE("directory already exists", path);
   } else if (has(mode, WriteMode::MODIFY) && !has(mode, WriteMode::CREATE)) {
-    KJ_FAIL_REQUIRE("directory does not exist", path) { break; }
+    KJ_FAIL_REQUIRE("directory does not exist", path);
   } else if (!has(mode, WriteMode::MODIFY) && !has(mode, WriteMode::CREATE)) {
-    KJ_FAIL_ASSERT("neither WriteMode::CREATE nor WriteMode::MODIFY was given", path) { break; }
+    KJ_FAIL_ASSERT("neither WriteMode::CREATE nor WriteMode::MODIFY was given", path);
   } else {
     // Shouldn't happen.
-    KJ_FAIL_ASSERT("tryOpenSubdir() returned null despite no preconditions", path) { break; }
+    KJ_FAIL_ASSERT("tryOpenSubdir() returned null despite no preconditions", path);
   }
   return newInMemoryDirectory(nullClock());
 }
@@ -636,10 +595,10 @@ Own<const Directory> Directory::openSubdir(PathPtr path, WriteMode mode) const {
 void Directory::symlink(PathPtr linkpath, StringPtr content, WriteMode mode) const {
   if (!trySymlink(linkpath, content, mode)) {
     if (has(mode, WriteMode::CREATE)) {
-      KJ_FAIL_REQUIRE("path already exists", linkpath) { break; }
+      KJ_FAIL_REQUIRE("path already exists", linkpath);
     } else {
       // Shouldn't happen.
-      KJ_FAIL_ASSERT("symlink() returned null despite no preconditions", linkpath) { break; }
+      KJ_FAIL_ASSERT("symlink() returned null despite no preconditions", linkpath);
     }
   }
 }
@@ -649,11 +608,9 @@ void Directory::transfer(PathPtr toPath, WriteMode toMode,
                          TransferMode mode) const {
   if (!tryTransfer(toPath, toMode, fromDirectory, fromPath, mode)) {
     if (has(toMode, WriteMode::CREATE)) {
-      KJ_FAIL_REQUIRE("toPath already exists or fromPath doesn't exist", toPath, fromPath) {
-        break;
-      }
+      KJ_FAIL_REQUIRE("toPath already exists or fromPath doesn't exist", toPath, fromPath);
     } else {
-      KJ_FAIL_ASSERT("fromPath doesn't exist", fromPath) { break; }
+      KJ_FAIL_ASSERT("fromPath doesn't exist", fromPath);
     }
   }
 }
@@ -711,9 +668,7 @@ static bool tryCopyDirectoryEntry(const Directory& to, PathPtr toPath, WriteMode
     default:
       // Note: Unclear whether it's better to throw an error here or just ignore it / log a
       //   warning. Can reconsider when we see an actual use case.
-      KJ_FAIL_REQUIRE("can only copy files, directories, and symlinks", fromPath) {
-        return false;
-      }
+      KJ_FAIL_REQUIRE("can only copy files, directories, and symlinks", fromPath);
   }
 }
 
@@ -727,7 +682,7 @@ static void copyContents(const Directory& to, const ReadableDirectory& from) {
 bool Directory::tryTransfer(PathPtr toPath, WriteMode toMode,
                             const Directory& fromDirectory, PathPtr fromPath,
                             TransferMode mode) const {
-  KJ_REQUIRE(toPath.size() > 0, "can't replace self") { return false; }
+  KJ_REQUIRE(toPath.size() > 0, "can't replace self");
 
   // First try reversing.
   KJ_IF_SOME(result, fromDirectory.tryTransferTo(*this, toPath, toMode, fromPath, mode)) {
@@ -751,7 +706,7 @@ bool Directory::tryTransfer(PathPtr toPath, WriteMode toMode,
       fromDirectory.remove(fromPath);
       return true;
     case TransferMode::LINK:
-      KJ_FAIL_REQUIRE("can't link across different Directory implementations") { return false; }
+      KJ_FAIL_REQUIRE("can't link across different Directory implementations");
   }
 
   KJ_UNREACHABLE;
@@ -764,19 +719,19 @@ Maybe<bool> Directory::tryTransferTo(const Directory& toDirectory, PathPtr toPat
 
 void Directory::remove(PathPtr path) const {
   if (!tryRemove(path)) {
-    KJ_FAIL_REQUIRE("path to remove doesn't exist", path) { break; }
+    KJ_FAIL_REQUIRE("path to remove doesn't exist", path);
   }
 }
 
 void Directory::commitFailed(WriteMode mode) {
   if (has(mode, WriteMode::CREATE) && !has(mode, WriteMode::MODIFY)) {
-    KJ_FAIL_REQUIRE("replace target already exists") { break; }
+    KJ_FAIL_REQUIRE("replace target already exists");
   } else if (has(mode, WriteMode::MODIFY) && !has(mode, WriteMode::CREATE)) {
-    KJ_FAIL_REQUIRE("replace target does not exist") { break; }
+    KJ_FAIL_REQUIRE("replace target does not exist");
   } else if (!has(mode, WriteMode::MODIFY) && !has(mode, WriteMode::CREATE)) {
-    KJ_FAIL_ASSERT("neither WriteMode::CREATE nor WriteMode::MODIFY was given") { break; }
+    KJ_FAIL_ASSERT("neither WriteMode::CREATE nor WriteMode::MODIFY was given");
   } else {
-    KJ_FAIL_ASSERT("tryCommit() returned null despite no preconditions") { break; }
+    KJ_FAIL_ASSERT("tryCommit() returned null despite no preconditions");
   }
 }
 
@@ -1072,7 +1027,7 @@ public:
           uint64_t hash = reinterpret_cast<uintptr_t>(link.content.begin());
           return FsNode::Metadata { FsNode::Type::SYMLINK, 0, 0, link.lastModified, 1, hash };
         } else {
-          KJ_FAIL_ASSERT("unknown node type") { return kj::none; }
+          KJ_FAIL_ASSERT("unknown node type");
         }
       } else {
         return kj::none;
@@ -1088,7 +1043,7 @@ public:
 
   Maybe<Own<const ReadableFile>> tryOpenFile(PathPtr path) const override {
     if (path.size() == 0) {
-      KJ_FAIL_REQUIRE("not a file") { return kj::none; }
+      KJ_FAIL_REQUIRE("not a file");
     } else if (path.size() == 1) {
       auto lock = impl.lockShared();
       KJ_IF_SOME(entry, lock->tryGetEntry(path[0])) {
@@ -1126,7 +1081,7 @@ public:
 
   Maybe<String> tryReadlink(PathPtr path) const override {
     if (path.size() == 0) {
-      KJ_FAIL_REQUIRE("not a symlink") { return kj::none; }
+      KJ_FAIL_REQUIRE("not a symlink");
     } else if (path.size() == 1) {
       auto lock = impl.lockShared();
       KJ_IF_SOME(entry, lock->tryGetEntry(path[0])) {
@@ -1146,11 +1101,11 @@ public:
   Maybe<Own<const File>> tryOpenFile(PathPtr path, WriteMode mode) const override {
     if (path.size() == 0) {
       if (has(mode, WriteMode::MODIFY)) {
-        KJ_FAIL_REQUIRE("not a file") { return kj::none; }
+        KJ_FAIL_REQUIRE("not a file");
       } else if (has(mode, WriteMode::CREATE)) {
         return kj::none;  // already exists (as a directory)
       } else {
-        KJ_FAIL_REQUIRE("can't replace self") { return kj::none; }
+        KJ_FAIL_REQUIRE("can't replace self");
       }
     } else if (path.size() == 1) {
       auto lock = impl.lockExclusive();
@@ -1170,7 +1125,7 @@ public:
 
   Own<Replacer<File>> replaceFile(PathPtr path, WriteMode mode) const override {
     if (path.size() == 0) {
-      KJ_FAIL_REQUIRE("can't replace self") { break; }
+      KJ_FAIL_REQUIRE("can't replace self");
     } else if (path.size() == 1) {
       // don't need lock just to construct a file
       return heap<ReplacerImpl<File>>(*this, path[0],
@@ -1190,7 +1145,7 @@ public:
       } else if (has(mode, WriteMode::CREATE)) {
         return kj::none;  // already exists
       } else {
-        KJ_FAIL_REQUIRE("can't replace self") { return kj::none; }
+        KJ_FAIL_REQUIRE("can't replace self");
       }
     } else if (path.size() == 1) {
       auto lock = impl.lockExclusive();
@@ -1210,7 +1165,7 @@ public:
 
   Own<Replacer<Directory>> replaceSubdir(PathPtr path, WriteMode mode) const override {
     if (path.size() == 0) {
-      KJ_FAIL_REQUIRE("can't replace self") { break; }
+      KJ_FAIL_REQUIRE("can't replace self");
     } else if (path.size() == 1) {
       // don't need lock just to construct a directory
       return heap<ReplacerImpl<Directory>>(*this, path[0],
@@ -1226,11 +1181,11 @@ public:
   Maybe<Own<AppendableFile>> tryAppendFile(PathPtr path, WriteMode mode) const override {
     if (path.size() == 0) {
       if (has(mode, WriteMode::MODIFY)) {
-        KJ_FAIL_REQUIRE("not a file") { return kj::none; }
+        KJ_FAIL_REQUIRE("not a file");
       } else if (has(mode, WriteMode::CREATE)) {
         return kj::none;  // already exists (as a directory)
       } else {
-        KJ_FAIL_REQUIRE("can't replace self") { return kj::none; }
+        KJ_FAIL_REQUIRE("can't replace self");
       }
     } else if (path.size() == 1) {
       auto lock = impl.lockExclusive();
@@ -1253,7 +1208,7 @@ public:
       if (has(mode, WriteMode::CREATE)) {
         return false;
       } else {
-        KJ_FAIL_REQUIRE("can't replace self") { return false; }
+        KJ_FAIL_REQUIRE("can't replace self");
       }
     } else if (path.size() == 1) {
       auto lock = impl.lockExclusive();
@@ -1268,7 +1223,7 @@ public:
       KJ_IF_SOME(child, tryGetParent(path[0], mode)) {
         return child->trySymlink(path.slice(1, path.size()), content, mode);
       } else {
-        KJ_FAIL_REQUIRE("couldn't create parent directory") { return false; }
+        KJ_FAIL_REQUIRE("couldn't create parent directory");
       }
     }
   }
@@ -1285,7 +1240,7 @@ public:
       if (has(toMode, WriteMode::CREATE)) {
         return false;
       } else {
-        KJ_FAIL_REQUIRE("can't replace self") { return false; }
+        KJ_FAIL_REQUIRE("can't replace self");
       }
     } else if (toPath.size() == 1) {
       if (!has(toMode, WriteMode::MODIFY)) {
@@ -1422,7 +1377,7 @@ public:
 
   bool tryRemove(PathPtr path) const override {
     if (path.size() == 0) {
-      KJ_FAIL_REQUIRE("can't remove self from self") { return false; }
+      KJ_FAIL_REQUIRE("can't remove self from self");
     } else if (path.size() == 1) {
       auto lock = impl.lockExclusive();
       auto iter = lock->entries.find(path[0]);
@@ -1495,7 +1450,7 @@ private:
     const T& get() override { return *inner; }
 
     bool tryCommit() override {
-      KJ_REQUIRE(!committed, "commit() already called") { return true; }
+      KJ_REQUIRE(!committed, "commit() already called");
 
       auto lock = directory->impl.lockExclusive();
       KJ_IF_SOME(entry, lock->openEntry(name, Replacer<T>::mode)) {
@@ -1687,7 +1642,7 @@ private:
       lock.release();
       return tryOpenFile(newPath);
     } else {
-      KJ_FAIL_REQUIRE("not a file") { return kj::none; }
+      KJ_FAIL_REQUIRE("not a file");
     }
   }
   Maybe<Own<const ReadableDirectory>> asDirectory(
@@ -1699,14 +1654,14 @@ private:
       lock.release();
       return tryOpenSubdir(newPath);
     } else {
-      KJ_FAIL_REQUIRE("not a directory") { return kj::none; }
+      KJ_FAIL_REQUIRE("not a directory");
     }
   }
   Maybe<String> asSymlink(kj::Locked<const Impl>& lock, const EntryImpl& entry) const {
     if (entry.node.is<SymlinkNode>()) {
       return heapString(entry.node.get<SymlinkNode>().content);
     } else {
-      KJ_FAIL_REQUIRE("not a symlink") { return kj::none; }
+      KJ_FAIL_REQUIRE("not a symlink");
     }
   }
 
@@ -1724,7 +1679,7 @@ private:
       lock->modified();
       return entry.init(FileNode { lock->newFile() });
     } else {
-      KJ_FAIL_REQUIRE("not a file") { return kj::none; }
+      KJ_FAIL_REQUIRE("not a file");
     }
   }
   Maybe<Own<const Directory>> asDirectory(
@@ -1742,7 +1697,7 @@ private:
       lock->modified();
       return entry.init(DirectoryNode { lock->newDirectory() });
     } else {
-      KJ_FAIL_REQUIRE("not a directory") { return kj::none; }
+      KJ_FAIL_REQUIRE("not a directory");
     }
   }
 
@@ -1779,7 +1734,7 @@ private:
     if (has(mode, WriteMode::CREATE)) {
       // CREATE is documented as returning null when the file already exists. In this case, the
       // file does NOT exist because the parent directory does not exist or is not a directory.
-      KJ_FAIL_REQUIRE("parent is not a directory") { return kj::none; }
+      KJ_FAIL_REQUIRE("parent is not a directory");
     } else {
       return kj::none;
     }

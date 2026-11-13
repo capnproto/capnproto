@@ -869,9 +869,9 @@ struct TestChild {
 
   ~TestChild() noexcept(false) {
     KJ_IF_SOME(p, pid) {
-      KJ_SYSCALL(::kill(p, SIGKILL)) { return; }
+      KJ_DTOR_SYSCALL(::kill(p, SIGKILL));
       int status;
-      KJ_SYSCALL(waitpid(p, &status, 0)) { return; }
+      KJ_DTOR_SYSCALL(waitpid(p, &status, 0));
     }
   }
 
@@ -892,7 +892,7 @@ TEST(AsyncUnixTest, ChildProcess) {
   KJ_SYSCALL(sigemptyset(&sigs));
   KJ_SYSCALL(sigaddset(&sigs, SIGTERM));
   KJ_SYSCALL(pthread_sigmask(SIG_BLOCK, &sigs, &oldsigs));
-  KJ_DEFER(KJ_SYSCALL(pthread_sigmask(SIG_SETMASK, &oldsigs, nullptr)) { break; });
+  KJ_DEFER(KJ_DTOR_SYSCALL(pthread_sigmask(SIG_SETMASK, &oldsigs, nullptr)));
 
   UnixEventPort port;
   EventLoop loop(port);

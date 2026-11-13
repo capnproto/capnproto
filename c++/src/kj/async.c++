@@ -838,7 +838,7 @@ struct Executor::Impl {
     KJ_DEFER(state.lockExclusive());
 
     for (auto& event: s.start) {
-      KJ_ASSERT(event.state == _::XThreadEvent::QUEUED, event.state) { break; }
+      KJ_DTOR_ASSERT(event.state == _::XThreadEvent::QUEUED, event.state);
       s.start.remove(event);
       event.setDisconnected();
       event.sendReply();
@@ -846,7 +846,7 @@ struct Executor::Impl {
     }
 
     for (auto& event: s.executing) {
-      KJ_ASSERT(event.state == _::XThreadEvent::EXECUTING, event.state) { break; }
+      KJ_DTOR_ASSERT(event.state == _::XThreadEvent::EXECUTING, event.state);
       s.executing.remove(event);
       event.promiseNode = kj::none;
       event.setDisconnected();
@@ -855,7 +855,7 @@ struct Executor::Impl {
     }
 
     for (auto& event: s.cancel) {
-      KJ_ASSERT(event.state == _::XThreadEvent::CANCELING, event.state) { break; }
+      KJ_DTOR_ASSERT(event.state == _::XThreadEvent::CANCELING, event.state);
       s.cancel.remove(event);
       event.promiseNode = kj::none;
       event.setDoneState();
@@ -1417,7 +1417,7 @@ struct FiberStack::Impl {
       KJ_FAIL_SYSCALL("mmap(new stack)", errno);
     }
     KJ_ON_SCOPE_FAILURE({
-      KJ_SYSCALL(munmap(stackMapping, allocSize)) { break; }
+      KJ_DTOR_SYSCALL(munmap(stackMapping, allocSize));
     });
 
 #if __linux__
@@ -1467,7 +1467,8 @@ struct FiberStack::Impl {
   static void free(Impl* impl, size_t stackSize) {
     size_t allocSize = stackSize + getPageSize();
     void* stack = reinterpret_cast<byte*>(impl + 1) - allocSize;
-    KJ_SYSCALL(munmap(stack, allocSize)) { break; }
+    // Called from ~FiberStack().
+    KJ_DTOR_SYSCALL(munmap(stack, allocSize));
   }
 
   static size_t getPageSize() {
@@ -1907,10 +1908,9 @@ void EventLoop::Id::assertCurrentEventLoop() const {
 }
 
 void EventLoop::leaveScope() {
-  KJ_REQUIRE(threadLocalEventLoop == this,
-             "WaitScope destroyed in a different thread than it was created in.") {
-    break;
-  }
+  // Called from ~WaitScope().
+  KJ_DTOR_REQUIRE(threadLocalEventLoop == this,
+                  "WaitScope destroyed in a different thread than it was created in.");
   threadLocalEventLoop = nullptr;
 }
 
@@ -2214,7 +2214,12 @@ void NeverDone::wait(WaitScope& waitScope, SourceLocation location) const {
 
 void detach(kj::Promise<void>&& promise) {
   EventLoop& loop = currentEventLoop();
-  KJ_REQUIRE(loop.daemons.get() != nullptr, "EventLoop is shutting down.") { return; }
+  if (loop.daemons.get() == nullptr) {
+    // Destructors may call this while the EventLoop is being torn down, so don't throw during
+    // unwind.
+    KJ_DTOR_FAIL_REQUIRE("EventLoop is shutting down.");
+    return;
+  }
   loop.daemons->add(kj::mv(promise));
 }
 
