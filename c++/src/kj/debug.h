@@ -570,6 +570,47 @@ namespace kj {
 
 namespace _ {  // private
 
+#if defined(_MSC_VER) && !defined(__clang__)
+#define KJ_DEBUG_FAIL_BY_VALUE 0
+// MSVC doesn't inline anything in debug builds, not even `__forceinline` functions, so the wrapper
+// that passes arguments by value would add a frame to the stack trace of every failed check.
+#else
+#define KJ_DEBUG_FAIL_BY_VALUE 1
+#define KJ_DEBUG_FAIL_INLINE inline __attribute__((always_inline))
+// Unlike KJ_ALWAYS_INLINE, inlines even in debug builds: Debug::fail() must not add a frame to
+// the stack trace.
+#endif
+
+#if KJ_DEBUG_FAIL_BY_VALUE
+
+template <typename T, bool = __is_class(T) || __is_union(T)>
+struct DebugIsScalar_ { static constexpr bool value = __is_trivially_copyable(T); };
+template <typename T> struct DebugIsScalar_<T, true> { static constexpr bool value = false; };
+template <typename T> struct DebugIsScalar_<T&>: DebugIsScalar_<T> {};
+template <typename T> struct DebugIsScalar_<T&&>: DebugIsScalar_<T> {};
+template <typename T, size_t s> struct DebugIsScalar_<T[s]> { static constexpr bool value = false; };
+template <typename T> struct DebugIsScalar_<T[]> { static constexpr bool value = false; };
+// Whether `T`, ignoring references, is a scalar type: a number, enum or pointer. (Non-class,
+// non-array types are trivially copyable if and only if they are scalars.)
+
+template <typename T, bool = DebugIsScalar_<T>::value>
+struct DebugParam_ { typedef T&& Type; };
+template <typename T>
+struct DebugParam_<T, true> { typedef Decay<T> Type; };
+template <typename T>
+using DebugParam = typename DebugParam_<T>::Type;
+// The type in which Debug::fail() passes an argument of type `T&&` to the out-of-line code that
+// stringifies it. Scalars (numbers, enums, pointers) are copied, everything else is passed by
+// reference. Copying a scalar is free on the failure path, and means that the function containing
+// the check doesn't take its address: a local variable can stay in a register, rather than being
+// written to the stack every time the check passes. The magic assert types are specialized
+// below, so that `_kjCondition` doesn't need to be in memory either.
+//
+// Copies don't change the description: everything is stringified before the call returns, while
+// any temporaries in the macro's arguments are still alive.
+
+#endif  // KJ_DEBUG_FAIL_BY_VALUE
+
 class Debug {
 public:
   Debug() = delete;
@@ -596,21 +637,40 @@ public:
   static void log(const char* file, int line, LogSeverity severity, const char* macroArgs,
                   Params&&... params);
 
+#if KJ_DEBUG_FAIL_BY_VALUE
+  template <typename Code, typename... Params>
+  static KJ_DEBUG_FAIL_INLINE KJ_NORETURN(void fail(const char* file, int line, Code code,
+      const char* condition, const char* macroArgs, Params&&... params));
+  template <typename Code, typename... Params>
+  static KJ_DEBUG_FAIL_INLINE void failUnlessUnwinding(const char* file, int line,
+      Code code, const char* condition, const char* macroArgs, Params&&... params);
+  // Forward to failImpl() / failUnlessUnwindingImpl(), passing cheap arguments by value (see
+  // `DebugParam`). Always inlined, even in debug builds, so that they don't add a frame to the
+  // stack trace.
+
+  template <typename Code, typename... Params>
+  static KJ_NOINLINE KJ_NORETURN(void failImpl(const char* file, int line, Code code,
+      const char* condition, const char* macroArgs, Params... params));
+  template <typename Code, typename... Params>
+  static KJ_NOINLINE KJ_NOT_TAIL_CALLED void failUnlessUnwindingImpl(const char* file, int line,
+      Code code, const char* condition, const char* macroArgs, Params... params);
+#else
   template <typename Code, typename... Params>
   static KJ_NOINLINE KJ_NORETURN(void fail(const char* file, int line, Code code,
       const char* condition, const char* macroArgs, Params&&... params));
-  // Throws an exception describing a failed check. Used by the check macros. Kept out of line so
-  // that the call site is just a branch and a call.
-
   template <typename Code, typename... Params>
   static KJ_NOINLINE KJ_NOT_TAIL_CALLED void failUnlessUnwinding(const char* file, int line,
       Code code, const char* condition, const char* macroArgs, Params&&... params);
-  // Throws an exception describing a failed check, unless another exception is unwinding the
-  // stack, in which case it logs the failure and returns; see
+#endif
+  // fail() throws an exception describing a failed check. Used by the check macros. Kept out of
+  // line so that the call site is just a branch and a call.
+  //
+  // failUnlessUnwinding() throws an exception describing a failed check, unless another exception
+  // is unwinding the stack, in which case it logs the failure and returns; see
   // `kj::throwExceptionUnlessUnwinding()`. Used by the `KJ_DTOR_*` macros. The unwinding check
-  // only happens here, on the failure path, so the call site is a branch and a call, with no
-  // try/catch. Not tail-called, so that the trace (which skips this frame) still starts with the
-  // function containing the check.
+  // only happens out of line, on the failure path, so the call site is a branch and a call, with
+  // no try/catch. Not tail-called, so that the trace (which skips the out-of-line frame) still
+  // starts with the function containing the check.
 
   class SyscallResult {
   public:
@@ -699,6 +759,11 @@ private:
   static int getOsErrorNumber(bool nonblocking);
   // Get the error code of the last error (e.g. from errno).  Returns -1 on EINTR.
 
+  template <typename Code, typename... Params>
+  static Exception makeFailureWithParams(const char* file, int line, Code code,
+      const char* condition, const char* macroArgs, Params&&... params);
+  // Stringifies `params` and builds the exception describing a failed check.
+
   static Exception makeFailure(const char* file, int line, Exception::Type type,
       const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
   static Exception makeFailure(const char* file, int line, int osErrorNumber,
@@ -723,16 +788,57 @@ inline void Debug::log<>(const char* file, int line, LogSeverity severity, const
 }
 
 template <typename Code, typename... Params>
+Exception Debug::makeFailureWithParams(const char* file, int line, Code code,
+    const char* condition, const char* macroArgs, Params&&... params) {
+  if constexpr (sizeof...(Params) == 0) {
+    return makeFailure(file, line, code, condition, macroArgs, nullptr);
+  } else {
+    String argValues[sizeof...(Params)] = {str(params)...};
+    return makeFailure(file, line, code, condition, macroArgs,
+                       arrayPtr(argValues, sizeof...(Params)));
+  }
+}
+
+#if KJ_DEBUG_FAIL_BY_VALUE
+
+template <typename Code, typename... Params>
+inline void Debug::fail(const char* file, int line, Code code,
+                        const char* condition, const char* macroArgs, Params&&... params) {
+  failImpl<Code, DebugParam<Params>...>(
+      file, line, code, condition, macroArgs, kj::fwd<Params>(params)...);
+}
+
+template <typename Code, typename... Params>
+inline void Debug::failUnlessUnwinding(const char* file, int line, Code code,
+                                       const char* condition, const char* macroArgs,
+                                       Params&&... params) {
+  failUnlessUnwindingImpl<Code, DebugParam<Params>...>(
+      file, line, code, condition, macroArgs, kj::fwd<Params>(params)...);
+}
+
+template <typename Code, typename... Params>
+void Debug::failImpl(const char* file, int line, Code code,
+                     const char* condition, const char* macroArgs, Params... params) {
+  // ignoreCount = 1 to skip this frame, so the trace starts at the failed check.
+  throwException(makeFailureWithParams(file, line, code, condition, macroArgs, params...), 1);
+}
+
+template <typename Code, typename... Params>
+void Debug::failUnlessUnwindingImpl(const char* file, int line, Code code,
+                                    const char* condition, const char* macroArgs,
+                                    Params... params) {
+  // ignoreCount = 1 to skip this frame, so the trace starts at the failed check.
+  throwExceptionUnlessUnwinding(
+      makeFailureWithParams(file, line, code, condition, macroArgs, params...), 1);
+}
+
+#else  // KJ_DEBUG_FAIL_BY_VALUE
+
+template <typename Code, typename... Params>
 void Debug::fail(const char* file, int line, Code code,
                  const char* condition, const char* macroArgs, Params&&... params) {
   // ignoreCount = 1 to skip this frame, so the trace starts at the failed check.
-  if constexpr (sizeof...(Params) == 0) {
-    throwException(makeFailure(file, line, code, condition, macroArgs, nullptr), 1);
-  } else {
-    String argValues[sizeof...(Params)] = {str(params)...};
-    throwException(makeFailure(file, line, code, condition, macroArgs,
-                               arrayPtr(argValues, sizeof...(Params))), 1);
-  }
+  throwException(makeFailureWithParams(file, line, code, condition, macroArgs, params...), 1);
 }
 
 template <typename Code, typename... Params>
@@ -740,15 +846,11 @@ void Debug::failUnlessUnwinding(const char* file, int line, Code code,
                                 const char* condition, const char* macroArgs,
                                 Params&&... params) {
   // ignoreCount = 1 to skip this frame, so the trace starts at the failed check.
-  if constexpr (sizeof...(Params) == 0) {
-    throwExceptionUnlessUnwinding(
-        makeFailure(file, line, code, condition, macroArgs, nullptr), 1);
-  } else {
-    String argValues[sizeof...(Params)] = {str(params)...};
-    throwExceptionUnlessUnwinding(makeFailure(file, line, code, condition, macroArgs,
-                                              arrayPtr(argValues, sizeof...(Params))), 1);
-  }
+  throwExceptionUnlessUnwinding(
+      makeFailureWithParams(file, line, code, condition, macroArgs, params...), 1);
 }
+
+#endif  // KJ_DEBUG_FAIL_BY_VALUE, else
 
 #if _WIN32 || __CYGWIN__
 inline Debug::Win32Result Debug::win32Call(int boolean) {
@@ -874,6 +976,41 @@ String KJ_STRINGIFY(DebugComparison<Left, Right, Op>& cmp) {
   return _::concat(tryToCharSequence(&cmp.left), Op::op(), tryToCharSequence(&cmp.right));
 }
 
+#if KJ_DEBUG_FAIL_BY_VALUE
+
+template <typename T, bool = DebugIsScalar_<T>::value>
+struct DebugOperand_ { typedef T& Type; };
+template <typename T>
+struct DebugOperand_<T, true> { typedef Decay<T> Type; };
+template <typename T>
+using DebugOperand = typename DebugOperand_<T>::Type;
+// How DebugComparisonOperands holds an operand of type `T`: scalars by value, everything else by
+// reference to the operand in the DebugComparison.
+
+template <typename Left, typename Right, typename Op>
+struct DebugComparisonOperands {
+  // The operands of a failed DebugComparison, as passed to Debug::failImpl(). Doesn't refer to
+  // the DebugComparison itself, so that it can stay in registers when the check passes.
+
+  Left left;
+  Right right;
+
+  template <typename L, typename R>
+  DebugComparisonOperands(DebugComparison<L, R, Op>& cmp): left(cmp.left), right(cmp.right) {}
+};
+
+template <typename Left, typename Right, typename Op>
+String KJ_STRINGIFY(DebugComparisonOperands<Left, Right, Op>& cmp) {
+  return _::concat(tryToCharSequence(&cmp.left), Op::op(), tryToCharSequence(&cmp.right));
+}
+
+template <typename Left, typename Right, typename Op>
+struct DebugParam_<DebugComparison<Left, Right, Op>&, false> {
+  typedef DebugComparisonOperands<DebugOperand<Left>, DebugOperand<Right>, Op> Type;
+};
+
+#endif  // KJ_DEBUG_FAIL_BY_VALUE
+
 template <typename T>
 struct DebugExpression {
   DebugExpression(T&& value): value(kj::fwd<T>(value)) {}
@@ -922,6 +1059,23 @@ StringPtr KJ_STRINGIFY(const DebugExpression<T>& exp) {
   //   directly, and was determined to be falsy.
   return "false"_kj;
 }
+
+#if KJ_DEBUG_FAIL_BY_VALUE
+
+struct DebugFalse {
+  // A failed DebugExpression, as passed to Debug::failImpl(). Its stringification doesn't depend
+  // on the value, so it's empty and takes no register or stack space.
+
+  template <typename T>
+  DebugFalse(const DebugExpression<T>&) {}
+};
+
+inline StringPtr KJ_STRINGIFY(DebugFalse) { return "false"_kj; }
+
+template <typename T>
+struct DebugParam_<DebugExpression<T>&, false> { typedef DebugFalse Type; };
+
+#endif  // KJ_DEBUG_FAIL_BY_VALUE
 
 struct DebugExpressionStart {
   template <typename T>
