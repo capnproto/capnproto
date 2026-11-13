@@ -176,6 +176,7 @@ cc_library(
 
 cc_test(
     name = "http-over-capnp-bench",
+    size = "large",
     srcs = ["http-over-capnp-bench.c++"],
     tags = ["google_benchmark"],
     deps = [
@@ -183,7 +184,6 @@ cc_test(
         "//src/capnp:capnp-rpc",
         "@google_benchmark//:benchmark",
     ],
-    size = "large",
 )
 
 cc_test(
