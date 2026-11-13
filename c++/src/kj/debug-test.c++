@@ -556,6 +556,69 @@ KJ_TEST("magic assert stringification") {
   }
 }
 
+KJ_TEST("assertion diagnostics are captured before argument temporaries are destroyed") {
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(kj::str("temporary pointer").cStr());
+    }));
+    KJ_EXPECT(exception.getDescription() == "temporary pointer");
+  }
+
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_REQUIRE(false, kj::str("temporary view").asPtr());
+    }));
+    KJ_EXPECT(exception.getDescription() == "expected false; temporary view");
+  }
+
+  {
+    // The argument is a reference to a subobject, not an owning temporary that can be moved.
+    struct Temporary {
+      kj::String text = kj::str("temporary subobject");
+      kj::String& getText() { return text; }
+    };
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_ASSERT(Temporary().getText());
+    }));
+    KJ_EXPECT(exception.getDescription() == "Temporary().getText() = temporary subobject");
+  }
+}
+
+struct NonmovableDiagnostic {
+  NonmovableDiagnostic() = default;
+  KJ_DISALLOW_COPY_AND_MOVE(NonmovableDiagnostic);
+};
+
+kj::StringPtr KJ_STRINGIFY(const NonmovableDiagnostic&) {
+  return "nonmovable";
+}
+
+KJ_TEST("assertion diagnostics do not require moving their arguments") {
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_UNIMPLEMENTED(kj::str("owning temporary"));
+    }));
+    KJ_EXPECT(exception.getType() == kj::Exception::Type::UNIMPLEMENTED);
+    KJ_EXPECT(exception.getDescription() == "owning temporary");
+  }
+
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(NonmovableDiagnostic());
+    }));
+    KJ_EXPECT(exception.getDescription() == "NonmovableDiagnostic() = nonmovable");
+  }
+
+  {
+    auto value = kj::str("not moved");
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(kj::mv(value));
+    }));
+    KJ_EXPECT(exception.getDescription() == "kj::mv(value) = not moved");
+    KJ_EXPECT(value == "not moved");
+  }
+}
+
 KJ_NOINLINE void failFailAssert(void*& callerFrame) {
   callerFrame = KJ_CALLING_ADDRESS();
   KJ_FAIL_ASSERT();
