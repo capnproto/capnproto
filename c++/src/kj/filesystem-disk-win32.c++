@@ -145,9 +145,9 @@ static void rmrfChildren(ArrayPtr<const wchar_t> path) {
   if (handle == INVALID_HANDLE_VALUE) {
     auto error = GetLastError();
     if (error == ERROR_FILE_NOT_FOUND) return;
-    KJ_FAIL_WIN32("FindFirstFile", error, dbgStr(glob)) { return; }
+    KJ_FAIL_WIN32("FindFirstFile", error, dbgStr(glob));
   }
-  KJ_DEFER(KJ_WIN32(FindClose(handle)) { break; });
+  KJ_DEFER(KJ_DTOR_WIN32(FindClose(handle)));
 
   do {
     // Ignore "." and "..", ugh.
@@ -182,7 +182,7 @@ static void rmrfChildren(ArrayPtr<const wchar_t> path) {
           }
           KJ_FALLTHROUGH;
         default:
-          KJ_FAIL_WIN32("RemoveDirectory", error, dbgStr(child)) { break; }
+          KJ_FAIL_WIN32("RemoveDirectory", error, dbgStr(child));
       }
     } else {
       KJ_WIN32(DeleteFileW(child.begin()));
@@ -191,7 +191,7 @@ static void rmrfChildren(ArrayPtr<const wchar_t> path) {
 
   auto error = GetLastError();
   if (error != ERROR_NO_MORE_FILES) {
-    KJ_FAIL_WIN32("FindNextFile", error, dbgStr(path)) { return; }
+    KJ_FAIL_WIN32("FindNextFile", error, dbgStr(path));
   }
 }
 
@@ -273,7 +273,7 @@ protected:
                               elementSize * elementCount);
     void* mapping = reinterpret_cast<void*>(range.offset);
     if (mapping != nullptr) {
-      KJ_ASSERT(UnmapViewOfFile(mapping)) { break; }
+      KJ_DTOR_ASSERT(UnmapViewOfFile(mapping));
     }
   }
 };
@@ -283,7 +283,7 @@ constexpr MmapDisposer mmapDisposer = MmapDisposer();
 void* win32Mmap(HANDLE handle, MmapRange range, DWORD pageProtect, DWORD access) {
   HANDLE mappingHandle;
   KJ_WIN32(mappingHandle = CreateFileMappingW(handle, NULL, pageProtect, 0, 0, NULL));
-  KJ_DEFER(KJ_WIN32(CloseHandle(mappingHandle)) { break; });
+  KJ_DEFER(KJ_DTOR_WIN32(CloseHandle(mappingHandle)));
 
   void* mapping = MapViewOfFile(mappingHandle, access,
       static_cast<DWORD>(range.offset >> 32), static_cast<DWORD>(range.offset), range.size);
@@ -351,8 +351,7 @@ public:
         // Probably VeraCrypt. See https://github.com/capnproto/capnproto/issues/2176
         break;
       default:
-        KJ_FAIL_WIN32("GetFileInformationByHandleEx(FileCompressionInfo)", error) { break; }
-        break;
+        KJ_FAIL_WIN32("GetFileInformationByHandleEx(FileCompressionInfo)", error);
     } else {
       metadata.spaceUsed = compInfo.CompressedFileSize.QuadPart;
     }
@@ -385,7 +384,7 @@ public:
           n = 0;
           break;
         default:
-          KJ_FAIL_WIN32("ReadFile", offset, buffer.size()) { return total; }
+          KJ_FAIL_WIN32("ReadFile", error, offset, buffer.size());
       }
       if (n == 0) break;
       total += n;
@@ -561,7 +560,7 @@ public:
       if (error == ERROR_FILE_NOT_FOUND) return nullptr;
       KJ_FAIL_WIN32("FindFirstFile", error, dbgStr(glob));
     }
-    KJ_DEFER(KJ_WIN32(FindClose(handle)) { break; });
+    KJ_DEFER(KJ_DTOR_WIN32(FindClose(handle)));
 
     typedef Decay<decltype(func(instance<StringPtr>(), instance<FsNode::Type>()))> Entry;
     kj::Vector<Entry> entries;
@@ -603,7 +602,7 @@ public:
         case ERROR_PATH_NOT_FOUND:
           return false;
         default:
-          KJ_FAIL_WIN32("GetFileAttributesEx(path)", error, path) { return false; }
+          KJ_FAIL_WIN32("GetFileAttributesEx(path)", error, path);
       }
     } else {
       return true;
@@ -639,7 +638,7 @@ public:
       case ERROR_PATH_NOT_FOUND:
         return nullptr;
       default:
-        KJ_FAIL_WIN32("CreateFile(path, OPEN_EXISTING)", error, path) { return nullptr; }
+        KJ_FAIL_WIN32("CreateFile(path, OPEN_EXISTING)", error, path);
     }
 
     return newDiskReadableFile(kj::AutoCloseHandle(newHandle));
@@ -664,7 +663,7 @@ public:
       case ERROR_PATH_NOT_FOUND:
         return nullptr;
       default:
-        KJ_FAIL_WIN32("CreateFile(directoryPath, OPEN_EXISTING)", error, path) { return nullptr; }
+        KJ_FAIL_WIN32("CreateFile(directoryPath, OPEN_EXISTING)", error, path);
     }
 
     kj::AutoCloseHandle ownHandle(newHandle);
@@ -814,7 +813,7 @@ public:
     // node in a temporary location and then rename()ing it into place.
 
     if (path.size() == 0) {
-      KJ_FAIL_REQUIRE("can't replace self") { return false; }
+      KJ_FAIL_REQUIRE("can't replace self");
     }
 
     auto filename = nativePath(path);
@@ -840,7 +839,7 @@ public:
           }
           KJ_FALLTHROUGH;
         default:
-          KJ_FAIL_WIN32("create(path)", error, path) { return false; }
+          KJ_FAIL_WIN32("create(path)", error, path);
       } else {
         // Success.
         return true;
@@ -910,7 +909,7 @@ public:
             return tryOpenFileInternal(path, mode - WriteMode::CREATE_PARENT, append);
           }
 
-          KJ_FAIL_REQUIRE("parent is not a directory", path) { return nullptr; }
+          KJ_FAIL_REQUIRE("parent is not a directory", path);
         } else {
           // MODIFY-only mode. ERROR_PATH_NOT_FOUND = parent path doesn't exist = return null.
           return nullptr;
@@ -930,7 +929,7 @@ public:
         goto failed;
       default:
       failed:
-        KJ_FAIL_WIN32("CreateFile", error, path) { return nullptr; }
+        KJ_FAIL_WIN32("CreateFile", error, path);
     }
 
     return kj::AutoCloseHandle(newHandle);
@@ -955,7 +954,7 @@ public:
           case ERROR_PATH_NOT_FOUND:
             return false;
           default:
-            KJ_FAIL_WIN32("GetFileAttributesEx(toPath)", error, toPath) { return false; }
+            KJ_FAIL_WIN32("GetFileAttributesEx(toPath)", error, toPath);
         }
       }
     }
@@ -990,9 +989,7 @@ public:
             default:
               // Try to move back.
               MoveFileW(tempName.begin(), wToPath.begin());
-              KJ_FAIL_WIN32("MoveFile", error, dbgStr(fromPath), dbgStr(wToPath)) {
-                return false;
-              }
+              KJ_FAIL_WIN32("MoveFile", error, dbgStr(fromPath), dbgStr(wToPath));
           }
 
           // Succeeded, delete temporary.
@@ -1011,7 +1008,7 @@ public:
 
       default:
       default_:
-        KJ_FAIL_WIN32("MoveFileEx", error, dbgStr(wToPath), dbgStr(fromPath)) { return false; }
+        KJ_FAIL_WIN32("MoveFileEx", error, dbgStr(wToPath), dbgStr(fromPath));
     }
 
     return true;
@@ -1044,7 +1041,7 @@ public:
     }
 
     bool tryCommit() override {
-      KJ_ASSERT(!committed, "already committed") { return false; }
+      KJ_ASSERT(!committed, "already committed");
 
       // For directories, we intentionally don't use FILE_SHARE_DELETE on our handle because if the
       // directory name changes our paths would be wrong. But, this means we can't rename the
@@ -1057,14 +1054,16 @@ public:
       KJ_DEFER({
         if (kj::isSameType<T, Directory>()) {
           HANDLE newHandle = nullptr;
-          KJ_WIN32(newHandle = CreateFileW(
+          // This runs during unwind if committing failed, so don't throw then.
+          KJ_DTOR_WIN32(newHandle = CreateFileW(
               committed ? parentDirectory.nativePath(path).begin() : tempPath.begin(),
               GENERIC_READ,
               FILE_SHARE_READ | FILE_SHARE_WRITE,
               NULL,
               OPEN_EXISTING,
               FILE_FLAG_BACKUP_SEMANTICS,  // apparently, this flag is required for directories
-              NULL)) { return; }
+              NULL));
+          if (newHandle == nullptr || newHandle == INVALID_HANDLE_VALUE) return;
           *objectHandle = AutoCloseHandle(newHandle);
           *getPathPointerHack(*object) = KJ_ASSERT_NONNULL(parentDirectory.dirPath).append(path);
         }
@@ -1194,7 +1193,7 @@ public:
   bool tryTransfer(PathPtr toPath, WriteMode toMode,
                    const Directory& fromDirectory, PathPtr fromPath,
                    TransferMode mode, const Directory& self) const {
-    KJ_REQUIRE(toPath.size() > 0, "can't replace self") { return false; }
+    KJ_REQUIRE(toPath.size() > 0, "can't replace self");
 
     // Try to get the "from" path.
     Array<wchar_t> rawFromPath;
@@ -1241,7 +1240,7 @@ public:
           // to default implementation.
           break;
         default:
-          KJ_FAIL_WIN32("CopyFile", error, fromPath, toPath) { return false; }
+          KJ_FAIL_WIN32("CopyFile", error, fromPath, toPath);
       } else {
         // Copy succeeded.
         return true;
@@ -1454,7 +1453,7 @@ public:
   Array<Entry> listEntries() const override {
     DWORD drives = GetLogicalDrives();
     if (drives == 0) {
-      KJ_FAIL_WIN32("GetLogicalDrives()", GetLastError()) { return nullptr; }
+      KJ_FAIL_WIN32("GetLogicalDrives()", GetLastError());
     }
 
     Vector<Entry> results;
@@ -1504,8 +1503,7 @@ private:
       auto temp = kj::heapArray<wchar_t>(tryLen + 1);
       DWORD len = GetCurrentDirectoryW(temp.size(), temp.begin());
       if (len == 0) {
-        KJ_FAIL_WIN32("GetCurrentDirectory", GetLastError()) { break; }
-        return Path(".");
+        KJ_FAIL_WIN32("GetCurrentDirectory", GetLastError());
       }
       if (len < temp.size()) {
         return Path::parseWin32Api(temp.first(len));

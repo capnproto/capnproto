@@ -1962,9 +1962,7 @@ private:
       // Successful resolution.
 
       KJ_ASSERT(connection.is<Connected>(),
-                "Resolving export should have been canceled on disconnect.") {
-        return kj::READY_NOW;
-      }
+                "Resolving export should have been canceled on disconnect.");
 
       // If we're resolving to anonther promise that is itself already resolved, skip past it.
       //
@@ -3259,9 +3257,7 @@ private:
         });
 
         KJ_ASSERT(connectionState->connection.is<Connected>(),
-                  "Cancellation should have been requested on disconnect.") {
-          return;
-        }
+                  "Cancellation should have been requested on disconnect.");
 
         if (response == kj::none) getResults(MessageSize{0, 0});  // force initialization of response
 
@@ -3832,7 +3828,7 @@ private:
 
       if (bootstrap.hasDeprecatedObjectId()) {
         KJ_FAIL_REQUIRE("This vat only supports a bootstrap interface, not the old "
-                        "Cap'n-Proto-0.4-style named exports.") { return; }
+                        "Cap'n-Proto-0.4-style named exports.");
       } else {
         cap = bootstrapFactory.baseCreateFor(conn.baseGetPeerVatId());
       }
@@ -4341,9 +4337,7 @@ private:
 
           KJ_REQUIRE(unwrapIfSameConnection(*target) != kj::none,
                     "'Disembargo' of type 'senderLoopback' sent to an object that does not point "
-                    "back to the sender.") {
-            return;
-          }
+                    "back to the sender.");
 
           if (!connection.is<Connected>()) {
             return;
@@ -4365,9 +4359,7 @@ private:
             // See the documentation of Disembargo in rpc.capnp for more.
             KJ_REQUIRE(redirect == kj::none,
                       "'Disembargo' of type 'senderLoopback' sent to an object that does not "
-                      "appear to have been the subject of a previous 'Resolve' message.") {
-              return;
-            }
+                      "appear to have been the subject of a previous 'Resolve' message.");
           }
 
           builder.getContext().setReceiverLoopback(embargoId);
