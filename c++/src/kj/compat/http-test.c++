@@ -2071,6 +2071,20 @@ KJ_TEST("HttpInputStream bare message grows buffer after exactly consumed body")
   secondWrite.wait(waitScope);
 }
 
+KJ_TEST("HttpInputStream body length above 2^32") {
+  // Content-Length is a 64-bit quantity, so a value that doesn't fit in 32 bits has to survive
+  // all the way to the body stream rather than being clipped on the way there.
+  KJ_HTTP_TEST_SETUP_IO;
+
+  kj::HttpHeaderTable table;
+  auto pipe = kj::newOneWayPipe();
+  auto input = newHttpInputStream(*pipe.in, table);
+
+  auto writeTask = pipe.out->write("Content-Length: 4294967296\r\n\r\n"_kjb);
+  auto message = input->readMessage().wait(waitScope);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(message.body->tryGetLength()) == 4294967296ull);
+}
+
 // -----------------------------------------------------------------------------
 
 KJ_TEST("WebSocket core protocol") {
