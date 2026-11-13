@@ -111,6 +111,21 @@ if(NOT CAPNP_LITE)
   install(FILES ${capnp-rpc_headers} ${capnp-rpc_schemas} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/capnp")
 endif()
 
+# From CMake upstream: Some atomic instructions are implemented using
+# libatomic on some platforms.
+include(CheckCXXSourceCompiles)
+CHECK_CXX_SOURCE_COMPILES("
+#include <atomic>
+int main()
+{
+  std::atomic<long long>(0).load();
+  return 0;
+}
+" HAVE_CXX_ATOMICS_WITHOUT_LIB)
+if(NOT HAVE_CXX_ATOMICS_WITHOUT_LIB)
+  target_link_libraries(capnp PUBLIC atomic)
+endif()
+
 # capnp-json ========================================================================
 
 set(capnp-json_sources
