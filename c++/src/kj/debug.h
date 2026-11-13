@@ -580,11 +580,73 @@ namespace kj {
 namespace _ {  // private
 
 #if defined(_MSC_VER) && !defined(__clang__)
+#define KJ_FAIL_BY_VALUE_ 0
+// MSVC doesn't inline anything in debug builds, not even `__forceinline` functions, so the wrapper
+// that passes arguments by value would add a frame to the stack trace of every failed check.
+#define KJ_FAIL_INLINE_ inline
 #define KJ_FAIL_COLD_
 #else
+#define KJ_FAIL_BY_VALUE_ 1
+#define KJ_FAIL_INLINE_ inline __attribute__((always_inline))
+// Unlike KJ_ALWAYS_INLINE, inlines even in debug builds: Debug::fail() must not add a frame to
+// the stack trace.
 #define KJ_FAIL_COLD_ __attribute__((cold))
 // The failure and logging paths: optimized for size and kept away from the code that calls them.
 #endif
+
+#if KJ_FAIL_BY_VALUE_
+
+template <typename T, typename = void>
+struct DebugIsSmallClass_ { static constexpr bool value = false; };
+template <typename T>
+struct DebugIsSmallClass_<T, decltype(void(sizeof(T)))> {
+  static constexpr bool value = __is_trivially_copyable(T) &&
+      __is_trivially_constructible(T, const T&) && sizeof(T) <= 2 * sizeof(void*);
+};
+// Whether `T` is a complete class that can be copied as cheaply as two pointers, e.g. a StringPtr
+// or an iterator.
+
+template <typename T, bool = __is_class(T) || __is_union(T)>
+struct DebugByValue_ { static constexpr bool value = __is_trivially_copyable(T); };
+template <typename T> struct DebugByValue_<T, true>: DebugIsSmallClass_<T> {};
+template <typename T> struct DebugByValue_<T&>: DebugByValue_<T> {};
+template <typename T> struct DebugByValue_<T&&>: DebugByValue_<T> {};
+template <typename T, size_t s> struct DebugByValue_<T[s]> { static constexpr bool value = false; };
+template <typename T> struct DebugByValue_<T[]> { static constexpr bool value = false; };
+// Whether `T`, ignoring references, is cheap to copy: a scalar type (a number, enum or pointer;
+// non-class, non-array types are trivially copyable if and only if they are scalars), or a small
+// class (see DebugIsSmallClass_).
+
+template <typename T, bool = DebugByValue_<T>::value>
+struct DebugParam_ { typedef T&& Type; };
+template <typename T>
+struct DebugParam_<T, true> { typedef Decay<T> Type; };
+template <typename T>
+using DebugParam = typename DebugParam_<T>::Type;
+// The type in which Debug::fail() passes an argument of type `T&&` to the out-of-line code that
+// stringifies it. Scalars (numbers, enums, pointers) and small trivially copyable classes are
+// copied, everything else is passed by reference. Copying is cheap on the failure path, and means
+// that the function containing the check doesn't take the argument's address: a local variable
+// can stay in registers, rather than being written to the stack every time the check passes.
+//
+// Copies don't change the description: everything is stringified before the call returns, while
+// any temporaries in the macro's arguments are still alive.
+
+template <typename T>
+struct DebugConditionParam_ { typedef DebugParam<T> Type; };
+template <typename T>
+using DebugConditionParam = typename DebugConditionParam_<T>::Type;
+// The type in which Debug::fail() passes a check's condition that is a comparison. It's
+// specialized below to pass a DebugComparison as DebugComparisonOperands, so that a comparison as
+// `_kjCondition` doesn't need to be in memory either. Only the condition is passed that way: a
+// DebugComparison that is an ordinary argument is stringified like any other.
+
+#else  // KJ_FAIL_BY_VALUE_
+
+template <typename T>
+using DebugParam = T&&;
+
+#endif  // KJ_FAIL_BY_VALUE_, else
 
 template <typename T, typename = void>
 struct DebugIsComparison_ { static constexpr bool value = false; };
@@ -592,7 +654,9 @@ template <typename T>
 struct DebugIsComparison_<T, decltype(void(debugComparison(instance<T&>())))> {
   static constexpr bool value = true;
 };
-// Whether the evaluated condition supplies operands to display on failure.
+// Whether a check's evaluated condition is a comparison, whose operands are shown when the check
+// fails: a DebugComparison, or the DebugComparisonOperands that DebugConditionParam passes one as.
+// Each has a debugComparison() overload, below.
 
 class Debug {
 public:
@@ -675,11 +739,37 @@ public:
     Arg right;
   };
 
+#if KJ_FAIL_BY_VALUE_
+  template <typename S, typename Code, typename... Params>
+  static KJ_FAIL_INLINE_ KJ_NORETURN(void fail(S site, Code code, Params&&... params));
+  template <typename S, typename Condition, typename... Params>
+  static KJ_FAIL_INLINE_ KJ_NORETURN(void fail(S site, ConditionFailed code,
+      Condition&& condition, Params&&... params));
+  template <typename S, typename Code, typename... Params>
+  static KJ_FAIL_INLINE_ void failUnlessUnwinding(S site, Code code, Params&&... params);
+  template <typename S, typename Condition, typename... Params>
+  static KJ_FAIL_INLINE_ void failUnlessUnwinding(S site, ConditionFailed code,
+      Condition&& condition, Params&&... params);
+  // Forward to failImpl() / failUnlessUnwindingImpl(), passing cheap arguments by value (see
+  // `DebugParam`), and a condition that is a comparison as its operands (see
+  // `DebugConditionParam`). A condition that isn't shown, as it isn't a comparison, isn't passed
+  // at all: the failure is described like that of a check without a condition, and shares its
+  // instantiation. Always inlined, even in debug builds, so that they don't add a frame to the
+  // stack trace.
+
+  template <typename S, typename Code, typename... Params>
+  static KJ_NOINLINE KJ_FAIL_COLD_ KJ_NORETURN(void failImpl(S site, Code code,
+      Params... params));
+  template <typename S, typename Code, typename... Params>
+  static KJ_NOINLINE KJ_FAIL_COLD_ KJ_NOT_TAIL_CALLED void failUnlessUnwindingImpl(
+      S site, Code code, Params... params);
+#else
   template <typename S, typename Code, typename... Params>
   static KJ_NOINLINE KJ_NORETURN(void fail(S site, Code code, Params&&... params));
   template <typename S, typename Code, typename... Params>
   static KJ_NOINLINE KJ_NOT_TAIL_CALLED void failUnlessUnwinding(S site, Code code,
       Params&&... params);
+#endif
   // fail() throws an exception describing a failed check. Used by the check macros. Kept out of
   // line so that the call site is just a branch and a call. `site` is a PackedSite or a Site.
   //
@@ -855,6 +945,57 @@ Exception Debug::makeFailureWithParams(S site, ConditionFailed code, Condition&&
   }
 }
 
+#if KJ_FAIL_BY_VALUE_
+
+template <typename S, typename Code, typename... Params>
+inline void Debug::fail(S site, Code code, Params&&... params) {
+  failImpl<S, Code, DebugParam<Params>...>(site, code, kj::fwd<Params>(params)...);
+}
+
+template <typename S, typename Condition, typename... Params>
+inline void Debug::fail(S site, ConditionFailed code, Condition&& condition, Params&&... params) {
+  if constexpr (DebugIsComparison_<Decay<Condition>>::value) {
+    failImpl<S, ConditionFailed, DebugConditionParam<Condition>, DebugParam<Params>...>(
+        site, code, kj::fwd<Condition>(condition), kj::fwd<Params>(params)...);
+  } else {
+    fail(site, Exception::Type::FAILED, kj::fwd<Params>(params)...);
+  }
+}
+
+template <typename S, typename Code, typename... Params>
+inline void Debug::failUnlessUnwinding(S site, Code code, Params&&... params) {
+  failUnlessUnwindingImpl<S, Code, DebugParam<Params>...>(site, code, kj::fwd<Params>(params)...);
+}
+
+template <typename S, typename Condition, typename... Params>
+inline void Debug::failUnlessUnwinding(S site, ConditionFailed code, Condition&& condition,
+                                       Params&&... params) {
+  if constexpr (DebugIsComparison_<Decay<Condition>>::value) {
+    failUnlessUnwindingImpl<S, ConditionFailed, DebugConditionParam<Condition>,
+                            DebugParam<Params>...>(
+        site, code, kj::fwd<Condition>(condition), kj::fwd<Params>(params)...);
+  } else {
+    failUnlessUnwinding(site, Exception::Type::FAILED, kj::fwd<Params>(params)...);
+  }
+}
+
+template <typename S, typename Code, typename... Params>
+void Debug::failImpl(S site, Code code, Params... params) {
+  // ignoreCount = 1 to skip this frame, so the trace starts at the failed check.
+  throwException(makeFailureWithParams(site, code, params...), 1);
+}
+
+template <typename S, typename Code, typename... Params>
+void Debug::failUnlessUnwindingImpl(S site, Code code, Params... params) {
+  // ignoreCount = 1 to skip this frame, so the trace starts at the failed check.
+  throwExceptionUnlessUnwinding(makeFailureWithParams(site, code, params...), 1);
+}
+
+#else  // KJ_FAIL_BY_VALUE_
+
+// The same as failImpl() and failUnlessUnwindingImpl(), but called by the macros directly, taking
+// the arguments by reference: on MSVC, a wrapper would add a frame to the stack trace.
+
 template <typename S, typename Code, typename... Params>
 void Debug::fail(S site, Code code, Params&&... params) {
   // ignoreCount = 1 to skip this frame, so the trace starts at the failed check.
@@ -866,6 +1007,8 @@ void Debug::failUnlessUnwinding(S site, Code code, Params&&... params) {
   // ignoreCount = 1 to skip this frame, so the trace starts at the failed check.
   throwExceptionUnlessUnwinding(makeFailureWithParams(site, code, params...), 1);
 }
+
+#endif  // KJ_FAIL_BY_VALUE_, else
 
 #if _WIN32 || __CYGWIN__
 inline Debug::Win32Result Debug::win32Call(int boolean) {
@@ -1004,8 +1147,53 @@ Debug::Comparison debugComparison(DebugComparison<Left, Right, Op>& cmp) {
 
 template <typename Left, typename Right, typename Op>
 String KJ_STRINGIFY(DebugComparison<Left, Right, Op>& cmp) {
+  // For a comparison that is an ordinary argument rather than a check's condition, e.g. one that
+  // a macro defined outside of KJ passes to KJ_LOG.
   return stringifyDebugComparison(debugComparison(cmp));
 }
+
+#if KJ_FAIL_BY_VALUE_
+
+template <typename T, bool = DebugByValue_<T>::value>
+struct DebugOperandByValue_ { static constexpr bool value = false; };
+template <typename T>
+struct DebugOperandByValue_<T, true> {
+  static constexpr bool value = sizeof(Decay<T>) <= sizeof(void*);
+};
+template <typename T, bool = DebugOperandByValue_<T>::value>
+struct DebugOperand_ { typedef T& Type; };
+template <typename T>
+struct DebugOperand_<T, true> { typedef Decay<T> Type; };
+template <typename T>
+using DebugOperand = typename DebugOperand_<T>::Type;
+// How DebugComparisonOperands holds an operand of type `T`: cheap ones (see DebugByValue_) that
+// fit in a register by value, everything else by reference to the operand in the
+// DebugComparison. So DebugComparisonOperands always fits in two registers: a bigger one would
+// be passed on the stack, which costs stack space in the function containing the check.
+
+template <typename Left, typename Right, typename Op>
+struct DebugComparisonOperands {
+  // The operands of a failed DebugComparison, as passed to Debug::failImpl(). Doesn't refer to
+  // the DebugComparison itself, so that it can stay in registers when the check passes.
+
+  Left left;
+  Right right;
+
+  template <typename L, typename R>
+  DebugComparisonOperands(DebugComparison<L, R, Op>& cmp): left(cmp.left), right(cmp.right) {}
+};
+
+template <typename Left, typename Right, typename Op>
+Debug::Comparison debugComparison(DebugComparisonOperands<Left, Right, Op>& cmp) {
+  return { debugOperand(&cmp.left), Op::op(), debugOperand(&cmp.right) };
+}
+
+template <typename Left, typename Right, typename Op>
+struct DebugConditionParam_<DebugComparison<Left, Right, Op>&> {
+  typedef DebugComparisonOperands<DebugOperand<Left>, DebugOperand<Right>, Op> Type;
+};
+
+#endif  // KJ_FAIL_BY_VALUE_
 
 template <typename T>
 struct DebugExpression {
@@ -1057,6 +1245,8 @@ static constexpr DebugExpressionStart MAGIC_ASSERT;
 }  // namespace _ (private)
 }  // namespace kj
 
+#undef KJ_FAIL_BY_VALUE_
+#undef KJ_FAIL_INLINE_
 #undef KJ_FAIL_COLD_
 
 KJ_END_HEADER

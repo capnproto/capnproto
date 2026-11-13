@@ -175,6 +175,13 @@ TEST(Debug, Log) {
     KJ_EXPECT(flag && i == 123, "message"); line = __LINE__;
   }, kj::str("log message: ", fileLine(__FILE__, line), ":+0: error: "
       "failed: expected flag && i == 123; message\n"));
+
+  // A comparison that is an ordinary argument of KJ_LOG is labeled like any other.
+  EXPECT_LOG_EQ([&](){
+    auto comparison = MAGIC_ASSERT << i == 456;
+    KJ_LOG(ERROR, "message", comparison); line = __LINE__;
+  }, kj::str("log message: ", fileLine(__FILE__, line), ":+0: error: "
+      "message; comparison = 123 == 456\n"));
 }
 
 TEST(Debug, EmptyVariadicArgs) {
@@ -597,6 +604,29 @@ KJ_TEST("magic assert stringification") {
     }));
 
     KJ_EXPECT(exception.getDescription() == "expected foo; foo = false");
+  }
+
+  // A comparison that is an ordinary argument, rather than a check's condition, is labeled and
+  // stringified like any other argument. A macro defined outside of KJ might pass one to KJ_LOG.
+  {
+    int foo = 123;
+    auto comparison = MAGIC_ASSERT << foo == 456;
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_ASSERT("message", comparison);
+    }));
+
+    KJ_EXPECT(exception.getDescription() == "message; comparison = 123 == 456");
+    KJ_EXPECT(KJ_EXCEPTION(FAILED, "message", comparison).getDescription() ==
+        "message; comparison = 123 == 456");
+    KJ_EXPECT(kj::str(comparison) == "123 == 456");
+
+    // Also if it's the argument of a check whose condition is a comparison too.
+    auto exception2 = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_ASSERT(foo == 789, comparison);
+    }));
+
+    KJ_EXPECT(exception2.getDescription() ==
+        "expected foo == 789 [123 == 789]; comparison = 123 == 456");
   }
 }
 
