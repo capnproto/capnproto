@@ -22,7 +22,9 @@
 #include "exception.h"
 #include "debug.h"
 #include "main.h"
+#include "thread.h"
 #include <kj/compat/gtest.h>
+#include <atomic>
 #include <stdexcept>
 #include <stdint.h>
 #include <signal.h>
@@ -45,6 +47,40 @@ KJ_TEST("crash handler stack trace is signal-safe") {
 
   // TSan reports any allocation made by getStackTrace() while handling this signal.
   KJ_SYSCALL(raise(SIGUSR1));
+}
+
+std::atomic<uint> signalTraceCount = 0;
+
+void countTraceFromSignal(int) {
+  void* traceSpace[32]{};
+  getStackTrace(traceSpace, 0);
+  signalTraceCount.fetch_add(1, std::memory_order_release);
+}
+
+KJ_TEST("stack trace from a signal that interrupted a stack trace") {
+  // A crash handler traces whatever its thread was doing, which is often taking a stack trace for
+  // an exception. Under ASan, backtrace()'s interceptor would then spin forever on a lock that the
+  // interrupted thread holds.
+  struct sigaction action = {};
+  action.sa_handler = &countTraceFromSignal;
+  KJ_SYSCALL(sigaction(SIGUSR2, &action, nullptr));
+  signalTraceCount = 0;
+
+  std::atomic<bool> done = false;
+  Thread tracer([&]() {
+    while (!done.load(std::memory_order_relaxed)) {
+      void* traceSpace[32]{};
+      getStackTrace(traceSpace, 0);
+    }
+  });
+  KJ_DEFER(done = true);
+
+  // If the handler deadlocks, this hangs until the test times out. Failing sooner doesn't help:
+  // reporting the failure would need the same lock.
+  for (uint i: kj::zeroTo(10000)) {
+    tracer.sendSignal(SIGUSR2);
+    while (signalTraceCount.load(std::memory_order_acquire) == i) {}
+  }
 }
 #endif
 
