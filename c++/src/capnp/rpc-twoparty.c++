@@ -158,9 +158,7 @@ public:
     KJ_REQUIRE(size < network.receiveOptions.traversalLimitInWords, size,
                "Trying to send Cap'n Proto message larger than our single-message size limit. The "
                "other side probably won't accept it (assuming its traversalLimitInWords matches "
-               "ours) and would abort the connection, so I won't send it.") {
-      return;
-    }
+               "ours) and would abort the connection, so I won't send it.");
 
     auto sendTime = network.clock.now();
     if (network.queuedMessages.size() == 0) {

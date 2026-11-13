@@ -242,9 +242,7 @@ Schema Schema::getDependency(uint64_t id, uint location) const {
     }
   }
 
-  KJ_FAIL_REQUIRE("Requested ID not found in dependency table.", kj::hex(id)) {
-    return Schema();
-  }
+  KJ_FAIL_REQUIRE("Requested ID not found in dependency table.", kj::hex(id));
 }
 
 Schema::BrandArgumentList Schema::getBrandArgumentsAtScope(uint64_t scopeId) const {
@@ -280,33 +278,25 @@ kj::Array<uint64_t> Schema::getGenericScopeIds() const {
 
 StructSchema Schema::asStruct() const {
   KJ_REQUIRE(getProto().isStruct(), "Tried to use non-struct schema as a struct.",
-             getProto().getDisplayName()) {
-    return StructSchema();
-  }
+             getProto().getDisplayName());
   return StructSchema(*this);
 }
 
 EnumSchema Schema::asEnum() const {
   KJ_REQUIRE(getProto().isEnum(), "Tried to use non-enum schema as an enum.",
-             getProto().getDisplayName()) {
-    return EnumSchema();
-  }
+             getProto().getDisplayName());
   return EnumSchema(*this);
 }
 
 InterfaceSchema Schema::asInterface() const {
   KJ_REQUIRE(getProto().isInterface(), "Tried to use non-interface schema as an interface.",
-             getProto().getDisplayName()) {
-    return InterfaceSchema();
-  }
+             getProto().getDisplayName());
   return InterfaceSchema(*this);
 }
 
 ConstSchema Schema::asConst() const {
   KJ_REQUIRE(getProto().isConst(), "Tried to use non-constant schema as a constant.",
-             getProto().getDisplayName()) {
-    return ConstSchema();
-  }
+             getProto().getDisplayName());
   return ConstSchema(*this);
 }
 
@@ -579,9 +569,7 @@ static constexpr uint MAX_SUPERCLASSES = 64;
 kj::Maybe<InterfaceSchema::Method> InterfaceSchema::findMethodByName(
     kj::StringPtr name, uint& counter) const {
   // Security:  Don't let someone DOS us with a dynamic schema containing cyclic inheritance.
-  KJ_REQUIRE(counter++ < MAX_SUPERCLASSES, "Cyclic or absurdly-large inheritance graph detected.") {
-    return kj::none;
-  }
+  KJ_REQUIRE(counter++ < MAX_SUPERCLASSES, "Cyclic or absurdly-large inheritance graph detected.");
 
   auto result = findSchemaMemberByName(raw->generic, name, getMethods());
 
@@ -632,9 +620,7 @@ bool InterfaceSchema::extends(InterfaceSchema other) const {
 
 bool InterfaceSchema::extends(InterfaceSchema other, uint& counter) const {
   // Security:  Don't let someone DOS us with a dynamic schema containing cyclic inheritance.
-  KJ_REQUIRE(counter++ < MAX_SUPERCLASSES, "Cyclic or absurdly-large inheritance graph detected.") {
-    return false;
-  }
+  KJ_REQUIRE(counter++ < MAX_SUPERCLASSES, "Cyclic or absurdly-large inheritance graph detected.");
 
   if (other == *this) {
     return true;
@@ -665,9 +651,7 @@ kj::Maybe<InterfaceSchema> InterfaceSchema::findSuperclass(uint64_t typeId) cons
 
 kj::Maybe<InterfaceSchema> InterfaceSchema::findSuperclass(uint64_t typeId, uint& counter) const {
   // Security:  Don't let someone DOS us with a dynamic schema containing cyclic inheritance.
-  KJ_REQUIRE(counter++ < MAX_SUPERCLASSES, "Cyclic or absurdly-large inheritance graph detected.") {
-    return kj::none;
-  }
+  KJ_REQUIRE(counter++ < MAX_SUPERCLASSES, "Cyclic or absurdly-large inheritance graph detected.");
 
   if (typeId == raw->generic->id) {
     return *this;
@@ -758,30 +742,22 @@ ListSchema ListSchema::of(schema::Type::Which primitiveType) {
 // =======================================================================================
 
 StructSchema Type::asStruct() const {
-  KJ_REQUIRE(isStruct(), "Tried to interpret a non-struct type as a struct.") {
-    return StructSchema();
-  }
+  KJ_REQUIRE(isStruct(), "Tried to interpret a non-struct type as a struct.");
   KJ_ASSERT(schema != nullptr);
   return StructSchema(Schema(schema));
 }
 EnumSchema Type::asEnum() const {
-  KJ_REQUIRE(isEnum(), "Tried to interpret a non-enum type as an enum.") {
-    return EnumSchema();
-  }
+  KJ_REQUIRE(isEnum(), "Tried to interpret a non-enum type as an enum.");
   KJ_ASSERT(schema != nullptr);
   return EnumSchema(Schema(schema));
 }
 InterfaceSchema Type::asInterface() const {
-  KJ_REQUIRE(isInterface(), "Tried to interpret a non-interface type as an interface.") {
-    return InterfaceSchema();
-  }
+  KJ_REQUIRE(isInterface(), "Tried to interpret a non-interface type as an interface.");
   KJ_ASSERT(schema != nullptr);
   return InterfaceSchema(Schema(schema));
 }
 ListSchema Type::asList() const {
-  KJ_REQUIRE(isList(), "Type::asList(): Not a list.") {
-    return ListSchema::of(schema::Type::VOID);
-  }
+  KJ_REQUIRE(isList(), "Type::asList(): Not a list.");
   Type elementType = *this;
   --elementType.listDepth;
   return ListSchema::of(elementType);

@@ -80,9 +80,7 @@ static SegmentWordCount verifySegment(kj::ArrayPtr<const word> segment) {
       "purpose of optimizations. Unaligned access may lead to crashes or subtle corruption. "
       "For example, GCC will use SIMD instructions in optimizations, and those instrsuctions "
       "require alignment. If you really insist on taking your changes with unaligned data, "
-      "compile the Cap'n Proto library with -DCAPNP_ALLOW_UNALIGNED to remove this check.") {
-    break;
-  }
+      "compile the Cap'n Proto library with -DCAPNP_ALLOW_UNALIGNED to remove this check.");
 #endif
   return verifySegmentSize(segment.size());
 }
@@ -150,9 +148,7 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
 }
 
 void ReaderArena::reportReadLimitReached() {
-  KJ_FAIL_REQUIRE("Exceeded message traversal limit.  See capnp::ReaderOptions.") {
-    return;
-  }
+  KJ_FAIL_REQUIRE("Exceeded message traversal limit.  See capnp::ReaderOptions.");
 }
 
 // =======================================================================================
@@ -350,9 +346,7 @@ SegmentReader* BuilderArena::tryGetSegment(SegmentId id) {
 }
 
 void BuilderArena::reportReadLimitReached() {
-  KJ_FAIL_ASSERT("Read limit reached for BuilderArena, but it should have been unlimited.") {
-    return;
-  }
+  KJ_FAIL_ASSERT("Read limit reached for BuilderArena, but it should have been unlimited.");
 }
 
 kj::Maybe<kj::Own<ClientHook>> BuilderArena::LocalCapTable::extractCap(uint index) {
@@ -381,9 +375,7 @@ void BuilderArena::LocalCapTable::dropCap(uint index) {
 #if CAPNP_LITE
   KJ_UNIMPLEMENTED("no cap tables in lite mode");
 #else
-  KJ_ASSERT(index < capTable.size(), "Invalid capability descriptor in message.") {
-    return;
-  }
+  KJ_ASSERT(index < capTable.size(), "Invalid capability descriptor in message.");
   capTable[index] = kj::none;
 #endif
 }
