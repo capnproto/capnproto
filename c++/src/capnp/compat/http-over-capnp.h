@@ -107,6 +107,20 @@ private:
       const kj::HttpHeaders& headers, capnp::Orphanage orphanage);
 };
 
+capnp::HttpMethod httpMethodToCapnp(const kj::HttpMethod& method);
+// Converts `method` for a capnp `HttpMethod` field. Returns `HttpMethod::OTHER` when
+// `method.known()` is `OTHER`, in which case `method.name()` must be sent alongside it (as in
+// `HttpRequest.methodName`).
+
+kj::HttpMethod httpMethodFromCapnp(capnp::HttpMethod method, capnp::Text::Reader methodName);
+// Inverse of httpMethodToCapnp(). `methodName` is only used if `method` is `OTHER`. Throws if
+// `method` is not recognized, or if `methodName` is not a valid method name.
+
+void setHttpMethod(capnp::HttpRequest::Builder request, const kj::HttpMethod& method);
+kj::HttpMethod getHttpMethod(capnp::HttpRequest::Reader request);
+// Convenience wrappers around the above, for the `method` and `methodName` fields of
+// `HttpRequest`.
+
 }  // namespace capnp
 
 CAPNP_END_HEADER
