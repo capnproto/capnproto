@@ -1862,6 +1862,251 @@ KJ_TEST("Userland pipe tryPumpFrom cancel") {
   expectRead(*pipe2.in, "baz").wait(ws);
 }
 
+KJ_TEST("Userland pipe abortWrite() fails reads with the exception") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+
+  char buffer[4]{};
+  auto readPromise = pipe.in->tryRead(buffer, 1, 4);
+  KJ_EXPECT(!readPromise.poll(ws));
+
+  pipe.out->abortWrite(KJ_EXCEPTION(FAILED, "foobar"));
+  KJ_EXPECT_THROW_MESSAGE("foobar", readPromise.wait(ws));
+
+  // Later reads, pumps and writes fail too.
+  KJ_EXPECT_THROW_MESSAGE("foobar", pipe.in->tryRead(buffer, 1, 4).wait(ws));
+  auto pipe2 = newOneWayPipe();
+  KJ_EXPECT_THROW_MESSAGE("foobar", pipe.in->pumpTo(*pipe2.out).wait(ws));
+  KJ_EXPECT_THROW_MESSAGE("foobar", pipe.out->write("baz"_kjb).wait(ws));
+
+  // Dropping the write end does not turn the failure into EOF.
+  pipe.out = nullptr;
+  KJ_EXPECT_THROW_MESSAGE("foobar", pipe.in->tryRead(buffer, 1, 4).wait(ws));
+}
+
+KJ_TEST("Userland pipe abortWrite() fails a pumpTo() with the exception") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  auto pipe2 = newOneWayPipe();
+  auto pumpPromise = pipe.in->pumpTo(*pipe2.out);
+  KJ_EXPECT(!pumpPromise.poll(ws));
+
+  pipe.out->abortWrite(KJ_EXCEPTION(FAILED, "foobar"));
+  KJ_EXPECT_THROW_MESSAGE("foobar", pumpPromise.wait(ws));
+}
+
+KJ_TEST("Userland pipe abortWrite() fails a blocked write with the exception") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newOneWayPipe();
+  auto writePromise = pipe.out->write("foo"_kjb);
+  KJ_EXPECT(!writePromise.poll(ws));
+
+  pipe.out->abortWrite(KJ_EXCEPTION(FAILED, "foobar"));
+  KJ_EXPECT_THROW_MESSAGE("foobar", writePromise.wait(ws));
+
+  char buffer[4]{};
+  KJ_EXPECT_THROW_MESSAGE("foobar", pipe.in->tryRead(buffer, 1, 4).wait(ws));
+}
+
+KJ_TEST("Userland pipe abortWrite() fails a read of a tryPumpFrom() input with the exception") {
+  // Canceling the tryPumpFrom() would fail the read with "operation canceled" instead.
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto input = newOneWayPipe();
+  auto pipe = newOneWayPipe();
+  auto pumpPromise = KJ_ASSERT_NONNULL(pipe.out->tryPumpFrom(*input.in));
+
+  char buffer[4]{};
+  auto readPromise = pipe.in->tryRead(buffer, 1, 4);
+  KJ_EXPECT(!readPromise.poll(ws));
+  KJ_EXPECT(!pumpPromise.poll(ws));
+
+  pipe.out->abortWrite(KJ_EXCEPTION(FAILED, "foobar"));
+  KJ_EXPECT_THROW_MESSAGE("foobar", readPromise.wait(ws));
+  KJ_EXPECT_THROW_MESSAGE("foobar", pumpPromise.wait(ws));
+  KJ_EXPECT_THROW_MESSAGE("foobar", pipe.in->tryRead(buffer, 1, 4).wait(ws));
+}
+
+KJ_TEST("Userland pipe abortWrite() fails a pumpTo() of a tryPumpFrom() input with the exception") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto input = newOneWayPipe();
+  auto pipe = newOneWayPipe();
+  auto pumpFromPromise = KJ_ASSERT_NONNULL(pipe.out->tryPumpFrom(*input.in));
+
+  auto output = newOneWayPipe();
+  auto pumpToPromise = pipe.in->pumpTo(*output.out);
+  KJ_EXPECT(!pumpToPromise.poll(ws));
+  KJ_EXPECT(!pumpFromPromise.poll(ws));
+
+  pipe.out->abortWrite(KJ_EXCEPTION(FAILED, "foobar"));
+  KJ_EXPECT_THROW_MESSAGE("foobar", pumpToPromise.wait(ws));
+  KJ_EXPECT_THROW_MESSAGE("foobar", pumpFromPromise.wait(ws));
+}
+
+KJ_TEST("Userland pipe abortWrite() after shutdownWrite() is ignored") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newTwoWayPipe();
+  pipe.ends[0]->shutdownWrite();
+  pipe.ends[0]->abortWrite(KJ_EXCEPTION(FAILED, "foobar"));
+
+  char buffer[4]{};
+  KJ_EXPECT(pipe.ends[1]->tryRead(buffer, 1, 4).wait(ws) == 0);
+}
+
+KJ_TEST("Two-way pipe abortWrite() fails only the other end's reads") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newTwoWayPipe();
+  pipe.ends[0]->abortWrite(KJ_EXCEPTION(FAILED, "foobar"));
+
+  char buffer[4]{};
+  KJ_EXPECT_THROW_MESSAGE("foobar", pipe.ends[1]->tryRead(buffer, 1, 4).wait(ws));
+
+  auto writePromise = pipe.ends[1]->write("foo"_kjb);
+  expectRead(*pipe.ends[0], "foo").wait(ws);
+  writePromise.wait(ws);
+}
+
+KJ_TEST("Two-way pipe abortRead() with an exception fails the other end's writes with it") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newTwoWayPipe();
+  auto writePromise = pipe.ends[1]->write("foo"_kjb);
+  KJ_EXPECT(!writePromise.poll(ws));
+
+  pipe.ends[0]->abortRead(KJ_EXCEPTION(FAILED, "foobar"));
+  KJ_EXPECT_THROW_MESSAGE("foobar", writePromise.wait(ws));
+
+  // Later writes and pumps fail too.
+  KJ_EXPECT_THROW_MESSAGE("foobar", pipe.ends[1]->write("baz"_kjb).wait(ws));
+  KJ_EXPECT_THROW_MESSAGE("foobar", pipe.ends[1]->tryWriteSync("baz"_kjb));
+  auto input = newOneWayPipe();
+  auto inputWrite = input.out->write("baz"_kjb);
+  KJ_EXPECT_THROW_MESSAGE("foobar",
+      KJ_ASSERT_NONNULL(pipe.ends[1]->tryPumpFrom(*input.in)).wait(ws));
+
+  // The other direction still works.
+  auto otherWrite = pipe.ends[0]->write("qux"_kjb);
+  expectRead(*pipe.ends[1], "qux").wait(ws);
+  otherWrite.wait(ws);
+}
+
+KJ_TEST("Two-way pipe abortRead() with an exception fails a write forwarded by pumpTo() with it") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newTwoWayPipe();
+  auto output = newOneWayPipe();
+  auto pumpPromise = pipe.ends[0]->pumpTo(*output.out);
+  auto writePromise = pipe.ends[1]->write("foo"_kjb);
+  KJ_EXPECT(!writePromise.poll(ws));
+  KJ_EXPECT(!pumpPromise.poll(ws));
+
+  pipe.ends[0]->abortRead(KJ_EXCEPTION(FAILED, "foobar"));
+  KJ_EXPECT_THROW_MESSAGE("foobar", writePromise.wait(ws));
+  KJ_EXPECT_THROW_MESSAGE("foobar", pumpPromise.wait(ws));
+  KJ_EXPECT_THROW_MESSAGE("foobar", pipe.ends[1]->write("baz"_kjb).wait(ws));
+}
+
+KJ_TEST("Two-way pipe abortRead() with an exception fails a stalled pump forwarded by pumpTo() "
+        "with it") {
+  // The pump is into an output with no tryPumpFrom(), so the pipe pumps the input itself.
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  class StalledInputStream final: public AsyncInputStream {
+  public:
+    Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
+      return NEVER_DONE;
+    }
+  };
+
+  auto pipe = newTwoWayPipe();
+  NullStream output;
+  auto pumpToPromise = pipe.ends[0]->pumpTo(output);
+  StalledInputStream input;
+  auto pumpFromPromise = input.pumpTo(*pipe.ends[1]);
+  KJ_EXPECT(!pumpToPromise.poll(ws));
+  KJ_EXPECT(!pumpFromPromise.poll(ws));
+
+  pipe.ends[0]->abortRead(KJ_EXCEPTION(FAILED, "foobar"));
+  KJ_EXPECT_THROW_MESSAGE("foobar", pumpToPromise.wait(ws));
+  KJ_EXPECT_THROW_MESSAGE("foobar", pumpFromPromise.wait(ws));
+}
+
+KJ_TEST("Two-way pipe abortRead() with an exception fails a tryPumpFrom() with it") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newTwoWayPipe();
+  auto input = newOneWayPipe();
+  auto pumpPromise = KJ_ASSERT_NONNULL(pipe.ends[1]->tryPumpFrom(*input.in));
+  auto inputWrite = input.out->write("foo"_kjb);
+  KJ_EXPECT(!pumpPromise.poll(ws));
+
+  pipe.ends[0]->abortRead(KJ_EXCEPTION(FAILED, "foobar"));
+  KJ_EXPECT_THROW_MESSAGE("foobar", pumpPromise.wait(ws));
+  KJ_EXPECT_THROW_MESSAGE("foobar", pipe.ends[1]->write("baz"_kjb).wait(ws));
+}
+
+KJ_TEST("Two-way pipe abortRead() with an exception fails a tryPumpFrom() with a read in "
+        "progress with it") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newTwoWayPipe();
+  auto input = newOneWayPipe();
+  auto pumpPromise = KJ_ASSERT_NONNULL(pipe.ends[1]->tryPumpFrom(*input.in));
+  char buffer[4]{};
+  auto readPromise = pipe.ends[0]->tryRead(buffer, 1, 4);
+  KJ_EXPECT(!readPromise.poll(ws));
+
+  pipe.ends[0]->abortRead(KJ_EXCEPTION(FAILED, "foobar"));
+  KJ_EXPECT_THROW_MESSAGE("foobar", readPromise.wait(ws));
+  KJ_EXPECT_THROW_MESSAGE("foobar", pumpPromise.wait(ws));
+}
+
+KJ_TEST("Two-way pipe abortRead() with an exception completes a tryPumpFrom() at EOF") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newTwoWayPipe();
+  auto input = newOneWayPipe();
+  auto pumpPromise = KJ_ASSERT_NONNULL(pipe.ends[1]->tryPumpFrom(*input.in));
+  input.out = nullptr;
+  KJ_EXPECT(!pumpPromise.poll(ws));
+
+  pipe.ends[0]->abortRead(KJ_EXCEPTION(FAILED, "foobar"));
+  KJ_EXPECT(pumpPromise.wait(ws) == 0);
+}
+
+KJ_TEST("Two-way pipe abortRead() keeps the first exception") {
+  kj::EventLoop loop;
+  WaitScope ws(loop);
+
+  auto pipe = newTwoWayPipe();
+  pipe.ends[0]->abortRead(KJ_EXCEPTION(FAILED, "foobar"));
+  pipe.ends[0]->abortRead(KJ_EXCEPTION(FAILED, "bazqux"));
+  pipe.ends[0]->abortRead();
+  KJ_EXPECT_THROW_MESSAGE("foobar", pipe.ends[1]->write("baz"_kjb).wait(ws));
+
+  pipe.ends[0] = nullptr;
+  KJ_EXPECT_THROW_MESSAGE("foobar", pipe.ends[1]->write("baz"_kjb).wait(ws));
+}
+
 KJ_TEST("Userland pipe with limit") {
   kj::EventLoop loop;
   WaitScope ws(loop);

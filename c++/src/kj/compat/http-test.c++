@@ -5947,6 +5947,61 @@ KJ_TEST("newHttpClient from HttpService WebSockets") {
   testWebSocketClient(waitScope, *headerTable, hMyHeader, *client);
 }
 
+KJ_TEST("newHttpClient from HttpService fails CONNECT reads and writes when connect() fails after "
+        "accept()") {
+  KJ_HTTP_TEST_SETUP_IO;
+
+  class AcceptThenFailService final: public HttpService {
+  public:
+    AcceptThenFailService(HttpHeaderTable& table, kj::Promise<void> result)
+        : table(table), result(kj::mv(result)) {}
+
+    kj::Promise<void> request(
+        HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
+        kj::AsyncInputStream& requestBody, Response& response) override {
+      KJ_UNIMPLEMENTED("Regular HTTP requests are not implemented here.");
+    }
+
+    kj::Promise<void> connect(kj::StringPtr host,
+                              const HttpHeaders& headers,
+                              kj::AsyncIoStream& connection,
+                              ConnectResponse& response,
+                              kj::HttpConnectSettings settings) override {
+      response.accept(200, "OK", HttpHeaders(table));
+      return kj::mv(result);
+    }
+
+  private:
+    HttpHeaderTable& table;
+    kj::Promise<void> result;
+  };
+
+  HttpHeaderTable table;
+  auto paf = kj::newPromiseAndFulfiller<void>();
+  AcceptThenFailService service(table, kj::mv(paf.promise));
+  auto client = newHttpClient(service);
+
+  auto request = client->connect("example.org"_kj, HttpHeaders(table), {});
+  KJ_EXPECT(request.status.wait(waitScope).statusCode == 200);
+
+  char buffer[4]{};
+  auto readPromise = request.connection->tryRead(buffer, 1, 4);
+  auto writePromise = request.connection->write("foo"_kjb);
+  KJ_EXPECT(!readPromise.poll(waitScope));
+  KJ_EXPECT(!writePromise.poll(waitScope));
+
+  paf.fulfiller->reject(KJ_EXCEPTION(FAILED, "connect failed"));
+
+  // Reads and writes fail with the service's exception, rather than reads reporting a clean EOF
+  // and writes failing with a generic error.
+  KJ_EXPECT_THROW_MESSAGE("connect failed", readPromise.wait(waitScope));
+  KJ_EXPECT_THROW_MESSAGE("connect failed", writePromise.wait(waitScope));
+  KJ_EXPECT_THROW_MESSAGE("connect failed",
+      request.connection->tryRead(buffer, 1, 4).wait(waitScope));
+  KJ_EXPECT_THROW_MESSAGE("connect failed",
+      request.connection->write("bar"_kjb).wait(waitScope));
+}
+
 KJ_TEST("adapted client/server propagates request exceptions like non-adapted client") {
   KJ_HTTP_TEST_SETUP_IO;
 

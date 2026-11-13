@@ -343,6 +343,17 @@ public:
     }
   }
 
+  void abortRead(kj::Exception&& exception) override {
+    KJ_IF_SOME(s, state) {
+      s.abortRead(kj::mv(exception));
+    } else {
+      ownState = kj::heap<AbortedRead>(kj::mv(exception));
+      state = *ownState;
+
+      readAbortEvent.signal();
+    }
+  }
+
   Promise<void> write(ArrayPtr<const byte> buffer) override {
     if (buffer == nullptr) {
       return READY_NOW;
@@ -452,6 +463,15 @@ public:
       s.shutdownWrite();
     } else {
       ownState = kj::heap<ShutdownedWrite>();
+      state = *ownState;
+    }
+  }
+
+  void abortWrite(kj::Exception&& exception) override {
+    KJ_IF_SOME(s, state) {
+      s.abortWrite(kj::mv(exception));
+    } else {
+      ownState = kj::heap<AbortedWrite>(kj::mv(exception));
       state = *ownState;
     }
   }
@@ -761,6 +781,12 @@ private:
       pipe.endState(*this);
       pipe.abortRead();
     }
+    void abortRead(kj::Exception&& exception) override {
+      canceler.cancel(exception);
+      fulfiller.reject(exception.clone());
+      pipe.endState(*this);
+      pipe.abortRead(kj::mv(exception));
+    }
 
     Promise<void> write(ArrayPtr<const byte> buffer) override {
       KJ_FAIL_REQUIRE("can't write() again until previous write() completes");
@@ -791,6 +817,12 @@ private:
     }
     void shutdownWrite() override {
       KJ_FAIL_REQUIRE("can't shutdownWrite() until previous write() completes");
+    }
+    void abortWrite(kj::Exception&& exception) override {
+      canceler.cancel(exception);
+      fulfiller.reject(exception.clone());
+      pipe.endState(*this);
+      pipe.abortWrite(kj::mv(exception));
     }
 
     Promise<void> whenWriteDisconnected() override {
@@ -955,35 +987,12 @@ private:
     }
 
     void abortRead() override {
-      if (!isReadOutstanding) {
-        // No read in flight, we must check for EOF.
-
-        // The input might have reached EOF, but we haven't detected it yet because we haven't tried
-        // to read that far. If we had not optimized tryPumpFrom() and instead used the default
-        // pumpTo() implementation, then the input would not have called write() again once it
-        // reached EOF, and therefore the abortRead() on the other end would *not* propagate an
-        // exception! We need the same behavior here. To that end, we need to detect if we're at EOF
-        // by reading one last byte.
-        checkEofTask = kj::evalNow([&]() {
-          static char junk;
-          return input.tryRead(&junk, 1, 1).then([this](uint64_t n) {
-            if (n == 0) {
-              fulfiller.fulfill(kj::cp(pumpedSoFar));
-            } else {
-              fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "read end of pipe was aborted"));
-            }
-          }).eagerlyEvaluate([this](kj::Exception&& e) {
-            fulfiller.reject(kj::mv(e));
-          });
-        });
-      } else {
-        // Read is in-flight; by definition we are not at EOF.
-        canceler.cancel("abortRead() was called");
-        fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "read end of pipe was aborted"));
-      }
-
-      pipe.endState(*this);
+      rejectForAbortedRead(kj::none);
       pipe.abortRead();
+    }
+    void abortRead(kj::Exception&& exception) override {
+      rejectForAbortedRead(exception.clone());
+      pipe.abortRead(kj::mv(exception));
     }
 
     Promise<void> write(ArrayPtr<const byte> buffer) override {
@@ -1016,6 +1025,14 @@ private:
     void shutdownWrite() override {
       KJ_FAIL_REQUIRE("can't shutdownWrite() until previous tryPumpFrom() completes");
     }
+    void abortWrite(kj::Exception&& exception) override {
+      // Fails a read or pump that is reading `input` with the exception, rather than with the
+      // generic cancellation it gets when the tryPumpFrom() is canceled.
+      canceler.cancel(exception);
+      fulfiller.reject(exception.clone());
+      pipe.endState(*this);
+      pipe.abortWrite(kj::mv(exception));
+    }
 
     Promise<void> whenWriteDisconnected() override {
       KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
@@ -1033,6 +1050,46 @@ private:
     // If true, a tryRead() call is either still in progress or didn't complete sucessfully.
     // In this case, we cannot invoke tryRead() again during an abortRead() call.
     bool isReadOutstanding = false;
+
+    void rejectForAbortedRead(kj::Maybe<kj::Exception> reason) {
+      // Fails the pump because the read end was aborted, with `reason` if there is one.
+
+      if (!isReadOutstanding) {
+        // No read in flight, we must check for EOF.
+
+        // The input might have reached EOF, but we haven't detected it yet because we haven't tried
+        // to read that far. If we had not optimized tryPumpFrom() and instead used the default
+        // pumpTo() implementation, then the input would not have called write() again once it
+        // reached EOF, and therefore the abortRead() on the other end would *not* propagate an
+        // exception! We need the same behavior here. To that end, we need to detect if we're at EOF
+        // by reading one last byte.
+        checkEofTask = kj::evalNow([&]() {
+          static char junk;
+          return input.tryRead(&junk, 1, 1)
+              .then([this, reason = kj::mv(reason)](uint64_t n) mutable {
+            if (n == 0) {
+              fulfiller.fulfill(kj::cp(pumpedSoFar));
+            } else {
+              fulfiller.reject(kj::mv(reason).orDefault(
+                  KJ_EXCEPTION(DISCONNECTED, "read end of pipe was aborted")));
+            }
+          }).eagerlyEvaluate([this](kj::Exception&& e) {
+            fulfiller.reject(kj::mv(e));
+          });
+        });
+      } else {
+        // Read is in-flight; by definition we are not at EOF.
+        KJ_IF_SOME(e, reason) {
+          canceler.cancel(e);
+          fulfiller.reject(kj::mv(e));
+        } else {
+          canceler.cancel("abortRead() was called");
+          fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "read end of pipe was aborted"));
+        }
+      }
+
+      pipe.endState(*this);
+    }
   };
 
   class BlockedRead final: public AsyncCapabilityStream {
@@ -1078,6 +1135,12 @@ private:
       fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "read end of pipe was aborted"));
       pipe.endState(*this);
       pipe.abortRead();
+    }
+    void abortRead(kj::Exception&& exception) override {
+      canceler.cancel(exception);
+      fulfiller.reject(exception.clone());
+      pipe.endState(*this);
+      pipe.abortRead(kj::mv(exception));
     }
 
     Promise<void> write(ArrayPtr<const byte> buffer) override {
@@ -1328,6 +1391,12 @@ private:
       pipe.endState(*this);
       pipe.shutdownWrite();
     }
+    void abortWrite(kj::Exception&& exception) override {
+      canceler.cancel(exception);
+      fulfiller.reject(exception.clone());
+      pipe.endState(*this);
+      pipe.abortWrite(kj::mv(exception));
+    }
 
     Promise<void> whenWriteDisconnected() override {
       KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
@@ -1427,6 +1496,12 @@ private:
       fulfiller.reject(KJ_EXCEPTION(DISCONNECTED, "read end of pipe was aborted"));
       pipe.endState(*this);
       pipe.abortRead();
+    }
+    void abortRead(kj::Exception&& exception) override {
+      canceler.cancel(exception);
+      fulfiller.reject(exception.clone());
+      pipe.endState(*this);
+      pipe.abortRead(kj::mv(exception));
     }
 
     Promise<void> write(ArrayPtr<const byte> writeBuffer) override {
@@ -1616,32 +1691,37 @@ private:
       KJ_REQUIRE(canceler.isEmpty(), "already pumping");
 
       auto n = kj::min(amount2, amount - pumpedSoFar);
-      return output.tryPumpFrom(input, n)
-          .map([&](Promise<uint64_t> subPump) {
-        return canceler.wrap(subPump
-            .then([this,&input,amount2,n](uint64_t actual) -> Promise<uint64_t> {
-          canceler.release();
-          pumpedSoFar += actual;
-          KJ_ASSERT(pumpedSoFar <= amount);
-          if (pumpedSoFar == amount) {
-            fulfiller.fulfill(kj::cp(amount));
-            pipe.endState(*this);
-          }
+      Promise<uint64_t> subPump = nullptr;
+      KJ_IF_SOME(promise, output.tryPumpFrom(input, n)) {
+        subPump = kj::mv(promise);
+      } else {
+        // Pump into `output` here rather than leaving the pump to the caller, which would wait for
+        // `input` outside of `canceler`, where abortRead() could not fail it.
+        subPump = input.pumpTo(output, n);
+      }
+      return canceler.wrap(subPump
+          .then([this,&input,amount2,n](uint64_t actual) -> Promise<uint64_t> {
+        canceler.release();
+        pumpedSoFar += actual;
+        KJ_ASSERT(pumpedSoFar <= amount);
+        if (pumpedSoFar == amount) {
+          fulfiller.fulfill(kj::cp(amount));
+          pipe.endState(*this);
+        }
 
-          KJ_ASSERT(actual <= amount2);
-          if (actual == amount2) {
-            // Completed entire tryPumpFrom amount.
-            return amount2;
-          } else if (actual < n) {
-            // Received less than requested, presumably because EOF.
-            return actual;
-          } else {
-            // We received all the bytes that were requested but it didn't complete the pump.
-            KJ_ASSERT(pumpedSoFar == amount);
-            return input.pumpTo(pipe, amount2 - actual);
-          }
-        }, teeExceptionPromise<uint64_t>(fulfiller, canceler)));
-      });
+        KJ_ASSERT(actual <= amount2);
+        if (actual == amount2) {
+          // Completed entire tryPumpFrom amount.
+          return amount2;
+        } else if (actual < n) {
+          // Received less than requested, presumably because EOF.
+          return actual;
+        } else {
+          // We received all the bytes that were requested but it didn't complete the pump.
+          KJ_ASSERT(pumpedSoFar == amount);
+          return input.pumpTo(pipe, amount2 - actual);
+        }
+      }, teeExceptionPromise<uint64_t>(fulfiller, canceler)));
     }
 
     void shutdownWrite() override {
@@ -1649,6 +1729,12 @@ private:
       fulfiller.fulfill(kj::cp(pumpedSoFar));
       pipe.endState(*this);
       pipe.shutdownWrite();
+    }
+    void abortWrite(kj::Exception&& exception) override {
+      canceler.cancel(exception);
+      fulfiller.reject(exception.clone());
+      pipe.endState(*this);
+      pipe.abortWrite(kj::mv(exception));
     }
 
     Promise<void> whenWriteDisconnected() override {
@@ -1668,49 +1754,55 @@ private:
     // AsyncPipe state when abortRead() has been called.
 
   public:
+    AbortedRead(): exception(KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called")) {}
+    explicit AbortedRead(kj::Exception exception): exception(kj::mv(exception)) {}
+
     Promise<size_t> tryRead(void* readBufferPtr, size_t minBytes, size_t maxBytes) override {
-      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
+      return exception.clone();
     }
     Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
-      kj::throwException(KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called"));
+      kj::throwException(exception.clone());
     }
     Promise<ReadResult> tryReadWithFds(void* readBuffer, size_t minBytes, size_t maxBytes,
                                        OwnFd* fdBuffer, size_t maxFds) override {
-      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
+      return exception.clone();
     }
     Promise<ReadResult> tryReadWithStreams(
         void* readBuffer, size_t minBytes, size_t maxBytes,
         Own<AsyncCapabilityStream>* streamBuffer, size_t maxStreams) override {
-      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
+      return exception.clone();
     }
     Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
-      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
+      return exception.clone();
     }
     void abortRead() override {
       // ignore repeated abort
     }
+    void abortRead(kj::Exception&&) override {
+      // ignore repeated abort
+    }
 
     Promise<void> write(ArrayPtr<const byte> buffer) override {
-      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
+      return exception.clone();
     }
     Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
+      return exception.clone();
     }
     bool tryWriteSync(ArrayPtr<const byte> buffer) override {
-      kj::throwException(KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called"));
+      kj::throwException(exception.clone());
     }
     bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
-      kj::throwException(KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called"));
+      kj::throwException(exception.clone());
     }
     Promise<void> writeWithFds(ArrayPtr<const byte> data,
                               ArrayPtr<const ArrayPtr<const byte>> moreData,
                               ArrayPtr<const int> fds) override {
-      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
+      return exception.clone();
     }
     Promise<void> writeWithStreams(ArrayPtr<const byte> data,
                                   ArrayPtr<const ArrayPtr<const byte>> moreData,
                                   Array<Own<AsyncCapabilityStream>> streams) override {
-      return KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called");
+      return exception.clone();
     }
     Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
       // There might not actually be any data in `input`, in which case a pump wouldn't actually
@@ -1724,14 +1816,13 @@ private:
         // buffered pump, which would allocate a big old buffer just to find there's nothing to
         // read. Let's try reading 1 byte to avoid that allocation.
         static char c;
-        return input.tryRead(&c, 1, 1).then([](size_t n) {
+        return input.tryRead(&c, 1, 1).then([exception = exception.clone()](size_t n) mutable {
           if (n == 0) {
             // Yay, we're at EOF as hoped.
             return uint64_t(0);
           } else {
             // There was data in the input. The pump would have thrown.
-            kj::throwRecoverableException(
-                KJ_EXCEPTION(DISCONNECTED, "abortRead() has been called"));
+            kj::throwRecoverableException(kj::mv(exception));
             return uint64_t(0);
           }
         });
@@ -1741,9 +1832,15 @@ private:
       // ignore -- currently shutdownWrite() actually means that the PipeWriteEnd was dropped,
       // which is not an error even if reads have been aborted.
     }
+    void abortWrite(kj::Exception&&) override {
+      // ignore -- there is no reader left to fail
+    }
     Promise<void> whenWriteDisconnected() override {
       KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
     }
+
+  private:
+    kj::Exception exception;
   };
 
   class ShutdownedWrite final: public AsyncCapabilityStream {
@@ -1770,6 +1867,9 @@ private:
       return constPromise<uint64_t, 0>();
     }
     void abortRead() override {
+      // ignore
+    }
+    void abortRead(kj::Exception&&) override {
       // ignore
     }
 
@@ -1802,9 +1902,82 @@ private:
       // ignore -- currently shutdownWrite() actually means that the PipeWriteEnd was dropped,
       // so it will only be called once anyhow.
     }
+    void abortWrite(kj::Exception&&) override {
+      // ignore -- writes have already ended cleanly
+    }
     Promise<void> whenWriteDisconnected() override {
       KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
     }
+  };
+
+  class AbortedWrite final: public AsyncCapabilityStream {
+    // AsyncPipe state when abortWrite() has been called.
+
+  public:
+    explicit AbortedWrite(kj::Exception exception): exception(kj::mv(exception)) {}
+
+    Promise<size_t> tryRead(void* readBufferPtr, size_t minBytes, size_t maxBytes) override {
+      return exception.clone();
+    }
+    Maybe<size_t> tryReadSync(ArrayPtr<byte> buffer, size_t minBytes) override {
+      kj::throwException(exception.clone());
+    }
+    Promise<ReadResult> tryReadWithFds(void* readBuffer, size_t minBytes, size_t maxBytes,
+                                       OwnFd* fdBuffer, size_t maxFds) override {
+      return exception.clone();
+    }
+    Promise<ReadResult> tryReadWithStreams(
+        void* readBuffer, size_t minBytes, size_t maxBytes,
+        Own<AsyncCapabilityStream>* streamBuffer, size_t maxStreams) override {
+      return exception.clone();
+    }
+    Promise<uint64_t> pumpTo(AsyncOutputStream& output, uint64_t amount) override {
+      return exception.clone();
+    }
+    void abortRead() override {
+      // ignore
+    }
+    void abortRead(kj::Exception&&) override {
+      // ignore
+    }
+
+    Promise<void> write(ArrayPtr<const byte> buffer) override {
+      return exception.clone();
+    }
+    Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+      return exception.clone();
+    }
+    bool tryWriteSync(ArrayPtr<const byte> buffer) override {
+      kj::throwException(exception.clone());
+    }
+    bool tryWriteSync(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+      kj::throwException(exception.clone());
+    }
+    Promise<void> writeWithFds(ArrayPtr<const byte> data,
+                               ArrayPtr<const ArrayPtr<const byte>> moreData,
+                               ArrayPtr<const int> fds) override {
+      return exception.clone();
+    }
+    Promise<void> writeWithStreams(ArrayPtr<const byte> data,
+                                   ArrayPtr<const ArrayPtr<const byte>> moreData,
+                                   Array<Own<AsyncCapabilityStream>> streams) override {
+      return exception.clone();
+    }
+    Maybe<Promise<uint64_t>> tryPumpFrom(AsyncInputStream& input, uint64_t amount) override {
+      return Promise<uint64_t>(exception.clone());
+    }
+    void shutdownWrite() override {
+      // ignore -- the PipeWriteEnd's destructor calls shutdownWrite() after abortWrite() too
+    }
+    void abortWrite(kj::Exception&&) override {
+      // ignore repeated abort
+    }
+    Promise<void> whenWriteDisconnected() override {
+      KJ_FAIL_ASSERT("can't get here -- implemented by AsyncPipe");
+    }
+
+  private:
+    kj::Exception exception;
   };
 };
 
@@ -1868,6 +2041,10 @@ public:
     return pipe->whenWriteDisconnected();
   }
 
+  void abortWrite(kj::Exception&& exception) override {
+    pipe->abortWrite(kj::mv(exception));
+  }
+
 private:
   Rc<AsyncPipe> pipe;
   UnwindDetector unwind;
@@ -1905,6 +2082,9 @@ public:
   void abortRead() override {
     in->abortRead();
   }
+  void abortRead(kj::Exception&& exception) override {
+    in->abortRead(kj::mv(exception));
+  }
 
   Promise<void> write(ArrayPtr<const byte> buffer) override {
     return out->write(buffer);
@@ -1937,6 +2117,9 @@ public:
   }
   void shutdownWrite() override {
     out->shutdownWrite();
+  }
+  void abortWrite(kj::Exception&& exception) override {
+    out->abortWrite(kj::mv(exception));
   }
 
 private:
