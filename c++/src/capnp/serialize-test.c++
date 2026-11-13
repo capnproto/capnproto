@@ -430,7 +430,7 @@ int mkstemp(char *tpl) {
       KJ_FAIL_SYSCALL("open(mktemp())", error, tpl);
     }
 
-    memset(end, 'X', strlen(end));
+    kj::arrayPtr(end, strlen(end)).fill('X');
   }
 }
 #endif

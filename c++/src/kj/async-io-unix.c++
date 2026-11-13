@@ -1174,9 +1174,9 @@ public:
 
 private:
   SocketAddress() {
-    // We need to memset the whole object 0 otherwise Valgrind gets unhappy when we write it to a
+    // We need to zero the whole object otherwise Valgrind gets unhappy when we write it to a
     // pipe, due to the padding bytes being uninitialized.
-    memset(this, 0, sizeof(*this));
+    kj::asBytes(*this).fill(0);
   }
 
   socklen_t addrlen;

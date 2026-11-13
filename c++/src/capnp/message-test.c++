@@ -115,8 +115,7 @@ KJ_TEST("Rc builders project mutable fields and can project to readers") {
 }
 
 TEST(Message, MallocBuilderWithFirstSegment) {
-  word scratch[16];
-  memset(scratch, 0, sizeof(scratch));
+  word scratch[16]{};
   MallocMessageBuilder builder(kj::arrayPtr(scratch, 16), AllocationStrategy::FIXED_SIZE);
 
   kj::ArrayPtr<word> segment = builder.allocateSegment(1);
@@ -138,7 +137,7 @@ public:
 
   kj::ArrayPtr<word> allocateSegment(uint minimumSize) override {
     auto array = kj::heapArray<word>(minimumSize);
-    memset(array.begin(), 0, array.asBytes().size());
+    array.asBytes().fill(0);
     allocations.add(kj::mv(array));
     return allocations.back();
   }
@@ -205,8 +204,7 @@ TEST(Message, MessageBuilderInitMultiSegment) {
 }
 
 TEST(Message, MessageBuilderInitSpaceAvailable) {
-  word buffer[2048];
-  memset(buffer, 0, sizeof(buffer));
+  word buffer[2048]{};
   MallocMessageBuilder builder(buffer);
   initTestMessage(builder.getRoot<TestAllTypes>());
 
@@ -266,7 +264,7 @@ KJ_TEST("disallow unaligned") {
     char buffer[16];
     word align;
   };
-  memset(buffer, 0, sizeof(buffer));
+  kj::arrayPtr(buffer).fill(0);
 
   auto unaligned = kj::arrayPtr(reinterpret_cast<word*>(buffer + 1), 1);
 

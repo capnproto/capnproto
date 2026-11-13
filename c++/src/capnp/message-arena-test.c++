@@ -52,7 +52,7 @@ private:
 template <typename T, typename Func>
 void withPoisonedStorage(Func&& func) {
   alignas(T) byte storage[sizeof(T)]{};
-  memset(storage, 0xff, sizeof(storage));
+  kj::arrayPtr(storage).fill(0xff);
 
   T* object = reinterpret_cast<T*>(storage);
   kj::ctor(*object);

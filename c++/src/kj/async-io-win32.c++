@@ -703,8 +703,9 @@ public:
   }
 
 private:
-  SocketAddress(): addrlen(0) {
-    memset(&addr, 0, sizeof(addr));
+  SocketAddress() {
+    // Zero the whole object, including padding, to mollify valgrind.
+    kj::asBytes(*this).fill(0);
   }
 
   socklen_t addrlen;
@@ -779,7 +780,6 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
           }
 
           SocketAddress addr;
-          memset(&addr, 0, sizeof(addr));  // mollify valgrind
           if (params.host == "*") {
             // Set up a wildcard SocketAddress.  Only use the port number returned by getaddrinfo().
             addr.wildcard = true;

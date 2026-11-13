@@ -925,8 +925,7 @@ KJ_TEST("DiskFile holes") {
   auto file = dir->openFile(Path("holes"), WriteMode::CREATE);
 
 #if _WIN32
-  FILE_SET_SPARSE_BUFFER sparseInfo;
-  memset(&sparseInfo, 0, sizeof(sparseInfo));
+  FILE_SET_SPARSE_BUFFER sparseInfo{};
   sparseInfo.SetSparse = TRUE;
   DWORD dummy;
   KJ_WIN32(DeviceIoControl(
