@@ -41,6 +41,7 @@
 #include "function.h"
 #include "main.h"
 #include <stdlib.h>
+#include <string.h>
 #include <exception>
 #include <new>
 #include <signal.h>
@@ -1083,38 +1084,48 @@ kj::StringPtr trimSourceFilename(kj::StringPtr filename) {
   // a new string here, we can't do much about this, so our returned "canonical" name will
   // unfortunately end up with backslashes.
 
-  static constexpr const char* ROOTS[] = {
-    "ekam-provider/canonical/",  // Ekam source file.
-    "ekam-provider/c++header/",  // Ekam include file.
-    "src/",                      // Non-Ekam source root.
-    "tmp/",                      // Non-Ekam generated code.
+  static constexpr kj::StringPtr ROOTS[] = {
+    "ekam-provider/canonical/"_kj,  // Ekam source file.
+    "ekam-provider/c++header/"_kj,  // Ekam include file.
+    "src/"_kj,                      // Non-Ekam source root.
+    "tmp/"_kj,                      // Non-Ekam generated code.
 #if _WIN32
-    "src\\",                     // Win32 source root.
-    "tmp\\",                     // Win32 generated code.
+    "src\\"_kj,                     // Win32 source root.
+    "tmp\\"_kj,                     // Win32 generated code.
 #endif
   };
 
-retry:
-  for (size_t i: kj::indices(filename)) {
-    if (i == 0 || filename[i-1] == '/'
-#if _WIN32
-               || filename[i-1] == '\\'
-#endif
-        ) {
-      // We're at the start of a directory name. Check for valid prefixes.
-      for (kj::StringPtr root: ROOTS) {
-        if (filename.slice(i).startsWith(root)) {
-          filename = filename.slice(i + root.size());
-
-          // We should keep searching to find the last instance of a root name. `i` is no longer
-          // a valid index for `filename` so start the loop over.
-          goto retry;
-        }
+  kj::StringPtr result = filename;
+  kj::StringPtr rest = filename;
+  while (rest.size() > 0) {
+    // `rest` starts with a directory name. Check for valid prefixes.
+    bool matched = false;
+    for (kj::StringPtr root: ROOTS) {
+      if (rest.startsWith(root)) {
+        // We should keep searching to find the last instance of a root name. Every root ends with
+        // a separator, so the rest of the name starts with a directory name too.
+        rest = rest.slice(root.size());
+        result = rest;
+        matched = true;
+        break;
       }
+    }
+
+    if (!matched) {
+      // Skip to the next directory name.
+#if _WIN32
+      size_t i = 0;
+      while (i < rest.size() && rest[i] != '/' && rest[i] != '\\') ++i;
+#else
+      auto separator = static_cast<const char*>(memchr(rest.begin(), '/', rest.size()));
+      size_t i = separator == nullptr ? rest.size() : separator - rest.begin();
+#endif
+      if (i == rest.size()) break;
+      rest = rest.slice(i + 1);
     }
   }
 
-  return filename;
+  return result;
 }
 
 void resetCrashHandlers() {
