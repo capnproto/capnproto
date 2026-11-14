@@ -582,37 +582,54 @@ namespace _ {  // private
 #define KJ_DEBUG_FAIL_BY_VALUE 0
 // MSVC doesn't inline anything in debug builds, not even `__forceinline` functions, so the wrapper
 // that passes arguments by value would add a frame to the stack trace of every failed check.
+#define KJ_DEBUG_COLD
 #else
 #define KJ_DEBUG_FAIL_BY_VALUE 1
 #define KJ_DEBUG_FAIL_INLINE inline __attribute__((always_inline))
 // Unlike KJ_ALWAYS_INLINE, inlines even in debug builds: Debug::fail() must not add a frame to
 // the stack trace.
+#define KJ_DEBUG_COLD __attribute__((cold))
+// The failure path of checks: optimized for size and kept away from the code that calls it.
 #endif
 
 #if KJ_DEBUG_FAIL_BY_VALUE
 
-template <typename T, bool = __is_class(T) || __is_union(T)>
-struct DebugIsScalar_ { static constexpr bool value = __is_trivially_copyable(T); };
-template <typename T> struct DebugIsScalar_<T, true> { static constexpr bool value = false; };
-template <typename T> struct DebugIsScalar_<T&>: DebugIsScalar_<T> {};
-template <typename T> struct DebugIsScalar_<T&&>: DebugIsScalar_<T> {};
-template <typename T, size_t s> struct DebugIsScalar_<T[s]> { static constexpr bool value = false; };
-template <typename T> struct DebugIsScalar_<T[]> { static constexpr bool value = false; };
-// Whether `T`, ignoring references, is a scalar type: a number, enum or pointer. (Non-class,
-// non-array types are trivially copyable if and only if they are scalars.)
-
-template <typename T, bool = DebugIsScalar_<T>::value>
-struct DebugParam_ { typedef T&& Type; };
+template <typename T, typename = void>
+struct DebugIsSmallClass_ { static constexpr bool value = false; };
 template <typename T>
-struct DebugParam_<T, true> { typedef Decay<T> Type; };
+struct DebugIsSmallClass_<T, decltype(void(sizeof(T)))> {
+  static constexpr bool value = __is_trivially_copyable(T) &&
+      __is_trivially_constructible(T, const T&) && sizeof(T) <= 2 * sizeof(void*);
+};
+// Whether `T` is a complete class that can be copied as cheaply as two pointers, e.g. a StringPtr
+// or an iterator.
+
+template <typename T, bool = __is_class(T) || __is_union(T)>
+struct DebugByValue_ { static constexpr bool value = __is_trivially_copyable(T); };
+template <typename T> struct DebugByValue_<T, true>: DebugIsSmallClass_<T> {};
+template <typename T> struct DebugByValue_<T&>: DebugByValue_<T> {};
+template <typename T> struct DebugByValue_<T&&>: DebugByValue_<T> {};
+template <typename T, size_t s> struct DebugByValue_<T[s]> { static constexpr bool value = false; };
+template <typename T> struct DebugByValue_<T[]> { static constexpr bool value = false; };
+// Whether `T`, ignoring references, is cheap to copy: a scalar type (a number, enum or pointer;
+// non-class, non-array types are trivially copyable if and only if they are scalars), or a small
+// class (see DebugIsSmallClass_).
+
+template <typename T, bool = DebugByValue_<T>::value>
+struct DebugParamDefault_ { typedef T&& Type; };
+template <typename T>
+struct DebugParamDefault_<T, true> { typedef Decay<T> Type; };
+template <typename T>
+struct DebugParam_: DebugParamDefault_<T> {};
 template <typename T>
 using DebugParam = typename DebugParam_<T>::Type;
 // The type in which Debug::fail() passes an argument of type `T&&` to the out-of-line code that
-// stringifies it. Scalars (numbers, enums, pointers) are copied, everything else is passed by
-// reference. Copying a scalar is free on the failure path, and means that the function containing
-// the check doesn't take its address: a local variable can stay in a register, rather than being
-// written to the stack every time the check passes. The magic assert types are specialized
-// below, so that `_kjCondition` doesn't need to be in memory either.
+// stringifies it. Scalars (numbers, enums, pointers) and small trivially copyable classes are
+// copied, everything else is passed by reference. Copying is cheap on the failure path, and means
+// that the function containing the check doesn't take the argument's address: a local variable
+// can stay in registers, rather than being written to the stack every time the check passes. The
+// magic assert types are specialized below, so that `_kjCondition` doesn't need to be in memory
+// either.
 //
 // Copies don't change the description: everything is stringified before the call returns, while
 // any temporaries in the macro's arguments are still alive.
@@ -655,6 +672,33 @@ public:
     const char* macroArgs;
   };
 
+  struct Arg {
+    // An argument of a failed check or a log message, with the function that stringifies it.
+    // The templates only fill in an array of these: the stringification is shared by all
+    // arguments of the same type, and the rest of the work by all checks and messages.
+    const void* value;
+    String (*stringify)(const void* value);
+
+    template <typename T>
+    static KJ_DEBUG_COLD String stringifyValue(const void* value) {
+      // `str(value)` on a non-const lvalue, as the macro's arguments are named parameters.
+      return str(*const_cast<T*>(static_cast<const T*>(value)));
+    }
+
+    static KJ_DEBUG_COLD String stringifyChars(const void* value) {
+      return str(static_cast<const char*>(value));
+    }
+
+    template <typename T>
+    static Arg of(T& value) { return { &value, &stringifyValue<T> }; }
+    template <size_t s>
+    static Arg of(const char (&value)[s]) { return { value, &stringifyChars }; }
+    template <size_t s>
+    static Arg of(char (&value)[s]) { return { value, &stringifyChars }; }
+    // Char arrays, usually message literals, are stringified like `const char*` (up to the first
+    // NUL) by `str()`, so they share one function, whatever their size.
+  };
+
 #if KJ_DEBUG_FAIL_BY_VALUE
   template <typename Code, typename... Params>
   static KJ_DEBUG_FAIL_INLINE KJ_NORETURN(void fail(const Site& site, Code code,
@@ -667,10 +711,11 @@ public:
   // stack trace.
 
   template <typename Code, typename... Params>
-  static KJ_NOINLINE KJ_NORETURN(void failImpl(const Site& site, Code code, Params... params));
+  static KJ_NOINLINE KJ_DEBUG_COLD KJ_NORETURN(void failImpl(const Site& site, Code code,
+      Params... params));
   template <typename Code, typename... Params>
-  static KJ_NOINLINE KJ_NOT_TAIL_CALLED void failUnlessUnwindingImpl(const Site& site, Code code,
-      Params... params);
+  static KJ_NOINLINE KJ_DEBUG_COLD KJ_NOT_TAIL_CALLED void failUnlessUnwindingImpl(
+      const Site& site, Code code, Params... params);
 #else
   template <typename Code, typename... Params>
   static KJ_NOINLINE KJ_NORETURN(void fail(const Site& site, Code code, Params&&... params));
@@ -769,32 +814,30 @@ private:
   static LogSeverity minSeverity;
 
   static void logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
-                          ArrayPtr<String> argValues);
-  static String makeDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues);
+                          ArrayPtr<const Arg> args);
+  static String makeDescriptionInternal(const char* macroArgs, ArrayPtr<const Arg> args);
 
   static int getOsErrorNumber(bool nonblocking);
   // Get the error code of the last error (e.g. from errno).  Returns -1 on EINTR.
 
   template <typename Code, typename... Params>
   static Exception makeFailureWithParams(const Site& site, Code code, Params&&... params);
-  // Stringifies `params` and builds the exception describing a failed check.
+  // Builds the exception describing a failed check, stringifying `params`.
 
-  static Exception makeFailure(const char* file, int line, Exception::Type type,
-      const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
-  static Exception makeFailure(const char* file, int line, int osErrorNumber,
-      const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
+  static Exception makeFailure(const Site& site, Exception::Type type, ArrayPtr<const Arg> args);
+  static Exception makeFailure(const Site& site, int osErrorNumber, ArrayPtr<const Arg> args);
 #if _WIN32 || __CYGWIN__
-  static Exception makeFailure(const char* file, int line, Win32Result osErrorNumber,
-      const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
+  static Exception makeFailure(const Site& site, Win32Result osErrorNumber,
+      ArrayPtr<const Arg> args);
 #endif
-  // Builds the exception describing a failed check.
+  // Stringifies `args` and builds the exception describing a failed check.
 };
 
 template <typename... Params>
 void Debug::log(const char* file, int line, LogSeverity severity, const char* macroArgs,
                 Params&&... params) {
-  String argValues[sizeof...(Params)] = {str(params)...};
-  logInternal(file, line, severity, macroArgs, arrayPtr(argValues, sizeof...(Params)));
+  const Arg args[sizeof...(Params)] = { Arg::of(params)... };
+  logInternal(file, line, severity, macroArgs, arrayPtr(args, sizeof...(Params)));
 }
 
 template <>
@@ -805,11 +848,10 @@ inline void Debug::log<>(const char* file, int line, LogSeverity severity, const
 template <typename Code, typename... Params>
 Exception Debug::makeFailureWithParams(const Site& site, Code code, Params&&... params) {
   if constexpr (sizeof...(Params) == 0) {
-    return makeFailure(site.file, site.line, code, site.condition, site.macroArgs, nullptr);
+    return makeFailure(site, code, nullptr);
   } else {
-    String argValues[sizeof...(Params)] = {str(params)...};
-    return makeFailure(site.file, site.line, code, site.condition, site.macroArgs,
-                       arrayPtr(argValues, sizeof...(Params)));
+    const Arg args[sizeof...(Params)] = { Arg::of(params)... };
+    return makeFailure(site, code, arrayPtr(args, sizeof...(Params)));
   }
 }
 
@@ -897,8 +939,8 @@ int Debug::syscallError(Call&& call, bool nonblocking) {
 
 template <typename... Params>
 String Debug::makeDescription(const char* macroArgs, Params&&... params) {
-  String argValues[sizeof...(Params)] = {str(params)...};
-  return makeDescriptionInternal(macroArgs, arrayPtr(argValues, sizeof...(Params)));
+  const Arg args[sizeof...(Params)] = { Arg::of(params)... };
+  return makeDescriptionInternal(macroArgs, arrayPtr(args, sizeof...(Params)));
 }
 
 template <>
@@ -949,6 +991,20 @@ inline auto tryToCharSequence(T* value) { return kj::toCharSequence(*value); }
 inline StringPtr tryToCharSequence(...) { return "(can't stringify)"_kj; }
 // SFINAE to stringify a value if and only if it can be stringified.
 
+template <typename T>
+KJ_DEBUG_COLD String stringifyDebugOperand(const void* value) {
+  return _::concat(tryToCharSequence(const_cast<T*>(static_cast<const T*>(value))));
+}
+
+template <typename T>
+Debug::Arg debugOperand(T* value) { return { value, &stringifyDebugOperand<T> }; }
+// An operand of a comparison in a check, stringified by the function shared by all operands of
+// type `T`.
+
+String stringifyDebugComparison(const Debug::Arg& left, StringPtr op, const Debug::Arg& right);
+// Stringifies a comparison in a failed check, e.g. "1 == 2". Out of line, so that the code
+// stringifying a comparison is shared by all comparisons of the same types.
+
 #define KJ_DEBUG_OPERATOR(NAME, OP) \
   struct DebugOp##NAME { static StringPtr op() { return " " #OP " "_kj; } };
 KJ_DEBUG_OPERATOR(Eq, ==)
@@ -974,19 +1030,27 @@ struct DebugComparison {
 
 template <typename Left, typename Right, typename Op>
 String KJ_STRINGIFY(DebugComparison<Left, Right, Op>& cmp) {
-  return _::concat(tryToCharSequence(&cmp.left), Op::op(), tryToCharSequence(&cmp.right));
+  return stringifyDebugComparison(debugOperand(&cmp.left), Op::op(), debugOperand(&cmp.right));
 }
 
 #if KJ_DEBUG_FAIL_BY_VALUE
 
-template <typename T, bool = DebugIsScalar_<T>::value>
+template <typename T, bool = DebugByValue_<T>::value>
+struct DebugOperandByValue_ { static constexpr bool value = false; };
+template <typename T>
+struct DebugOperandByValue_<T, true> {
+  static constexpr bool value = sizeof(Decay<T>) <= sizeof(void*);
+};
+template <typename T, bool = DebugOperandByValue_<T>::value>
 struct DebugOperand_ { typedef T& Type; };
 template <typename T>
 struct DebugOperand_<T, true> { typedef Decay<T> Type; };
 template <typename T>
 using DebugOperand = typename DebugOperand_<T>::Type;
-// How DebugComparisonOperands holds an operand of type `T`: scalars by value, everything else by
-// reference to the operand in the DebugComparison.
+// How DebugComparisonOperands holds an operand of type `T`: cheap ones (see DebugByValue_) that
+// fit in a register by value, everything else by reference to the operand in the
+// DebugComparison. So DebugComparisonOperands always fits in two registers: a bigger one would
+// be passed on the stack, which costs stack space in the function containing the check.
 
 template <typename Left, typename Right, typename Op>
 struct DebugComparisonOperands {
@@ -1002,11 +1066,11 @@ struct DebugComparisonOperands {
 
 template <typename Left, typename Right, typename Op>
 String KJ_STRINGIFY(DebugComparisonOperands<Left, Right, Op>& cmp) {
-  return _::concat(tryToCharSequence(&cmp.left), Op::op(), tryToCharSequence(&cmp.right));
+  return stringifyDebugComparison(debugOperand(&cmp.left), Op::op(), debugOperand(&cmp.right));
 }
 
 template <typename Left, typename Right, typename Op>
-struct DebugParam_<DebugComparison<Left, Right, Op>&, false> {
+struct DebugParam_<DebugComparison<Left, Right, Op>&> {
   typedef DebugComparisonOperands<DebugOperand<Left>, DebugOperand<Right>, Op> Type;
 };
 
@@ -1074,7 +1138,7 @@ struct DebugFalse {
 inline StringPtr KJ_STRINGIFY(DebugFalse) { return "false"_kj; }
 
 template <typename T>
-struct DebugParam_<DebugExpression<T>&, false> { typedef DebugFalse Type; };
+struct DebugParam_<DebugExpression<T>&> { typedef DebugFalse Type; };
 
 #endif  // KJ_DEBUG_FAIL_BY_VALUE
 
