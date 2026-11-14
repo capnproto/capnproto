@@ -192,6 +192,12 @@ String stringify(const Debug::Arg& arg) {
   return arg.stringify(arg.value);
 }
 
+bool needsLabel(ArrayPtr<const char> argName) {
+  // Whether the description shows an argument's name before its value. Literals and `kj::str()`
+  // calls are shown as is.
+  return argName.size() > 0 && argName[0] != '\"' && !argName.startsWith("kj::str("_kjc);
+}
+
 constexpr size_t STACK_ARGS = 4;
 // Most checks and log messages have at most this many arguments, which are stringified into an
 // array on the stack. (Every element is constructed and destroyed, so it shouldn't be bigger.)
@@ -204,6 +210,15 @@ String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNu
   if (style == ASSERTION && code == nullptr) {
     // A check without a condition, e.g. KJ_FAIL_ASSERT(), is described by its arguments alone.
     style = LOG;
+  }
+
+  if (style == LOG && args.size() == 1) {
+    // A lone argument needs no delimiter, so if it needs no label either, e.g.
+    // `KJ_EXCEPTION(FAILED, "foo")`, it's described as is. Skip parsing the macro's arguments.
+    while (isspace(*macroArgs)) ++macroArgs;
+    if (!needsLabel(StringPtr(macroArgs))) {
+      return stringify(args[0]);
+    }
   }
 
   KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
@@ -314,10 +329,6 @@ String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNu
         totalSize += codeArray.size() + colon.size() + sysErrorArray.size();
         break;
     }
-
-    auto needsLabel = [](const ArrayPtr<const char> &argName) -> bool {
-      return argName.size() > 0 && argName[0] != '\"' && !argName.startsWith("kj::str("_kjc);
-    };
 
     for (size_t i = 0; i < argValues.size(); i++) {
       if (argNames[i] == "_kjCondition"_kj) {
