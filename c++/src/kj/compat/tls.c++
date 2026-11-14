@@ -260,13 +260,13 @@ public:
 
     return sslCall([this]() { return SSL_connect(ssl); }).then([this](size_t) {
       X509* cert = SSL_get_peer_certificate(ssl);
-      KJ_REQUIRE(cert != nullptr, "TLS peer provided no certificate") { return; }
+      KJ_REQUIRE(cert != nullptr, "TLS peer provided no certificate");
       X509_free(cert);
 
       auto result = SSL_get_verify_result(ssl);
       if (result != X509_V_OK) {
         const char* reason = X509_verify_cert_error_string(result);
-        KJ_FAIL_REQUIRE("TLS peer's certificate is not trusted", reason) { break; }
+        KJ_FAIL_REQUIRE("TLS peer's certificate is not trusted", reason);
       }
     });
   }
@@ -1184,7 +1184,7 @@ kj::String TlsPeerIdentity::toString() {
 
 kj::String TlsPeerIdentity::getCommonName() {
   if (cert == nullptr) {
-    KJ_FAIL_REQUIRE("client did not provide a certificate") { return nullptr; }
+    KJ_FAIL_REQUIRE("client did not provide a certificate");
   }
 
   X509_NAME* subj = X509_get_subject_name(cert);

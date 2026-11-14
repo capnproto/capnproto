@@ -1656,7 +1656,7 @@ public:
         co_return protocolError;
       }
       KJ_CASE_ONEOF(text, kj::ArrayPtr<char>) {
-        KJ_REQUIRE(text.size() > 0) { break; }
+        KJ_REQUIRE(text.size() > 0);
 
         uint64_t value = 0;
         for (char c: text) {
@@ -1668,11 +1668,10 @@ public:
           } else if ('A' <= c && c <= 'F') {
             digit = c - 'A' + 10;
           } else {
-            KJ_FAIL_REQUIRE("invalid HTTP chunk size", text, text.asBytes()) { break; }
-            co_return value;
+            KJ_FAIL_REQUIRE("invalid HTTP chunk size", text, text.asBytes());
           }
           KJ_REQUIRE(value <= (uint64_t(kj::maxValue) >> 4),
-              "HTTP chunk size overflow", text, text.asBytes()) { break; }
+              "HTTP chunk size overflow", text, text.asBytes());
           value = value * 16 + digit;
         }
 
@@ -2416,7 +2415,7 @@ kj::Own<kj::AsyncInputStream> HttpInputStreamImpl::getEntityBody(
       return kj::heap<HttpConnectionCloseEntityReader>(*this);
     }
 
-    KJ_FAIL_REQUIRE("unknown transfer encoding", te) { break; };
+    KJ_FAIL_REQUIRE("unknown transfer encoding", te);
   }
 
   // #4 and #5
@@ -2494,7 +2493,7 @@ public:
   void writeHeaders(String content) {
     // Writes some header content and begins a new entity body.
 
-    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed") { return; }
+    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed");
     KJ_REQUIRE(!inBody, "previous HTTP message body incomplete; can't write more messages");
     inBody = true;
 
@@ -2502,8 +2501,8 @@ public:
   }
 
   void writeBodyData(kj::String content) {
-    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed") { return; }
-    KJ_REQUIRE(inBody) { return; }
+    KJ_REQUIRE(!writeInProgress, "concurrent write()s not allowed");
+    KJ_REQUIRE(inBody);
 
     queueWrite(kj::mv(content));
   }
@@ -2581,7 +2580,7 @@ public:
   void finishBody() {
     // Called when entire body was written.
 
-    KJ_REQUIRE(inBody) { return; }
+    KJ_REQUIRE(inBody);
     inBody = false;
 
     if (writeInProgress) {
@@ -2597,8 +2596,12 @@ public:
   }
 
   void abortBody() {
-    // Called if the application failed to write all expected body bytes.
-    KJ_REQUIRE(inBody) { return; }
+    // Called if the application failed to write all expected body bytes. Called from
+    // ~HttpEntityBodyWriter(), so don't throw during unwind.
+    if (!inBody) {
+      KJ_DTOR_FAIL_REQUIRE("abortBody() called outside of a message body");
+      return;
+    }
     inBody = false;
     broken = true;
 
@@ -2935,9 +2938,7 @@ public:
     if (actual < length) {
       getInner().abortBody();
       KJ_FAIL_REQUIRE(
-          "value returned by input.tryGetLength() was greater than actual bytes transferred") {
-        break;
-      }
+          "value returned by input.tryGetLength() was greater than actual bytes transferred");
     }
 
     getInner().writeBodyData(kj::str("\r\n"));
@@ -6197,8 +6198,7 @@ kj::Own<HttpClient> newHttpClient(
 
 HttpClient::Response HttpClientErrorHandler::handleProtocolError(
       HttpHeaders::ProtocolError protocolError) {
-  KJ_FAIL_REQUIRE(protocolError.description) { break; }
-  return HttpClient::Response();
+  KJ_FAIL_REQUIRE(protocolError.description);
 }
 
 HttpClient::WebSocketResponse HttpClientErrorHandler::handleWebSocketProtocolError(

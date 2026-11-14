@@ -117,10 +117,7 @@ kj::Maybe<EnumSchema::Enumerant> DynamicEnum::getEnumerant() const {
 
 uint16_t DynamicEnum::asImpl(uint64_t requestedTypeId) const {
   KJ_REQUIRE(requestedTypeId == schema.getProto().getId(),
-             "Type mismatch in DynamicEnum.as().") {
-    // use it anyway
-    break;
-  }
+             "Type mismatch in DynamicEnum.as().");
   return value;
 }
 
@@ -550,9 +547,7 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
             rawValue = value.as<uint16_t>();
           } else {
             DynamicEnum enumValue = value.as<DynamicEnum>();
-            KJ_REQUIRE(enumValue.getSchema() == enumSchema, "Value type mismatch.") {
-              return;
-            }
+            KJ_REQUIRE(enumValue.getSchema() == enumSchema, "Value type mismatch.");
             rawValue = enumValue.getRaw();
           }
           builder.setDataField<uint16_t>(assumeDataOffset(slot.getOffset()), rawValue,
@@ -573,9 +568,7 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
         case schema::Type::LIST: {
           ListSchema listType = type.asList();
           auto listValue = value.as<DynamicList>();
-          KJ_REQUIRE(listValue.getSchema() == listType, "Value type mismatch.") {
-            return;
-          }
+          KJ_REQUIRE(listValue.getSchema() == listType, "Value type mismatch.");
           builder.getPointerField(assumePointerOffset(slot.getOffset()))
                  .setList(listValue.reader);
           return;
@@ -584,9 +577,7 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
         case schema::Type::STRUCT: {
           auto structType = type.asStruct();
           auto structValue = value.as<DynamicStruct>();
-          KJ_REQUIRE(structValue.getSchema() == structType, "Value type mismatch.") {
-            return;
-          }
+          KJ_REQUIRE(structValue.getSchema() == structType, "Value type mismatch.");
           builder.getPointerField(assumePointerOffset(slot.getOffset()))
                  .setStruct(structValue.reader);
           return;
@@ -632,9 +623,7 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
         case schema::Type::INTERFACE: {
           auto interfaceType = type.asInterface();
           auto capability = value.as<DynamicCapability>();
-          KJ_REQUIRE(capability.getSchema().extends(interfaceType), "Value type mismatch.") {
-            return;
-          }
+          KJ_REQUIRE(capability.getSchema().extends(interfaceType), "Value type mismatch.");
           builder.getPointerField(assumePointerOffset(slot.getOffset()))
                  .setCapability(kj::mv(capability.hook));
           return;
@@ -786,18 +775,14 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
         case schema::Type::LIST: {
           ListSchema listType = type.asList();
           KJ_REQUIRE(orphan.getType() == DynamicValue::LIST && orphan.listSchema == listType,
-                     "Value type mismatch.") {
-            return;
-          }
+                     "Value type mismatch.");
           break;
         }
 
         case schema::Type::STRUCT: {
           auto structType = type.asStruct();
           KJ_REQUIRE(orphan.getType() == DynamicValue::STRUCT && orphan.structSchema == structType,
-                     "Value type mismatch.") {
-            return;
-          }
+                     "Value type mismatch.");
           break;
         }
 
@@ -808,18 +793,14 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
                      orphan.getType() == DynamicValue::DATA ||
                      orphan.getType() == DynamicValue::CAPABILITY ||
                      orphan.getType() == DynamicValue::ANY_POINTER,
-                     "Value type mismatch.") {
-            return;
-          }
+                     "Value type mismatch.");
           break;
 
         case schema::Type::INTERFACE: {
           auto interfaceType = type.asInterface();
           KJ_REQUIRE(orphan.getType() == DynamicValue::CAPABILITY &&
                      orphan.interfaceSchema.extends(interfaceType),
-                     "Value type mismatch.") {
-            return;
-          }
+                     "Value type mismatch.");
           break;
         }
       }
@@ -1155,9 +1136,7 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) {
 }
 
 void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
-  KJ_REQUIRE(index < size(), "List index out-of-bounds.") {
-    return;
-  }
+  KJ_REQUIRE(index < size(), "List index out-of-bounds.");
 
   switch (schema.whichElementType()) {
 #define HANDLE_TYPE(name, discrim, typeName) \
@@ -1188,18 +1167,14 @@ void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
 
     case schema::Type::LIST: {
       auto listValue = value.as<DynamicList>();
-      KJ_REQUIRE(listValue.getSchema() == schema.getListElementType(), "Value type mismatch.") {
-        return;
-      }
+      KJ_REQUIRE(listValue.getSchema() == schema.getListElementType(), "Value type mismatch.");
       builder.getPointerElement(bounded(index) * ELEMENTS).setList(listValue.reader);
       return;
     }
 
     case schema::Type::STRUCT: {
       auto structValue = value.as<DynamicStruct>();
-      KJ_REQUIRE(structValue.getSchema() == schema.getStructElementType(), "Value type mismatch.") {
-        return;
-      }
+      KJ_REQUIRE(structValue.getSchema() == schema.getStructElementType(), "Value type mismatch.");
       builder.getStructElement(bounded(index) * ELEMENTS).copyContentFrom(structValue.reader);
       return;
     }
@@ -1212,9 +1187,7 @@ void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
       } else {
         DynamicEnum enumValue = value.as<DynamicEnum>();
         KJ_REQUIRE(schema.getEnumElementType() == enumValue.getSchema(),
-                   "Type mismatch when using DynamicList::Builder::set().") {
-          return;
-        }
+                   "Type mismatch when using DynamicList::Builder::set().");
         rawValue = enumValue.getRaw();
       }
       builder.setDataElement<uint16_t>(bounded(index) * ELEMENTS, rawValue);
@@ -1222,24 +1195,18 @@ void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
     }
 
     case schema::Type::ANY_POINTER:
-      KJ_FAIL_ASSERT("List(AnyPointer) not supported.") {
-        return;
-      }
+      KJ_FAIL_ASSERT("List(AnyPointer) not supported.");
 
     case schema::Type::INTERFACE: {
       auto capValue = value.as<DynamicCapability>();
       KJ_REQUIRE(capValue.getSchema().extends(schema.getInterfaceElementType()),
-                 "Value type mismatch.") {
-        return;
-      }
+                 "Value type mismatch.");
       builder.getPointerElement(bounded(index) * ELEMENTS).setCapability(kj::mv(capValue.hook));
       return;
     }
   }
 
-  KJ_FAIL_REQUIRE("can't set element of unknown type", (uint)schema.whichElementType()) {
-    return;
-  }
+  KJ_FAIL_REQUIRE("can't set element of unknown type", (uint)schema.whichElementType());
 }
 
 DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
@@ -1650,48 +1617,33 @@ namespace {
 
 template <typename T>
 T signedToUnsigned(long long value) {
-  KJ_REQUIRE(value >= 0 && T(value) == value, "Value out-of-range for requested type.", value) {
-    // Use it anyway.
-    break;
-  }
+  KJ_REQUIRE(value >= 0 && T(value) == value, "Value out-of-range for requested type.", value);
   return value;
 }
 
 template <>
 uint64_t signedToUnsigned<uint64_t>(long long value) {
-  KJ_REQUIRE(value >= 0, "Value out-of-range for requested type.", value) {
-    // Use it anyway.
-    break;
-  }
+  KJ_REQUIRE(value >= 0, "Value out-of-range for requested type.", value);
   return value;
 }
 
 template <typename T>
 T unsignedToSigned(unsigned long long value) {
   KJ_REQUIRE(T(value) >= 0 && (unsigned long long)T(value) == value,
-             "Value out-of-range for requested type.", value) {
-    // Use it anyway.
-    break;
-  }
+             "Value out-of-range for requested type.", value);
   return value;
 }
 
 template <>
 int64_t unsignedToSigned<int64_t>(unsigned long long value) {
-  KJ_REQUIRE(int64_t(value) >= 0, "Value out-of-range for requested type.", value) {
-    // Use it anyway.
-    break;
-  }
+  KJ_REQUIRE(int64_t(value) >= 0, "Value out-of-range for requested type.", value);
   return value;
 }
 
 template <typename T, typename U>
 T checkRoundTrip(U value) {
   T result = value;
-  KJ_REQUIRE(U(result) == value, "Value out-of-range for requested type.", value) {
-    // Use it anyway.
-    break;
-  }
+  KJ_REQUIRE(U(result) == value, "Value out-of-range for requested type.", value);
   return result;
 }
 
@@ -1701,17 +1653,10 @@ T checkRoundTripFromFloat(U value) {
   // out-of-range float to an integer is, surprisingly, UB.
   constexpr T MIN = kj::minValue;
   constexpr T MAX = kj::maxValue;
-  KJ_REQUIRE(value >= U(MIN), "Value out-of-range for requested type.", value) {
-    return MIN;
-  }
-  KJ_REQUIRE(value <= U(MAX), "Value out-of-range for requested type.", value) {
-    return MAX;
-  }
+  KJ_REQUIRE(value >= U(MIN), "Value out-of-range for requested type.", value);
+  KJ_REQUIRE(value <= U(MAX), "Value out-of-range for requested type.", value);
   T result = value;
-  KJ_REQUIRE(U(result) == value, "Value out-of-range for requested type.", value) {
-    // Use it anyway.
-    break;
-  }
+  KJ_REQUIRE(U(result) == value, "Value out-of-range for requested type.", value);
   return result;
 }
 
@@ -1727,9 +1672,7 @@ typeName DynamicValue::Reader::AsImpl<typeName>::apply(const Reader& reader) { \
     case FLOAT: \
       return ifFloat<typeName>(reader.floatValue); \
     default: \
-      KJ_FAIL_REQUIRE("Value type mismatch.") { \
-        return 0; \
-      } \
+      KJ_FAIL_REQUIRE("Value type mismatch."); \
   } \
 } \
 typeName DynamicValue::Builder::AsImpl<typeName>::apply(Builder& builder) { \
@@ -1741,9 +1684,7 @@ typeName DynamicValue::Builder::AsImpl<typeName>::apply(Builder& builder) { \
     case FLOAT: \
       return ifFloat<typeName>(builder.floatValue); \
     default: \
-      KJ_FAIL_REQUIRE("Value type mismatch.") { \
-        return 0; \
-      } \
+      KJ_FAIL_REQUIRE("Value type mismatch."); \
   } \
 }
 
@@ -1762,9 +1703,7 @@ HANDLE_NUMERIC_TYPE(double, kj::implicitCast, kj::implicitCast, kj::implicitCast
 
 #define HANDLE_TYPE(name, discrim, typeName) \
 ReaderFor<typeName> DynamicValue::Reader::AsImpl<typeName>::apply(const Reader& reader) { \
-  KJ_REQUIRE(reader.type == discrim, "Value type mismatch.") { \
-    return ReaderFor<typeName>(); \
-  } \
+  KJ_REQUIRE(reader.type == discrim, "Value type mismatch."); \
   return reader.name##Value; \
 } \
 BuilderFor<typeName> DynamicValue::Builder::AsImpl<typeName>::apply(Builder& builder) { \
@@ -1791,23 +1730,17 @@ PipelineFor<DynamicStruct> DynamicValue::Pipeline::AsImpl<DynamicStruct>::apply(
 
 ReaderFor<DynamicCapability> DynamicValue::Reader::AsImpl<DynamicCapability>::apply(
     const Reader& reader) {
-  KJ_REQUIRE(reader.type == CAPABILITY, "Value type mismatch.") {
-    return DynamicCapability::Client();
-  }
+  KJ_REQUIRE(reader.type == CAPABILITY, "Value type mismatch.");
   return reader.capabilityValue;
 }
 BuilderFor<DynamicCapability> DynamicValue::Builder::AsImpl<DynamicCapability>::apply(
     Builder& builder) {
-  KJ_REQUIRE(builder.type == CAPABILITY, "Value type mismatch.") {
-    return DynamicCapability::Client();
-  }
+  KJ_REQUIRE(builder.type == CAPABILITY, "Value type mismatch.");
   return builder.capabilityValue;
 }
 PipelineFor<DynamicCapability> DynamicValue::Pipeline::AsImpl<DynamicCapability>::apply(
     Pipeline& pipeline) {
-  KJ_REQUIRE(pipeline.type == CAPABILITY, "Pipeline type mismatch.") {
-    return DynamicCapability::Client();
-  }
+  KJ_REQUIRE(pipeline.type == CAPABILITY, "Pipeline type mismatch.");
   return kj::mv(pipeline.capabilityValue);
 }
 
@@ -1816,9 +1749,7 @@ Data::Reader DynamicValue::Reader::AsImpl<Data>::apply(const Reader& reader) {
     // Coerce text to data.
     return reader.textValue.asBytes();
   }
-  KJ_REQUIRE(reader.type == DATA, "Value type mismatch.") {
-    return Data::Reader();
-  }
+  KJ_REQUIRE(reader.type == DATA, "Value type mismatch.");
   return reader.dataValue;
 }
 Data::Builder DynamicValue::Builder::AsImpl<Data>::apply(Builder& builder) {
@@ -1826,23 +1757,17 @@ Data::Builder DynamicValue::Builder::AsImpl<Data>::apply(Builder& builder) {
     // Coerce text to data.
     return builder.textValue.asBytes();
   }
-  KJ_REQUIRE(builder.type == DATA, "Value type mismatch.") {
-    return BuilderFor<Data>();
-  }
+  KJ_REQUIRE(builder.type == DATA, "Value type mismatch.");
   return builder.dataValue;
 }
 
 // As in the header, HANDLE_TYPE(void, VOID, Void) crashes GCC 4.7.
 Void DynamicValue::Reader::AsImpl<Void>::apply(const Reader& reader) {
-  KJ_REQUIRE(reader.type == VOID, "Value type mismatch.") {
-    return Void();
-  }
+  KJ_REQUIRE(reader.type == VOID, "Value type mismatch.");
   return reader.voidValue;
 }
 Void DynamicValue::Builder::AsImpl<Void>::apply(Builder& builder) {
-  KJ_REQUIRE(builder.type == VOID, "Value type mismatch.") {
-    return Void();
-  }
+  KJ_REQUIRE(builder.type == VOID, "Value type mismatch.");
   return builder.voidValue;
 }
 

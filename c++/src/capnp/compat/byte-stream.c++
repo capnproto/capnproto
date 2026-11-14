@@ -518,12 +518,10 @@ public:
         return &capnpStream;
       }
       KJ_CASE_ONEOF(b, Borrowed) {
-        KJ_FAIL_REQUIRE("concurrent streaming calls disallowed") { break; }
-        return kj::Promise<void>(kj::READY_NOW);
+        KJ_FAIL_REQUIRE("concurrent streaming calls disallowed");
       }
       KJ_CASE_ONEOF(e, Ended) {
-        KJ_FAIL_REQUIRE("already ended") { break; }
-        return kj::Promise<void>(kj::READY_NOW);
+        KJ_FAIL_REQUIRE("already ended");
       }
     }
     KJ_UNREACHABLE;
@@ -742,8 +740,7 @@ protected:
         return Capability::Client(capnpStream);
       }
       KJ_CASE_ONEOF(b, Borrowed) {
-        KJ_FAIL_REQUIRE("concurrent streaming calls disallowed") { break; }
-        return kj::NEVER_DONE;
+        KJ_FAIL_REQUIRE("concurrent streaming calls disallowed");
       }
       KJ_CASE_ONEOF(e, Ended) {
         // No shortening possible. Pretend we never resolve so that calls continue to be routed
@@ -773,12 +770,10 @@ protected:
         return req.send();
       }
       KJ_CASE_ONEOF(b, Borrowed) {
-        KJ_FAIL_REQUIRE("concurrent streaming calls disallowed") { break; }
-        return kj::READY_NOW;
+        KJ_FAIL_REQUIRE("concurrent streaming calls disallowed");
       }
       KJ_CASE_ONEOF(e, Ended) {
-        KJ_FAIL_REQUIRE("already called end()") { break; }
-        return kj::READY_NOW;
+        KJ_FAIL_REQUIRE("already called end()");
       }
     }
     KJ_UNREACHABLE;
@@ -815,12 +810,10 @@ protected:
         return context.tailCall(kj::mv(req));
       }
       KJ_CASE_ONEOF(b, Borrowed) {
-        KJ_FAIL_REQUIRE("concurrent streaming calls disallowed") { break; }
-        return kj::READY_NOW;
+        KJ_FAIL_REQUIRE("concurrent streaming calls disallowed");
       }
       KJ_CASE_ONEOF(e, Ended) {
-        KJ_FAIL_REQUIRE("already called end()") { break; }
-        return kj::READY_NOW;
+        KJ_FAIL_REQUIRE("already called end()");
       }
     }
     KJ_UNREACHABLE;
@@ -878,12 +871,10 @@ protected:
         return context.tailCall(kj::mv(req));
       }
       KJ_CASE_ONEOF(b, Borrowed) {
-        KJ_FAIL_REQUIRE("concurrent streaming calls disallowed") { break; }
-        return kj::READY_NOW;
+        KJ_FAIL_REQUIRE("concurrent streaming calls disallowed");
       }
       KJ_CASE_ONEOF(e, Ended) {
-        KJ_FAIL_REQUIRE("already called end()") { break; }
-        return kj::READY_NOW;
+        KJ_FAIL_REQUIRE("already called end()");
       }
     }
     KJ_UNREACHABLE;

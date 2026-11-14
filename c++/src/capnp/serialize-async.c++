@@ -140,9 +140,7 @@ kj::Promise<void> AsyncMessageReader::readAfterFirstWord(kj::AsyncInputStream& i
   // Reject messages with too many segments for security reasons.
   // Use firstWord[0].get() here instead of segmentCount() to catch overflow. The actual limit
   // we are enforcing is 512, but firstWord[0] contains segmentCount - 1, hence we compare to 511.
-  KJ_REQUIRE(firstWord[0].get() < 511, "Message has too many segments.") {
-    return kj::READY_NOW;  // exception will be propagated
-  }
+  KJ_REQUIRE(firstWord[0].get() < 511, "Message has too many segments.");
 
   if (segmentCount() > 1) {
     // Read sizes for all segments except the first.  Include padding if necessary.
@@ -171,9 +169,7 @@ kj::Promise<void> AsyncMessageReader::readSegments(kj::AsyncInputStream& inputSt
   // size to make the receiver allocate excessive space and possibly crash.
   KJ_REQUIRE(totalWords <= getOptions().traversalLimitInWords,
              "Message is too large.  To increase the limit on the receiving end, see "
-             "capnp::ReaderOptions.") {
-    return kj::READY_NOW;  // exception will be propagated
-  }
+             "capnp::ReaderOptions.");
 
   if (scratchSpace.size() < totalWords) {
     // TODO(perf):  Consider allocating each segment as a separate chunk to reduce memory
@@ -478,7 +474,7 @@ kj::Maybe<int> getSendBufferSize(kj::AsyncIoStream& stream) {
   KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
     uint len = sizeof(int);
     stream.getsockopt(SOL_SOCKET, SO_SNDBUF, &bufSize, &len);
-    KJ_ASSERT(len == sizeof(bufSize)) { break; }
+    KJ_ASSERT(len == sizeof(bufSize));
   })) {
     if (exception.getType() != kj::Exception::Type::UNIMPLEMENTED) {
       // TODO(someday): Figure out why getting SO_SNDBUF sometimes throws EINVAL. I suspect it

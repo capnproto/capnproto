@@ -584,18 +584,14 @@ struct WireHelpers {
     if (segment != nullptr && ref->kind() == WirePointer::FAR) {
       // Look up the segment containing the landing pad.
       segment = segment->getArena()->tryGetSegment(ref->farRef.segmentId.get());
-      KJ_REQUIRE(segment != nullptr, "Message contains far pointer to unknown segment.") {
-        return kj::none;
-      }
+      KJ_REQUIRE(segment != nullptr, "Message contains far pointer to unknown segment.");
 
       // Find the landing pad and check that it is within bounds.
       const word* ptr = ref->farTarget(segment);
       auto padWords = (ONE + bounded(ref->isDoubleFar())) * POINTER_SIZE_IN_WORDS;
       KJ_REQUIRE(boundsCheck(segment, ptr, padWords),
                  "Message contains out-of-bounds far pointer. "
-                 OUT_OF_BOUNDS_ERROR_DETAIL) {
-        return kj::none;
-      }
+                 OUT_OF_BOUNDS_ERROR_DETAIL);
 
       const WirePointer* pad = reinterpret_cast<const WirePointer*>(ptr);
 
@@ -611,13 +607,9 @@ struct WireHelpers {
 
       SegmentReader* newSegment = segment->getArena()->tryGetSegment(pad->farRef.segmentId.get());
       KJ_REQUIRE(newSegment != nullptr,
-          "Message contains double-far pointer to unknown segment.") {
-        return kj::none;
-      }
+          "Message contains double-far pointer to unknown segment.");
       KJ_REQUIRE(pad->kind() == WirePointer::FAR,
-          "Second word of double-far pad must be far pointer.") {
-        return kj::none;
-      }
+          "Second word of double-far pad must be far pointer.");
 
       segment = newSegment;
       return pad->farTarget(segment);
@@ -662,12 +654,12 @@ struct WireHelpers {
       case WirePointer::OTHER:
         if (ref->isCapability()) {
 #if CAPNP_LITE
-          KJ_FAIL_ASSERT("Capability encountered in builder in lite mode?") { break; }
+          KJ_FAIL_ASSERT("Capability encountered in builder in lite mode?");
 #else  // CAPNP_LINE
           capTable->dropCap(ref->capRef.index.get());
 #endif  // CAPNP_LITE, else
         } else {
-          KJ_FAIL_REQUIRE("Unknown pointer type.") { break; }
+          KJ_FAIL_REQUIRE("Unknown pointer type.");
         }
         break;
     }
@@ -745,15 +737,9 @@ struct WireHelpers {
         break;
       }
       case WirePointer::FAR:
-        KJ_FAIL_ASSERT("Unexpected FAR pointer.") {
-          break;
-        }
-        break;
+        KJ_FAIL_ASSERT("Unexpected FAR pointer.");
       case WirePointer::OTHER:
-        KJ_FAIL_ASSERT("Unexpected OTHER pointer.") {
-          break;
-        }
-        break;
+        KJ_FAIL_ASSERT("Unexpected OTHER pointer.");
     }
   }
 
@@ -790,9 +776,7 @@ struct WireHelpers {
       return result;
     }
 
-    KJ_REQUIRE(nestingLimit > 0, "Message is too deeply-nested.") {
-      return result;
-    }
+    KJ_REQUIRE(nestingLimit > 0, "Message is too deeply-nested.");
     --nestingLimit;
 
     const word* ptr;
@@ -806,9 +790,7 @@ struct WireHelpers {
       case WirePointer::STRUCT: {
         KJ_REQUIRE(boundsCheck(segment, ptr, ref->structRef.wordSize()),
                    "Message contained out-of-bounds struct pointer. "
-                   OUT_OF_BOUNDS_ERROR_DETAIL) {
-          return result;
-        }
+                   OUT_OF_BOUNDS_ERROR_DETAIL);
         result.addWords(ref->structRef.wordSize());
 
         const WirePointer* pointerSection =
@@ -833,9 +815,7 @@ struct WireHelpers {
                 dataBitsPerElement(ref->listRef.elementSize()));
             KJ_REQUIRE(boundsCheck(segment, ptr, totalWords),
                        "Message contained out-of-bounds list pointer. "
-                       OUT_OF_BOUNDS_ERROR_DETAIL) {
-              return result;
-            }
+                       OUT_OF_BOUNDS_ERROR_DETAIL);
             result.addWords(totalWords);
             break;
           }
@@ -844,9 +824,7 @@ struct WireHelpers {
 
             KJ_REQUIRE(boundsCheck(segment, ptr, count * WORDS_PER_POINTER),
                        "Message contained out-of-bounds list pointer. "
-                       OUT_OF_BOUNDS_ERROR_DETAIL) {
-              return result;
-            }
+                       OUT_OF_BOUNDS_ERROR_DETAIL);
 
             result.addWords(count * WORDS_PER_POINTER);
 
@@ -860,25 +838,19 @@ struct WireHelpers {
             auto wordCount = ref->listRef.inlineCompositeWordCount();
             KJ_REQUIRE(boundsCheck(segment, ptr, wordCount + POINTER_SIZE_IN_WORDS),
                        "Message contained out-of-bounds list pointer. "
-                       OUT_OF_BOUNDS_ERROR_DETAIL) {
-              return result;
-            }
+                       OUT_OF_BOUNDS_ERROR_DETAIL);
 
             const WirePointer* elementTag = reinterpret_cast<const WirePointer*>(ptr);
             auto count = elementTag->inlineCompositeListElementCount();
 
             KJ_REQUIRE(elementTag->kind() == WirePointer::STRUCT,
-                       "Don't know how to handle non-STRUCT inline composite.") {
-              return result;
-            }
+                       "Don't know how to handle non-STRUCT inline composite.");
 
             auto actualSize = elementTag->structRef.wordSize() / ELEMENTS *
                               upgradeBound<uint64_t>(count);
             KJ_REQUIRE(actualSize <= wordCount,
                        "Struct list pointer's elements overran size. "
-                       OUT_OF_BOUNDS_ERROR_DETAIL) {
-              return result;
-            }
+                       OUT_OF_BOUNDS_ERROR_DETAIL);
 
             // We count the actual size rather than the claimed word count because that's what
             // we'll end up with if we make a copy.
@@ -905,15 +877,12 @@ struct WireHelpers {
         break;
       }
       case WirePointer::FAR:
-        KJ_FAIL_REQUIRE("Unexpected FAR pointer.") {
-          break;
-        }
-        break;
+        KJ_FAIL_REQUIRE("Unexpected FAR pointer.");
       case WirePointer::OTHER:
         if (ref->isCapability()) {
           result.capCount++;
         } else {
-          KJ_FAIL_REQUIRE("Unknown pointer type.") { break; }
+          KJ_FAIL_REQUIRE("Unknown pointer type.");
         }
         break;
     }
@@ -1136,7 +1105,6 @@ struct WireHelpers {
       WirePointer* ref, word* refTarget, SegmentBuilder* segment, CapTableBuilder* capTable,
       StructSize size, const word* defaultValue, BuilderArena* orphanArena = nullptr)) {
     if (ref->isNull()) {
-    useDefault:
       if (defaultValue == nullptr ||
           reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
         return initStructPointer(ref, segment, capTable, size, orphanArena);
@@ -1151,9 +1119,7 @@ struct WireHelpers {
     word* oldPtr = followFars(oldRef, refTarget, oldSegment);
 
     KJ_REQUIRE(oldRef->kind() == WirePointer::STRUCT,
-        "Schema mismatch: Message contains non-struct pointer where struct pointer was expected.") {
-      goto useDefault;
-    }
+        "Schema mismatch: Message contains non-struct pointer where struct pointer was expected.");
 
     auto oldDataSize = oldRef->structRef.dataSize.get();
     auto oldPointerCount = oldRef->structRef.ptrCount.get();
@@ -1273,7 +1239,6 @@ struct WireHelpers {
              "Use getWritableStructListPointer() for struct lists.");
 
     if (origRef->isNull()) {
-    useDefault:
       if (defaultValue == nullptr ||
           reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
         return ListBuilder(elementSize);
@@ -1293,9 +1258,7 @@ struct WireHelpers {
     word* ptr = followFars(ref, origRefTarget, segment);
 
     KJ_REQUIRE(ref->kind() == WirePointer::LIST,
-        "Schema mismatch: Called getWritableListPointer() but existing pointer is not a list.") {
-      goto useDefault;
-    }
+        "Schema mismatch: Called getWritableListPointer() but existing pointer is not a list.");
 
     ElementSize oldSize = ref->listRef.elementSize();
 
@@ -1322,26 +1285,19 @@ struct WireHelpers {
         case ElementSize::BIT:
           KJ_FAIL_REQUIRE(
               "Schema mismatch: Found struct list where bit list was expected; upgrading boolean "
-              "lists to structs is no longer supported.") {
-            goto useDefault;
-          }
-          break;
+              "lists to structs is no longer supported.");
 
         case ElementSize::BYTE:
         case ElementSize::TWO_BYTES:
         case ElementSize::FOUR_BYTES:
         case ElementSize::EIGHT_BYTES:
           KJ_REQUIRE(dataSize >= ONE * WORDS,
-                     "Schema mismatch: Existing list value is incompatible with expected type.") {
-            goto useDefault;
-          }
+                     "Schema mismatch: Existing list value is incompatible with expected type.");
           break;
 
         case ElementSize::POINTER:
           KJ_REQUIRE(pointerCount >= ONE * POINTERS,
-                     "Schema mismatch: Existing list value is incompatible with expected type.") {
-            goto useDefault;
-          }
+                     "Schema mismatch: Existing list value is incompatible with expected type.");
           // Adjust the pointer to point at the reference segment.
           ptr += dataSize;
           break;
@@ -1362,22 +1318,14 @@ struct WireHelpers {
 
       if (elementSize == ElementSize::BIT) {
         KJ_REQUIRE(oldSize == ElementSize::BIT,
-            "Schema mismatch: Found non-bit list where bit list was expected.") {
-          goto useDefault;
-        }
+            "Schema mismatch: Found non-bit list where bit list was expected.");
       } else {
         KJ_REQUIRE(oldSize != ElementSize::BIT,
-            "Schema mismatch: Found bit list where non-bit list was expected.") {
-          goto useDefault;
-        }
+            "Schema mismatch: Found bit list where non-bit list was expected.");
         KJ_REQUIRE(dataSize >= dataBitsPerElement(elementSize) * ELEMENTS,
-                   "Schema mismatch: Existing list value is incompatible with expected type.") {
-          goto useDefault;
-        }
+                   "Schema mismatch: Existing list value is incompatible with expected type.");
         KJ_REQUIRE(pointerCount >= pointersPerElement(elementSize) * ELEMENTS,
-                   "Schema mismatch: Existing list value is incompatible with expected type.") {
-          goto useDefault;
-        }
+                   "Schema mismatch: Existing list value is incompatible with expected type.");
       }
 
       auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
@@ -1398,7 +1346,6 @@ struct WireHelpers {
       SegmentBuilder* origSegment, CapTableBuilder* capTable,
       const word* defaultValue, BuilderArena* orphanArena = nullptr)) {
     if (origRef->isNull()) {
-    useDefault:
       if (defaultValue == nullptr ||
           reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
         return ListBuilder(ElementSize::VOID);
@@ -1414,9 +1361,7 @@ struct WireHelpers {
 
     KJ_REQUIRE(ref->kind() == WirePointer::LIST,
         "Schema mismatch: Called getWritableListPointerAnySize() but existing pointer is not a "
-        "list.") {
-      goto useDefault;
-    }
+        "list.");
 
     ElementSize elementSize = ref->listRef.elementSize();
 
@@ -1453,7 +1398,6 @@ struct WireHelpers {
       SegmentBuilder* origSegment, CapTableBuilder* capTable,
       StructSize elementSize, const word* defaultValue, BuilderArena* orphanArena = nullptr)) {
     if (origRef->isNull()) {
-    useDefault:
       if (defaultValue == nullptr ||
           reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
         return ListBuilder(ElementSize::INLINE_COMPOSITE);
@@ -1471,9 +1415,7 @@ struct WireHelpers {
 
     KJ_REQUIRE(oldRef->kind() == WirePointer::LIST,
                "Schema mismatch: Called getList{Field,Element}() but existing pointer is not a "
-               "list.") {
-      goto useDefault;
-    }
+               "list.");
 
     ElementSize oldSize = oldRef->listRef.elementSize();
 
@@ -1483,9 +1425,7 @@ struct WireHelpers {
       WirePointer* oldTag = reinterpret_cast<WirePointer*>(oldPtr);
       oldPtr += POINTER_SIZE_IN_WORDS;
       KJ_REQUIRE(oldTag->kind() == WirePointer::STRUCT,
-                 "INLINE_COMPOSITE list with non-STRUCT elements not supported.") {
-        goto useDefault;
-      }
+                 "INLINE_COMPOSITE list with non-STRUCT elements not supported.");
 
       auto oldDataSize = oldTag->structRef.dataSize.get();
       auto oldPointerCount = oldTag->structRef.ptrCount.get();
@@ -1567,9 +1507,7 @@ struct WireHelpers {
 
         KJ_REQUIRE(oldSize != ElementSize::BIT,
             "Schema mismatch: Found bit list where struct list was expected; upgrading boolean "
-            "lists to structs is no longer supported.") {
-          goto useDefault;
-        }
+            "lists to structs is no longer supported.");
 
         auto newDataSize = elementSize.data;
         auto newPointerCount = elementSize.pointers;
@@ -1671,7 +1609,6 @@ struct WireHelpers {
       WirePointer* ref, word* refTarget, SegmentBuilder* segment, CapTableBuilder* capTable,
       const void* defaultValue, TextSize defaultSize)) {
     if (ref->isNull()) {
-    useDefault:
       if (defaultSize == ZERO * BYTES) {
         return nullptr;
       } else {
@@ -1685,27 +1622,19 @@ struct WireHelpers {
       byte* bptr = reinterpret_cast<byte*>(ptr);
 
       KJ_REQUIRE(ref->kind() == WirePointer::LIST,
-          "Schema mismatch: Called getText{Field,Element}() but existing pointer is not a list.") {
-        goto useDefault;
-      }
+          "Schema mismatch: Called getText{Field,Element}() but existing pointer is not a list.");
       KJ_REQUIRE(ref->listRef.elementSize() == ElementSize::BYTE,
           "Schema mismatch: Called getText{Field,Element}() but existing list pointer is not "
-          "byte-sized.") {
-        goto useDefault;
-      }
+          "byte-sized.");
 
       auto maybeSize = trySubtract(ref->listRef.elementCount() * (ONE * BYTES / ELEMENTS),
                                    ONE * BYTES);
       KJ_IF_SOME(size, maybeSize) {
-        KJ_REQUIRE(*(bptr + size) == '\0', "Text blob missing NUL terminator.") {
-          goto useDefault;
-        }
+        KJ_REQUIRE(*(bptr + size) == '\0', "Text blob missing NUL terminator.");
 
         return Text::Builder(reinterpret_cast<char*>(bptr), unbound(size / BYTES));
       } else {
-        KJ_FAIL_REQUIRE("zero-size blob can't be text (need NUL terminator)") {
-          goto useDefault;
-        };
+        KJ_FAIL_REQUIRE("zero-size blob can't be text (need NUL terminator)");
       }
     }
   }
@@ -1745,7 +1674,6 @@ struct WireHelpers {
       WirePointer* ref, word* refTarget, SegmentBuilder* segment, CapTableBuilder* capTable,
       const void* defaultValue, BlobSize defaultSize)) {
     if (ref->isNull()) {
-    useDefault:
       if (defaultSize == ZERO * BYTES) {
         return nullptr;
       } else {
@@ -1757,14 +1685,10 @@ struct WireHelpers {
       word* ptr = followFars(ref, refTarget, segment);
 
       KJ_REQUIRE(ref->kind() == WirePointer::LIST,
-          "Schema mismatch: Called getData{Field,Element}() but existing pointer is not a list.") {
-        goto useDefault;
-      }
+          "Schema mismatch: Called getData{Field,Element}() but existing pointer is not a list.");
       KJ_REQUIRE(ref->listRef.elementSize() == ElementSize::BYTE,
           "Schema mismatch: Called getData{Field,Element}() but existing list pointer is not "
-          "byte-sized.") {
-        goto useDefault;
-      }
+          "byte-sized.");
 
       return Data::Builder(reinterpret_cast<byte*>(ptr),
           unbound(ref->listRef.elementCount() / ELEMENTS));
@@ -1984,15 +1908,11 @@ struct WireHelpers {
     switch (src->kind()) {
       case WirePointer::STRUCT:
         KJ_REQUIRE(nestingLimit > 0,
-              "Message is too deeply-nested or contains cycles.  See capnp::ReaderOptions.") {
-          goto useDefault;
-        }
+              "Message is too deeply-nested or contains cycles.  See capnp::ReaderOptions.");
 
         KJ_REQUIRE(boundsCheck(srcSegment, ptr, src->structRef.wordSize()),
                    "Message contained out-of-bounds struct pointer. "
-                   OUT_OF_BOUNDS_ERROR_DETAIL) {
-          goto useDefault;
-        }
+                   OUT_OF_BOUNDS_ERROR_DETAIL);
         return setStructPointer(dstSegment, dstCapTable, dst,
             StructReader(srcSegment, srcCapTable, ptr,
                          reinterpret_cast<const WirePointer*>(ptr + src->structRef.dataSize.get()),
@@ -2005,9 +1925,7 @@ struct WireHelpers {
         ElementSize elementSize = src->listRef.elementSize();
 
         KJ_REQUIRE(nestingLimit > 0,
-              "Message is too deeply-nested or contains cycles.  See capnp::ReaderOptions.") {
-          goto useDefault;
-        }
+              "Message is too deeply-nested or contains cycles.  See capnp::ReaderOptions.");
 
         if (elementSize == ElementSize::INLINE_COMPOSITE) {
           auto wordCount = src->listRef.inlineCompositeWordCount();
@@ -2015,32 +1933,24 @@ struct WireHelpers {
 
           KJ_REQUIRE(boundsCheck(srcSegment, ptr, wordCount + POINTER_SIZE_IN_WORDS),
                      "Message contains out-of-bounds list pointer. "
-                     OUT_OF_BOUNDS_ERROR_DETAIL) {
-            goto useDefault;
-          }
+                     OUT_OF_BOUNDS_ERROR_DETAIL);
 
           ptr += POINTER_SIZE_IN_WORDS;
 
           KJ_REQUIRE(tag->kind() == WirePointer::STRUCT,
-                     "INLINE_COMPOSITE lists of non-STRUCT type are not supported.") {
-            goto useDefault;
-          }
+                     "INLINE_COMPOSITE lists of non-STRUCT type are not supported.");
 
           auto elementCount = tag->inlineCompositeListElementCount();
           auto wordsPerElement = tag->structRef.wordSize() / ELEMENTS;
 
           KJ_REQUIRE(wordsPerElement * upgradeBound<uint64_t>(elementCount) <= wordCount,
-                     "INLINE_COMPOSITE list's elements overrun its word count.") {
-            goto useDefault;
-          }
+                     "INLINE_COMPOSITE list's elements overrun its word count.");
 
           if (wordsPerElement * (ONE * ELEMENTS) == ZERO * WORDS) {
             // Watch out for lists of zero-sized structs, which can claim to be arbitrarily large
             // without having sent actual data.
             KJ_REQUIRE(amplifiedRead(srcSegment, elementCount * (ONE * WORDS / ELEMENTS)),
-                       "Message contains amplified list pointer.") {
-              goto useDefault;
-            }
+                       "Message contains amplified list pointer.");
           }
 
           return setListPointer(dstSegment, dstCapTable, dst,
@@ -2059,17 +1969,13 @@ struct WireHelpers {
 
           KJ_REQUIRE(boundsCheck(srcSegment, ptr, wordCount),
                      "Message contains out-of-bounds list pointer. "
-                     OUT_OF_BOUNDS_ERROR_DETAIL) {
-            goto useDefault;
-          }
+                     OUT_OF_BOUNDS_ERROR_DETAIL);
 
           if (elementSize == ElementSize::VOID) {
             // Watch out for lists of void, which can claim to be arbitrarily large without having
             // sent actual data.
             KJ_REQUIRE(amplifiedRead(srcSegment, elementCount * (ONE * WORDS / ELEMENTS)),
-                       "Message contains amplified list pointer.") {
-              goto useDefault;
-            }
+                       "Message contains amplified list pointer.");
           }
 
           return setListPointer(dstSegment, dstCapTable, dst,
@@ -2080,19 +1986,13 @@ struct WireHelpers {
       }
 
       case WirePointer::FAR:
-        KJ_FAIL_REQUIRE("Unexpected FAR pointer.") {
-          goto useDefault;
-        }
+        KJ_FAIL_REQUIRE("Unexpected FAR pointer.");
 
       case WirePointer::OTHER: {
-        KJ_REQUIRE(src->isCapability(), "Unknown pointer type.") {
-          goto useDefault;
-        }
+        KJ_REQUIRE(src->isCapability(), "Unknown pointer type.");
 
         if (canonical) {
-          KJ_FAIL_REQUIRE("Cannot create a canonical message with a capability") {
-            break;
-          }
+          KJ_FAIL_REQUIRE("Cannot create a canonical message with a capability");
         }
 #if !CAPNP_LITE
         KJ_IF_SOME(cap, srcCapTable->extractCap(src->capRef.index.get())) {
@@ -2101,9 +2001,7 @@ struct WireHelpers {
           return { dstSegment, reinterpret_cast<word*>(1) };
         } else {
 #endif  // !CAPNP_LITE
-          KJ_FAIL_REQUIRE("Message contained invalid capability pointer.") {
-            goto useDefault;
-          }
+          KJ_FAIL_REQUIRE("Message contained invalid capability pointer.");
 #if !CAPNP_LITE
         }
 #endif  // !CAPNP_LITE
@@ -2145,7 +2043,7 @@ struct WireHelpers {
     if (ref->isNull()) {
       location = nullptr;
     } else if (ref->kind() == WirePointer::OTHER) {
-      KJ_REQUIRE(ref->isCapability(), "Unknown pointer type.") { break; }
+      KJ_REQUIRE(ref->isCapability(), "Unknown pointer type.");
       location = reinterpret_cast<word*>(1);  // dummy so that it is non-null
     } else {
       WirePointer* refCopy = ref;
@@ -2191,9 +2089,7 @@ struct WireHelpers {
     }
 
     KJ_REQUIRE(nestingLimit > 0,
-               "Message is too deeply-nested or contains cycles.  See capnp::ReaderOptions.") {
-      goto useDefault;
-    }
+               "Message is too deeply-nested or contains cycles.  See capnp::ReaderOptions.");
 
     const word* ptr;
     KJ_IF_SOME(p, followFars(ref, refTarget, segment)) {
@@ -2204,15 +2100,11 @@ struct WireHelpers {
 
     KJ_REQUIRE(ref->kind() == WirePointer::STRUCT,
                "Schema mismatch: Message contains non-struct pointer where struct pointer"
-               "was expected.") {
-      goto useDefault;
-    }
+               "was expected.");
 
     KJ_REQUIRE(boundsCheck(segment, ptr, ref->structRef.wordSize()),
                "Message contained out-of-bounds struct pointer. "
-               OUT_OF_BOUNDS_ERROR_DETAIL) {
-      goto useDefault;
-    }
+               OUT_OF_BOUNDS_ERROR_DETAIL);
 
     return StructReader(
         segment, capTable,
@@ -2238,18 +2130,11 @@ struct WireHelpers {
     } else if (!ref->isCapability()) {
       KJ_FAIL_REQUIRE(
           "Schema mismatch: Message contains non-capability pointer where capability pointer was "
-          "expected.") {
-        break;
-      }
-      return brokenCapFactory->newBrokenCap(
-          "Calling capability extracted from a non-capability pointer.");
+          "expected.");
     } else KJ_IF_SOME(cap, capTable->extractCap(ref->capRef.index.get())) {
       return kj::mv(cap);
     } else {
-      KJ_FAIL_REQUIRE("Message contains invalid capability pointer.") {
-        break;
-      }
-      return brokenCapFactory->newBrokenCap("Calling invalid capability pointer.");
+      KJ_FAIL_REQUIRE("Message contains invalid capability pointer.");
     }
   }
 #endif  // !CAPNP_LITE
@@ -2280,9 +2165,7 @@ struct WireHelpers {
     }
 
     KJ_REQUIRE(nestingLimit > 0,
-               "Message is too deeply-nested or contains cycles.  See capnp::ReaderOptions.") {
-      goto useDefault;
-    }
+               "Message is too deeply-nested or contains cycles.  See capnp::ReaderOptions.");
 
     const word* ptr;
     KJ_IF_SOME(p, followFars(ref, refTarget, segment)) {
@@ -2293,9 +2176,7 @@ struct WireHelpers {
 
     KJ_REQUIRE(ref->kind() == WirePointer::LIST,
                "Schema mismatch: Message contains non-list pointer where list pointer was "
-               "expected.") {
-      goto useDefault;
-    }
+               "expected.");
 
     ElementSize elementSize = ref->listRef.elementSize();
     if (elementSize == ElementSize::INLINE_COMPOSITE) {
@@ -2306,32 +2187,24 @@ struct WireHelpers {
 
       KJ_REQUIRE(boundsCheck(segment, ptr, wordCount + POINTER_SIZE_IN_WORDS),
                  "Message contains out-of-bounds list pointer. "
-                 OUT_OF_BOUNDS_ERROR_DETAIL) {
-        goto useDefault;
-      }
+                 OUT_OF_BOUNDS_ERROR_DETAIL);
 
       ptr += POINTER_SIZE_IN_WORDS;
 
       KJ_REQUIRE(tag->kind() == WirePointer::STRUCT,
-                 "INLINE_COMPOSITE lists of non-STRUCT type are not supported.") {
-        goto useDefault;
-      }
+                 "INLINE_COMPOSITE lists of non-STRUCT type are not supported.");
 
       auto size = tag->inlineCompositeListElementCount();
       auto wordsPerElement = tag->structRef.wordSize() / ELEMENTS;
 
       KJ_REQUIRE(upgradeBound<uint64_t>(size) * wordsPerElement <= wordCount,
-                 "INLINE_COMPOSITE list's elements overrun its word count.") {
-        goto useDefault;
-      }
+                 "INLINE_COMPOSITE list's elements overrun its word count.");
 
       if (wordsPerElement * (ONE * ELEMENTS) == ZERO * WORDS) {
         // Watch out for lists of zero-sized structs, which can claim to be arbitrarily large
         // without having sent actual data.
         KJ_REQUIRE(amplifiedRead(segment, size * (ONE * WORDS / ELEMENTS)),
-                   "Message contains amplified list pointer.") {
-          goto useDefault;
-        }
+                   "Message contains amplified list pointer.");
       }
 
       if (checkElementSize) {
@@ -2348,10 +2221,7 @@ struct WireHelpers {
           case ElementSize::BIT:
             KJ_FAIL_REQUIRE(
                 "Found struct list where bit list was expected; upgrading boolean lists to structs "
-                "is no longer supported.") {
-              goto useDefault;
-            }
-            break;
+                "is no longer supported.");
 
           case ElementSize::BYTE:
           case ElementSize::TWO_BYTES:
@@ -2359,17 +2229,13 @@ struct WireHelpers {
           case ElementSize::EIGHT_BYTES:
             KJ_REQUIRE(tag->structRef.dataSize.get() > ZERO * WORDS,
                        "Schema mismatch: Expected a primitive list, but got a list of pointer-only "
-                       "structs.") {
-              goto useDefault;
-            }
+                       "structs.");
             break;
 
           case ElementSize::POINTER:
             KJ_REQUIRE(tag->structRef.ptrCount.get() > ZERO * POINTERS,
                        "Schema mismatch: Expected a pointer list, but got a list of data-only "
-                       "structs.") {
-              goto useDefault;
-            }
+                       "structs.");
             break;
 
           case ElementSize::INLINE_COMPOSITE:
@@ -2394,26 +2260,20 @@ struct WireHelpers {
       auto wordCount = roundBitsUpToWords(upgradeBound<uint64_t>(elementCount) * step);
       KJ_REQUIRE(boundsCheck(segment, ptr, wordCount),
             "Message contains out-of-bounds list pointer. "
-            OUT_OF_BOUNDS_ERROR_DETAIL) {
-        goto useDefault;
-      }
+            OUT_OF_BOUNDS_ERROR_DETAIL);
 
       if (elementSize == ElementSize::VOID) {
         // Watch out for lists of void, which can claim to be arbitrarily large without having sent
         // actual data.
         KJ_REQUIRE(amplifiedRead(segment, elementCount * (ONE * WORDS / ELEMENTS)),
-                   "Message contains amplified list pointer.") {
-          goto useDefault;
-        }
+                   "Message contains amplified list pointer.");
       }
 
       if (checkElementSize) {
         if (elementSize == ElementSize::BIT && expectedElementSize != ElementSize::BIT) {
           KJ_FAIL_REQUIRE(
               "Found bit list where struct list was expected; upgrading boolean lists to structs "
-              "is no longer supported.") {
-            goto useDefault;
-          }
+              "is no longer supported.");
         }
 
         // Verify that the elements are at least as large as the expected type.  Note that if we
@@ -2427,13 +2287,9 @@ struct WireHelpers {
             pointersPerElement(expectedElementSize) * ELEMENTS;
 
         KJ_REQUIRE(expectedDataBitsPerElement <= dataSize,
-                   "Schema mismatch: Message contained list with incompatible element type.") {
-          goto useDefault;
-        }
+                   "Schema mismatch: Message contained list with incompatible element type.");
         KJ_REQUIRE(expectedPointersPerElement <= pointerCount,
-                   "Schema mismatch: Message contained list with incompatible element type.") {
-          goto useDefault;
-        }
+                   "Schema mismatch: Message contained list with incompatible element type.");
       }
 
       return ListReader(segment, capTable, ptr, elementCount, step,
@@ -2466,32 +2322,22 @@ struct WireHelpers {
       auto size = ref->listRef.elementCount() * (ONE * BYTES / ELEMENTS);
 
       KJ_REQUIRE(ref->kind() == WirePointer::LIST,
-                 "Schema mismatch: Message contains non-list pointer where text was expected.") {
-        goto useDefault;
-      }
+                 "Schema mismatch: Message contains non-list pointer where text was expected.");
 
       KJ_REQUIRE(ref->listRef.elementSize() == ElementSize::BYTE,
                  "Schema mismatch: Message contains list pointer of non-bytes where text was "
-                 "expected.") {
-        goto useDefault;
-      }
+                 "expected.");
 
       KJ_REQUIRE(boundsCheck(segment, ptr, roundBytesUpToWords(size)),
                  "Message contained out-of-bounds text pointer. "
-                 OUT_OF_BOUNDS_ERROR_DETAIL) {
-        goto useDefault;
-      }
+                 OUT_OF_BOUNDS_ERROR_DETAIL);
 
-      KJ_REQUIRE(size > ZERO * BYTES, "Message contains text that is not NUL-terminated.") {
-        goto useDefault;
-      }
+      KJ_REQUIRE(size > ZERO * BYTES, "Message contains text that is not NUL-terminated.");
 
       const char* cptr = reinterpret_cast<const char*>(ptr);
       uint unboundedSize = unbound(size / BYTES) - 1;
 
-      KJ_REQUIRE(cptr[unboundedSize] == '\0', "Message contains text that is not NUL-terminated.") {
-        goto useDefault;
-      }
+      KJ_REQUIRE(cptr[unboundedSize] == '\0', "Message contains text that is not NUL-terminated.");
 
       return Text::Reader(cptr, unboundedSize);
     }
@@ -2526,21 +2372,15 @@ struct WireHelpers {
       auto size = ref->listRef.elementCount() * (ONE * BYTES / ELEMENTS);
 
       KJ_REQUIRE(ref->kind() == WirePointer::LIST,
-                 "Schema mismatch: Message contains non-list pointer where data was expected.") {
-        goto useDefault;
-      }
+                 "Schema mismatch: Message contains non-list pointer where data was expected.");
 
       KJ_REQUIRE(ref->listRef.elementSize() == ElementSize::BYTE,
                  "Schema mismatch: Message contains list pointer of non-bytes where data was "
-                 "expected.") {
-        goto useDefault;
-      }
+                 "expected.");
 
       KJ_REQUIRE(boundsCheck(segment, ptr, roundBytesUpToWords(size)),
                  "Message contained out-of-bounds data pointer. "
-                 OUT_OF_BOUNDS_ERROR_DETAIL) {
-        goto useDefault;
-      }
+                 OUT_OF_BOUNDS_ERROR_DETAIL);
 
       return Data::Reader(reinterpret_cast<const byte*>(ptr), unbound(size / BYTES));
     }
@@ -2710,9 +2550,7 @@ PointerBuilder PointerBuilder::imbue(CapTableBuilder* capTable) {
 PointerReader PointerReader::getRoot(SegmentReader* segment, CapTableReader* capTable,
                                      const word* location, int nestingLimit) {
   KJ_REQUIRE(WireHelpers::boundsCheck(segment, location, POINTER_SIZE_IN_WORDS),
-             "Root location out-of-bounds.") {
-    location = nullptr;
-  }
+             "Root location out-of-bounds.");
 
   return PointerReader(segment, capTable,
       reinterpret_cast<const WirePointer*>(location), nestingLimit);
@@ -2775,13 +2613,13 @@ PointerType PointerReader::getPointerType() const {
     if (WireHelpers::followFars(ptr, refTarget, sgmt) == kj::none) return PointerType::NULL_;
     switch(ptr->kind()) {
       case WirePointer::FAR:
-        KJ_FAIL_ASSERT("far pointer not followed?") { return PointerType::NULL_; }
+        KJ_FAIL_ASSERT("far pointer not followed?");
       case WirePointer::STRUCT:
         return PointerType::STRUCT;
       case WirePointer::LIST:
         return PointerType::LIST;
       case WirePointer::OTHER:
-        KJ_REQUIRE(ptr->isCapability(), "unknown pointer type") { return PointerType::NULL_; }
+        KJ_REQUIRE(ptr->isCapability(), "unknown pointer type");
         return PointerType::CAPABILITY;
     }
     KJ_UNREACHABLE;
@@ -3064,31 +2902,23 @@ bool StructReader::isCanonical(const word **readHead,
 
 Text::Builder ListBuilder::asText() {
   KJ_REQUIRE(structDataSize == G(8) * BITS && structPointerCount == ZERO * POINTERS,
-             "Expected Text, got list of non-bytes.") {
-    return Text::Builder();
-  }
+             "Expected Text, got list of non-bytes.");
 
   size_t size = unbound(elementCount / ELEMENTS);
 
-  KJ_REQUIRE(size > 0, "Message contains text that is not NUL-terminated.") {
-    return Text::Builder();
-  }
+  KJ_REQUIRE(size > 0, "Message contains text that is not NUL-terminated.");
 
   char* cptr = reinterpret_cast<char*>(ptr);
   --size;  // NUL terminator
 
-  KJ_REQUIRE(cptr[size] == '\0', "Message contains text that is not NUL-terminated.") {
-    return Text::Builder();
-  }
+  KJ_REQUIRE(cptr[size] == '\0', "Message contains text that is not NUL-terminated.");
 
   return Text::Builder(cptr, size);
 }
 
 Data::Builder ListBuilder::asData() {
   KJ_REQUIRE(structDataSize == G(8) * BITS && structPointerCount == ZERO * POINTERS,
-             "Expected Text, got list of non-bytes.") {
-    return Data::Builder();
-  }
+             "Expected Text, got list of non-bytes.");
 
   return Data::Builder(reinterpret_cast<byte*>(ptr), unbound(elementCount / ELEMENTS));
 }
@@ -3126,40 +2956,30 @@ ListBuilder ListBuilder::imbue(CapTableBuilder* capTable) {
 
 Text::Reader ListReader::asText() {
   KJ_REQUIRE(structDataSize == G(8) * BITS && structPointerCount == ZERO * POINTERS,
-             "Schema mismatch: Expected Text, got list of non-bytes.") {
-    return Text::Reader();
-  }
+             "Schema mismatch: Expected Text, got list of non-bytes.");
 
   size_t size = unbound(elementCount / ELEMENTS);
 
-  KJ_REQUIRE(size > 0, "Message contains text that is not NUL-terminated.") {
-    return Text::Reader();
-  }
+  KJ_REQUIRE(size > 0, "Message contains text that is not NUL-terminated.");
 
   const char* cptr = reinterpret_cast<const char*>(ptr);
   --size;  // NUL terminator
 
-  KJ_REQUIRE(cptr[size] == '\0', "Message contains text that is not NUL-terminated.") {
-    return Text::Reader();
-  }
+  KJ_REQUIRE(cptr[size] == '\0', "Message contains text that is not NUL-terminated.");
 
   return Text::Reader(cptr, size);
 }
 
 Data::Reader ListReader::asData() {
   KJ_REQUIRE(structDataSize == G(8) * BITS && structPointerCount == ZERO * POINTERS,
-             "Schema mismatch: Expected Text, got list of non-bytes.") {
-    return Data::Reader();
-  }
+             "Schema mismatch: Expected Text, got list of non-bytes.");
 
   return Data::Reader(reinterpret_cast<const byte*>(ptr), unbound(elementCount / ELEMENTS));
 }
 
 kj::ArrayPtr<const byte> ListReader::asRawBytes() const {
   KJ_REQUIRE(structPointerCount == ZERO * POINTERS,
-             "Schema mismatch: Expected data only, got pointers.") {
-    return kj::ArrayPtr<const byte>();
-  }
+             "Schema mismatch: Expected data only, got pointers.");
 
   return arrayPtr(reinterpret_cast<const byte*>(ptr),
       WireHelpers::roundBitsUpToBytes(
@@ -3168,9 +2988,7 @@ kj::ArrayPtr<const byte> ListReader::asRawBytes() const {
 
 StructReader ListReader::getStructElement(ElementCount index) const {
   KJ_REQUIRE(nestingLimit > 0,
-             "Message is too deeply-nested or contains cycles.  See capnp::ReaderOptions.") {
-    return StructReader();
-  }
+             "Message is too deeply-nested or contains cycles.  See capnp::ReaderOptions.");
 
   auto indexBit = upgradeBound<uint64_t>(index) * step;
   const byte* structData = ptr + indexBit / BITS_PER_BYTE;
@@ -3695,9 +3513,7 @@ bool OrphanBuilder::truncate(ElementCount uncheckedSize, bool isText) {
     return size == ZERO * ELEMENTS;
   }
 
-  KJ_REQUIRE(ref->kind() == WirePointer::LIST, "Schema mismatch: Can't truncate non-list.") {
-    return false;
-  }
+  KJ_REQUIRE(ref->kind() == WirePointer::LIST, "Schema mismatch: Can't truncate non-list.");
 
   if (isText) {
     // Add space for the NUL terminator.
@@ -3713,9 +3529,7 @@ bool OrphanBuilder::truncate(ElementCount uncheckedSize, bool isText) {
     WirePointer* tag = reinterpret_cast<WirePointer*>(target);
     ++target;
     KJ_REQUIRE(tag->kind() == WirePointer::STRUCT,
-               "INLINE_COMPOSITE lists of non-STRUCT type are not supported.") {
-      return false;
-    }
+               "INLINE_COMPOSITE lists of non-STRUCT type are not supported.");
     StructSize structSize(tag->structRef.dataSize.get(), tag->structRef.ptrCount.get());
     auto elementStep = structSize.total() / ELEMENTS;
 

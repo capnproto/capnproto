@@ -1327,7 +1327,7 @@ TEST(Encoding, UpgradeUnion) {
 
   {
     auto root = builder.getRoot<test::TestNewUnionVersion>();
-    ASSERT_TRUE(root.isB())
+    ASSERT_TRUE(root.isB());
     EXPECT_EQ(123, root.getB());
   }
 }

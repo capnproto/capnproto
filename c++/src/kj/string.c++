@@ -39,13 +39,13 @@ bool isHex(const char *s) {
 }
 
 long long parseSigned(const StringPtr& s, long long min, long long max) {
-  KJ_REQUIRE(s != nullptr, "String does not contain valid number", s) { return 0; }
+  KJ_REQUIRE(s != nullptr, "String does not contain valid number", s);
   char *endPtr;
   errno = 0;
   auto value = strtoll(s.begin(), &endPtr, isHex(s.cStr()) ? 16 : 10);
-  KJ_REQUIRE(endPtr == s.end(), "String does not contain valid number", s) { return 0; }
-  KJ_REQUIRE(errno != ERANGE, "Value out-of-range", s) { return 0; }
-  KJ_REQUIRE(value >= min && value <= max, "Value out-of-range", value, min, max) { return 0; }
+  KJ_REQUIRE(endPtr == s.end(), "String does not contain valid number", s);
+  KJ_REQUIRE(errno != ERANGE, "Value out-of-range", s);
+  KJ_REQUIRE(value >= min && value <= max, "Value out-of-range", value, min, max);
   return value;
 }
 
@@ -61,15 +61,15 @@ Maybe<long long> tryParseSigned(const StringPtr& s, long long min, long long max
 }
 
 unsigned long long parseUnsigned(const StringPtr& s, unsigned long long max) {
-  KJ_REQUIRE(s != nullptr, "String does not contain valid number", s) { return 0; }
+  KJ_REQUIRE(s != nullptr, "String does not contain valid number", s);
   char *endPtr;
   errno = 0;
   auto value = strtoull(s.begin(), &endPtr, isHex(s.cStr()) ? 16 : 10);
-  KJ_REQUIRE(endPtr == s.end(), "String does not contain valid number", s) { return 0; }
-  KJ_REQUIRE(errno != ERANGE, "Value out-of-range", s) { return 0; }
-  KJ_REQUIRE(value <= max, "Value out-of-range", value, max) { return 0; }
+  KJ_REQUIRE(endPtr == s.end(), "String does not contain valid number", s);
+  KJ_REQUIRE(errno != ERANGE, "Value out-of-range", s);
+  KJ_REQUIRE(value <= max, "Value out-of-range", value, max);
   //strtoull("-1") does not fail with ERANGE
-  KJ_REQUIRE(s[0] != '-', "Value out-of-range", s) { return 0; }
+  KJ_REQUIRE(s[0] != '-', "Value out-of-range", s);
   return value;
 }
 
@@ -592,11 +592,11 @@ CappedArray<char, kDoubleToBufferSize> Stringifier::operator*(double f) const {
 }
 
 double parseDouble(const StringPtr& s) {
-  KJ_REQUIRE(s != nullptr, "String does not contain valid number", s) { return 0; }
+  KJ_REQUIRE(s != nullptr, "String does not contain valid number", s);
   char *endPtr;
   errno = 0;
   auto value = _::NoLocaleStrtod(s.begin(), &endPtr);
-  KJ_REQUIRE(endPtr == s.end(), "String does not contain valid floating number", s) { return 0; }
+  KJ_REQUIRE(endPtr == s.end(), "String does not contain valid floating number", s);
 #if _WIN32 || __CYGWIN__ || __BIONIC__
   // When Windows' strtod() parses "nan", it returns a value with the sign bit set. But, our
   // preferred canonical value for NaN does not have the sign bit set, and all other platforms

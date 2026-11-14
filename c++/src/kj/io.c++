@@ -50,11 +50,7 @@ BufferedOutputStream::~BufferedOutputStream() noexcept(false) {}
 
 size_t InputStream::read(ArrayPtr<byte> buffer, size_t minBytes) {
   size_t n = tryRead(buffer, minBytes);
-  KJ_REQUIRE(n >= minBytes, "Premature EOF") {
-    // Pretend we read zeros from the input.
-    buffer.slice(n).first(minBytes-n).fill(0);
-    return minBytes;
-  }
+  KJ_REQUIRE(n >= minBytes, "Premature EOF");
   return n;
 }
 
@@ -255,10 +251,7 @@ size_t ArrayInputStream::tryRead(ArrayPtr<byte> dst, size_t minBytes) {
 }
 
 void ArrayInputStream::skip(size_t bytes) {
-  KJ_REQUIRE(array.size() >= bytes, "ArrayInputStream ended prematurely.") {
-    bytes = array.size();
-    break;
-  }
+  KJ_REQUIRE(array.size() >= bytes, "ArrayInputStream ended prematurely.");
   array = array.slice(bytes, array.size());
 }
 

@@ -28,37 +28,34 @@ namespace _ {  // private
 
 void inlineRequireFailure(const char* file, int line, const char* expectation,
                           const char* macroArgs, const char* message) {
+  Debug::Site site { file, line, expectation, macroArgs };
   if (message == nullptr) {
-    Debug::Fault f(file, line, kj::Exception::Type::FAILED, expectation, macroArgs);
-    f.fatal();
+    Debug::fail(site, kj::Exception::Type::FAILED);
   } else {
-    Debug::Fault f(file, line, kj::Exception::Type::FAILED, expectation, macroArgs, message);
-    f.fatal();
+    Debug::fail(site, kj::Exception::Type::FAILED, message);
   }
 }
 
 void inlineRequireFailure(const char* file, int line, const char* expectation,
                           const char* macroArgs, const char* message, size_t arg1) {
   const char* msg = message ? message : "";
-  Debug::Fault f(file, line, kj::Exception::Type::FAILED, expectation, macroArgs, msg, arg1);
-  f.fatal();
+  Debug::fail(Debug::Site { file, line, expectation, macroArgs }, kj::Exception::Type::FAILED,
+              msg, arg1);
 }
 
 void inlineRequireFailure(const char* file, int line, const char* expectation,
                           const char* macroArgs, const char* message, size_t arg1, size_t arg2) {
   const char* msg = message ? message : "";
-  Debug::Fault f(
-      file, line, kj::Exception::Type::FAILED, expectation, macroArgs, msg, arg1, arg2);
-  f.fatal();
+  Debug::fail(Debug::Site { file, line, expectation, macroArgs }, kj::Exception::Type::FAILED,
+              msg, arg1, arg2);
 }
 
 void inlineRequireFailure(const char* file, int line, const char* expectation,
                           const char* macroArgs, const char* message, size_t arg1, size_t arg2,
                           size_t arg3) {
   const char* msg = message ? message : "";
-  Debug::Fault f(
-      file, line, kj::Exception::Type::FAILED, expectation, macroArgs, msg, arg1, arg2, arg3);
-  f.fatal();
+  Debug::fail(Debug::Site { file, line, expectation, macroArgs }, kj::Exception::Type::FAILED,
+              msg, arg1, arg2, arg3);
 }
 
 void unreachable() {
