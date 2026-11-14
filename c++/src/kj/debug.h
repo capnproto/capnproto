@@ -579,6 +579,13 @@ namespace kj {
 
 namespace _ {  // private
 
+#if defined(_MSC_VER) && !defined(__clang__)
+#define KJ_FAIL_COLD_
+#else
+#define KJ_FAIL_COLD_ __attribute__((cold))
+// The failure and logging paths: optimized for size and kept away from the code that calls them.
+#endif
+
 class Debug {
 public:
   Debug() = delete;
@@ -604,6 +611,33 @@ public:
   template <typename... Params>
   static void log(const char* file, int line, LogSeverity severity, const char* macroArgs,
                   Params&&... params);
+
+  struct Arg {
+    // An argument of a failed check or a log message, with the function that stringifies it.
+    // The templates only fill in an array of these: the stringification is shared by all
+    // arguments of the same type, and the rest of the work by all checks and messages.
+    const void* value;
+    String (*stringify)(const void* value);
+
+    template <typename T>
+    static KJ_FAIL_COLD_ String stringifyValue(const void* value) {
+      // `str(value)` on a non-const lvalue, as the macro's arguments are named parameters.
+      return str(*const_cast<T*>(static_cast<const T*>(value)));
+    }
+
+    static KJ_FAIL_COLD_ String stringifyChars(const void* value) {
+      return str(static_cast<const char*>(value));
+    }
+
+    template <typename T>
+    static Arg of(T& value) { return { &value, &stringifyValue<T> }; }
+    template <size_t s>
+    static Arg of(const char (&value)[s]) { return { value, &stringifyChars }; }
+    template <size_t s>
+    static Arg of(char (&value)[s]) { return { value, &stringifyChars }; }
+    // Char arrays, usually message literals, are stringified like `const char*` (up to the first
+    // NUL) by `str()`, so they share one function, whatever their size.
+  };
 
   template <typename Code, typename... Params>
   static KJ_NOINLINE KJ_NORETURN(void fail(const char* file, int line, Code code,
@@ -702,19 +736,19 @@ private:
   static LogSeverity minSeverity;
 
   static void logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
-                          ArrayPtr<String> argValues);
-  static String makeDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues);
+                          ArrayPtr<const Arg> args);
+  static String makeDescriptionInternal(const char* macroArgs, ArrayPtr<const Arg> args);
 
   static int getOsErrorNumber(bool nonblocking);
   // Get the error code of the last error (e.g. from errno).  Returns -1 on EINTR.
 
   static Exception makeFailure(const char* file, int line, Exception::Type type,
-      const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
+      const char* condition, const char* macroArgs, ArrayPtr<const Arg> args);
   static Exception makeFailure(const char* file, int line, int osErrorNumber,
-      const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
+      const char* condition, const char* macroArgs, ArrayPtr<const Arg> args);
 #if _WIN32 || __CYGWIN__
   static Exception makeFailure(const char* file, int line, Win32Result osErrorNumber,
-      const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
+      const char* condition, const char* macroArgs, ArrayPtr<const Arg> args);
 #endif
   // Builds the exception describing a failed check.
 };
@@ -722,8 +756,8 @@ private:
 template <typename... Params>
 void Debug::log(const char* file, int line, LogSeverity severity, const char* macroArgs,
                 Params&&... params) {
-  String argValues[sizeof...(Params)] = {str(params)...};
-  logInternal(file, line, severity, macroArgs, arrayPtr(argValues, sizeof...(Params)));
+  const Arg args[sizeof...(Params)] = { Arg::of(params)... };
+  logInternal(file, line, severity, macroArgs, arrayPtr(args, sizeof...(Params)));
 }
 
 template <>
@@ -738,9 +772,9 @@ void Debug::fail(const char* file, int line, Code code,
   if constexpr (sizeof...(Params) == 0) {
     throwException(makeFailure(file, line, code, condition, macroArgs, nullptr), 1);
   } else {
-    String argValues[sizeof...(Params)] = {str(params)...};
+    const Arg args[sizeof...(Params)] = { Arg::of(params)... };
     throwException(makeFailure(file, line, code, condition, macroArgs,
-                               arrayPtr(argValues, sizeof...(Params))), 1);
+                               arrayPtr(args, sizeof...(Params))), 1);
   }
 }
 
@@ -753,9 +787,9 @@ void Debug::failUnlessUnwinding(const char* file, int line, Code code,
     throwExceptionUnlessUnwinding(
         makeFailure(file, line, code, condition, macroArgs, nullptr), 1);
   } else {
-    String argValues[sizeof...(Params)] = {str(params)...};
+    const Arg args[sizeof...(Params)] = { Arg::of(params)... };
     throwExceptionUnlessUnwinding(makeFailure(file, line, code, condition, macroArgs,
-                                              arrayPtr(argValues, sizeof...(Params))), 1);
+                                              arrayPtr(args, sizeof...(Params))), 1);
   }
 }
 
@@ -803,8 +837,8 @@ int Debug::syscallError(Call&& call, bool nonblocking) {
 
 template <typename... Params>
 String Debug::makeDescription(const char* macroArgs, Params&&... params) {
-  String argValues[sizeof...(Params)] = {str(params)...};
-  return makeDescriptionInternal(macroArgs, arrayPtr(argValues, sizeof...(Params)));
+  const Arg args[sizeof...(Params)] = { Arg::of(params)... };
+  return makeDescriptionInternal(macroArgs, arrayPtr(args, sizeof...(Params)));
 }
 
 template <>
@@ -933,5 +967,7 @@ static constexpr DebugExpressionStart MAGIC_ASSERT;
 
 }  // namespace _ (private)
 }  // namespace kj
+
+#undef KJ_FAIL_COLD_
 
 KJ_END_HEADER

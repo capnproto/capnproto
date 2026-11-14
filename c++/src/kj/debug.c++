@@ -188,9 +188,29 @@ enum DescriptionStyle {
   SYSCALL
 };
 
-static String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNumber,
-                                  const char* sysErrorString, const char* macroArgs,
-                                  ArrayPtr<String> argValues) {
+String stringify(const Debug::Arg& arg) {
+  return arg.stringify(arg.value);
+}
+
+constexpr size_t STACK_ARGS = 4;
+// Most checks and log messages have at most this many arguments, which are stringified into an
+// array on the stack. (Every element is constructed and destroyed, so it shouldn't be bigger.)
+
+String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNumber,
+                           const char* sysErrorString, const char* macroArgs,
+                           ArrayPtr<const Debug::Arg> args) {
+  // Stringifies `args` and describes them, labeled with their names parsed from `macroArgs`.
+
+  if (style == ASSERTION && code == nullptr) {
+    // A check without a condition, e.g. KJ_FAIL_ASSERT(), is described by its arguments alone.
+    style = LOG;
+  }
+
+  KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
+  for (auto i: kj::indices(args)) {
+    argValues[i] = stringify(args[i]);
+  }
+
   KJ_STACK_ARRAY(ArrayPtr<const char>, argNames, argValues.size(), 8, 64);
 
   if (argValues.size() > 0) {
@@ -248,10 +268,6 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
       code = equalsPos + 1;
       while (isspace(*code)) ++code;
     }
-  }
-
-  if (style == ASSERTION && code == nullptr) {
-    style = LOG;
   }
 
   {
@@ -364,29 +380,29 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
 }  // namespace
 
 void Debug::logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
-                        ArrayPtr<String> argValues) {
+                        ArrayPtr<const Arg> args) {
   getExceptionCallback().logMessage(severity, trimSourceFilename(file).cStr(), line, 0,
-      makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, argValues));
+      makeDescriptionInternal(macroArgs, args));
 }
 
 Exception Debug::makeFailure(
     const char* file, int line, Exception::Type type,
-    const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
+    const char* condition, const char* macroArgs, ArrayPtr<const Arg> args) {
   return Exception(type, file, line,
-      makeDescriptionImpl(ASSERTION, condition, 0, nullptr, macroArgs, argValues));
+      makeDescriptionImpl(ASSERTION, condition, 0, nullptr, macroArgs, args));
 }
 
 Exception Debug::makeFailure(
     const char* file, int line, int osErrorNumber,
-    const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
+    const char* condition, const char* macroArgs, ArrayPtr<const Arg> args) {
   return Exception(typeOfErrno(osErrorNumber), file, line,
-      makeDescriptionImpl(SYSCALL, condition, osErrorNumber, nullptr, macroArgs, argValues));
+      makeDescriptionImpl(SYSCALL, condition, osErrorNumber, nullptr, macroArgs, args));
 }
 
 #if _WIN32 || __CYGWIN__
 Exception Debug::makeFailure(
     const char* file, int line, Win32Result osErrorNumber,
-    const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
+    const char* condition, const char* macroArgs, ArrayPtr<const Arg> args) {
   LPVOID ptr;
   // TODO(someday): Why doesn't this work for winsock errors?
   DWORD result = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER |
@@ -411,12 +427,12 @@ Exception Debug::makeFailure(
 
   return Exception(typeOfWin32Error(osErrorNumber.number), file, line,
       makeDescriptionImpl(SYSCALL, condition, 0, message.cStr(),
-                          macroArgs, argValues));
+                          macroArgs, args));
 }
 #endif
 
-String Debug::makeDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues) {
-  return makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, argValues);
+String Debug::makeDescriptionInternal(const char* macroArgs, ArrayPtr<const Arg> args) {
+  return makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, args);
 }
 
 int Debug::getOsErrorNumber(bool nonblocking) {
