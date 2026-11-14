@@ -23,7 +23,19 @@ namespace schemas {
 
 CAPNP_DECLARE_SCHEMA(9fd69ebc87b9719c);
 enum class Side_9fd69ebc87b9719c: uint16_t {
+  /// The object lives on the "server" or "supervisor" end of the connection. Only the
+  /// server/supervisor knows how to interpret the ref; to the client, it is opaque.
+  /// 
+  /// Note that containers intending to implement strong confinement should rewrite SturdyRefs
+  /// received from the external network before passing them on to the confined app. The confined
+  /// app thus does not ever receive the raw bits of the SturdyRef (which it could perhaps
+  /// maliciously leak), but instead receives only a thing that it can pass back to the container
+  /// later to restore the ref. See:
+  /// http://www.erights.org/elib/capability/dist-confine.html
   SERVER,
+  /// The object lives on the "client" or "confined app" end of the connection. Only the client
+  /// knows how to interpret the ref; to the server/supervisor, it is opaque. Most clients do not
+  /// actually know how to persist capabilities at all, so use of this is unusual.
   CLIENT,
 };
 CAPNP_DECLARE_ENUM(Side, 9fd69ebc87b9719c);
@@ -58,6 +70,7 @@ struct VatId {
   };
 };
 
+/// Only used for joins, since three-way introductions never happen on a two-party network.
 struct ThirdPartyCompletion {
   ThirdPartyCompletion() = delete;
 
@@ -73,6 +86,7 @@ struct ThirdPartyCompletion {
   };
 };
 
+/// Never used, because there are only two parties.
 struct ThirdPartyToAwait {
   ThirdPartyToAwait() = delete;
 
@@ -88,6 +102,7 @@ struct ThirdPartyToAwait {
   };
 };
 
+/// Never used, because there is no third party.
 struct ThirdPartyToContact {
   ThirdPartyToContact() = delete;
 
@@ -103,6 +118,36 @@ struct ThirdPartyToContact {
   };
 };
 
+/// Joins in the two-party case are simplified by a few observations.
+/// 
+/// First, on a two-party network, a Join only ever makes sense if the receiving end is also
+/// connected to other networks.  A vat which is not connected to any other network can safely
+/// reject all joins.
+/// 
+/// Second, since a two-party connection bisects the network -- there can be no other connections
+/// between the networks at either end of the connection -- if one part of a join crosses the
+/// connection, then _all_ parts must cross it.  Therefore, a vat which is receiving a Join request
+/// off some other network which needs to be forwarded across the two-party connection can
+/// collect all the parts on its end and only forward them across the two-party connection when all
+/// have been received.
+/// 
+/// For example, imagine that Alice and Bob are vats connected over a two-party connection, and
+/// each is also connected to other networks.  At some point, Alice receives one part of a Join
+/// request off her network.  The request is addressed to a capability that Alice received from
+/// Bob and is proxying to her other network.  Alice goes ahead and responds to the Join part as
+/// if she hosted the capability locally (this is important so that if not all the Join parts end
+/// up at Alice, the original sender can detect the failed Join without hanging).  As other parts
+/// trickle in, Alice verifies that each part is addressed to a capability from Bob and continues
+/// to respond to each one.  Once the complete set of join parts is received, Alice checks if they
+/// were all for the exact same capability.  If so, she doesn't need to send anything to Bob at
+/// all.  Otherwise, she collects the set of capabilities (from Bob) to which the join parts were
+/// addressed and essentially initiates a _new_ Join request on those capabilities to Bob.  Alice
+/// does not forward the Join parts she received herself, but essentially forwards the Join as a
+/// whole.
+/// 
+/// On Bob's end, since he knows that Alice will always send all parts of a Join together, he
+/// simply waits until he's received them all, then performs a join on the respective capabilities
+/// as if it had been requested locally.
 struct JoinKeyPart {
   JoinKeyPart() = delete;
 
@@ -228,6 +273,7 @@ public:
   }
 #endif  // !CAPNP_LITE
 
+  /// The ID from `JoinKeyPart`.
   inline  ::uint32_t getJoinId() const;
 
 private:
@@ -259,6 +305,7 @@ public:
 #endif  // !CAPNP_LITE
 
   inline  ::uint32_t getJoinId();
+  /// The ID from `JoinKeyPart`.
   inline void setJoinId( ::uint32_t value);
 
 private:
@@ -446,10 +493,14 @@ public:
   }
 #endif  // !CAPNP_LITE
 
+  /// A number identifying this join, chosen by the sender.  May be reused once `Finish` messages are
+  /// sent corresponding to all of the `Join` messages.
   inline  ::uint32_t getJoinId() const;
 
+  /// The number of capabilities to be joined.
   inline  ::uint16_t getPartCount() const;
 
+  /// Which part this request targets -- a number in the range [0, partCount).
   inline  ::uint16_t getPartNum() const;
 
 private:
@@ -481,12 +532,16 @@ public:
 #endif  // !CAPNP_LITE
 
   inline  ::uint32_t getJoinId();
+  /// A number identifying this join, chosen by the sender.  May be reused once `Finish` messages are
+  /// sent corresponding to all of the `Join` messages.
   inline void setJoinId( ::uint32_t value);
 
   inline  ::uint16_t getPartCount();
+  /// The number of capabilities to be joined.
   inline void setPartCount( ::uint16_t value);
 
   inline  ::uint16_t getPartNum();
+  /// Which part this request targets -- a number in the range [0, partCount).
   inline void setPartNum( ::uint16_t value);
 
 private:
@@ -532,12 +587,17 @@ public:
   }
 #endif  // !CAPNP_LITE
 
+  /// Matches `JoinKeyPart`.
   inline  ::uint32_t getJoinId() const;
 
+  /// All JoinResults in the set will have the same value for `succeeded`.  The receiver actually
+  /// implements the join by waiting for all the `JoinKeyParts` and then performing its own join on
+  /// them, then going back and answering all the join requests afterwards.
   inline bool getSucceeded() const;
 
   inline bool hasCap() const;
 #if !CAPNP_LITE
+  /// One of the JoinResults will have a non-null `cap` which is the joined capability.
   inline  ::capnp::Capability::Client getCap() const;
 #endif  // !CAPNP_LITE
 
@@ -570,14 +630,19 @@ public:
 #endif  // !CAPNP_LITE
 
   inline  ::uint32_t getJoinId();
+  /// Matches `JoinKeyPart`.
   inline void setJoinId( ::uint32_t value);
 
   inline bool getSucceeded();
+  /// All JoinResults in the set will have the same value for `succeeded`.  The receiver actually
+  /// implements the join by waiting for all the `JoinKeyParts` and then performing its own join on
+  /// them, then going back and answering all the join requests afterwards.
   inline void setSucceeded(bool value);
 
   inline bool hasCap();
 #if !CAPNP_LITE
   inline  ::capnp::Capability::Client getCap();
+  /// One of the JoinResults will have a non-null `cap` which is the joined capability.
   inline void setCap( ::capnp::Capability::Client&& value);
   inline void setCap( ::capnp::Capability::Client& value);
   inline void adoptCap(::capnp::Orphan< ::capnp::Capability>&& value);
@@ -602,6 +667,7 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
+  /// One of the JoinResults will have a non-null `cap` which is the joined capability.
   inline  ::capnp::Capability::Client getCap();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;

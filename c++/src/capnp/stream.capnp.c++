@@ -5,13 +5,14 @@
 
 namespace capnp {
 namespace schemas {
-static const ::capnp::_::AlignedData<17> b_995f9a3377c0b16e = {
-  {   0,   0,   0,   0,   5,   0,   6,   0,
+static const ::capnp::_::AlignedData<18> b_995f9a3377c0b16e = {
+  {   0,   0,   0,   0,   6,   0,   6,   0,
     110, 177, 192, 119,  51, 154,  95, 153,
      19,   0,   0,   0,   1,   0,   0,   0,
     248, 243, 147,  19, 169, 102, 195, 134,
       0,   0,   7,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0,
+      7,   6,   0,   0,  33,  10,   0,   0,
      21,   0,   0,   0,   2,   1,   0,   0,
      33,   0,   0,   0,   7,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0,
@@ -27,7 +28,7 @@ static const ::capnp::_::AlignedData<17> b_995f9a3377c0b16e = {
 ::capnp::word const* const bp_995f9a3377c0b16e = b_995f9a3377c0b16e.words;
 #if !CAPNP_LITE
 const ::capnp::_::RawSchema s_995f9a3377c0b16e = {
-  0x995f9a3377c0b16e, b_995f9a3377c0b16e.words, 17, nullptr, nullptr,
+  0x995f9a3377c0b16e, b_995f9a3377c0b16e.words, 18, nullptr, nullptr,
   0, 0, nullptr, nullptr, nullptr, { &s_995f9a3377c0b16e, nullptr, nullptr, 0, 0, nullptr }, false
 };
 #endif  // !CAPNP_LITE
