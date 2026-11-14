@@ -55,6 +55,24 @@ TEST(Exception, TrimSourceFilename) {
 #else
   EXPECT_EQ(trimSourceFilename(__FILE__), "kj/exception-test.c++");
 #endif
+
+  // Everything up to the last root at the start of a directory name is removed.
+  KJ_EXPECT(trimSourceFilename("src/kj/foo.c++") == "kj/foo.c++");
+  KJ_EXPECT(trimSourceFilename("/home/me/src/capnp/src/kj/foo.c++") == "kj/foo.c++");
+  KJ_EXPECT(trimSourceFilename("bazel-out/k8-opt/bin/src/kj/foo.h") == "kj/foo.h");
+  KJ_EXPECT(trimSourceFilename("ekam-provider/canonical/kj/foo.c++") == "kj/foo.c++");
+  KJ_EXPECT(trimSourceFilename("x/ekam-provider/c++header/kj/foo.h") == "kj/foo.h");
+  KJ_EXPECT(trimSourceFilename("tmp/src/foo.c++") == "foo.c++");
+  KJ_EXPECT(trimSourceFilename("src/tmp") == "tmp");
+  KJ_EXPECT(trimSourceFilename("src/") == "");
+  KJ_EXPECT(trimSourceFilename("src//kj/foo.c++") == "/kj/foo.c++");
+
+  // Roots that aren't at the start of a directory name, or are incomplete, are kept.
+  KJ_EXPECT(trimSourceFilename("foo/mysrc/bar.c++") == "foo/mysrc/bar.c++");
+  KJ_EXPECT(trimSourceFilename("foo/src") == "foo/src");
+  KJ_EXPECT(trimSourceFilename("foo/") == "foo/");
+  KJ_EXPECT(trimSourceFilename("foo.c++") == "foo.c++");
+  KJ_EXPECT(trimSourceFilename("") == "");
 }
 
 TEST(Exception, RunCatchingExceptions) {
