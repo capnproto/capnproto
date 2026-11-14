@@ -371,6 +371,22 @@ void stringifyArgs(ArrayPtr<const Debug::Arg> args, ArrayPtr<String> argValues) 
   }
 }
 
+Debug::Site unpack(Debug::PackedSite site) {
+  // Splits a KJ_DEBUG_SITE literal into its fields.
+  auto next = [](const char* field) { return field + strlen(field) + 1; };
+  const char* file = site.text;
+  const char* lineText = next(file);
+  const char* condition = next(lineText);
+  const char* macroArgs = next(condition);
+
+  uint line = 0;
+  for (const char* digit = lineText; *digit >= '0' && *digit <= '9'; ++digit) {
+    line = line * 10 + (*digit - '0');
+  }
+
+  return { file, static_cast<int>(line), condition, macroArgs };
+}
+
 bool isLoneLiteral(const char* macroArgs, ArrayPtr<const Debug::Arg> args) {
   // Whether the only argument of a log message or exception is a string literal, e.g.
   // `KJ_EXCEPTION(FAILED, "foo")`. Then makeDescriptionImpl(LOG, ...) returns the literal as is:
@@ -411,7 +427,22 @@ Exception Debug::makeFailure(const Site& site, int osErrorNumber, ArrayPtr<const
                           argValues));
 }
 
+Exception Debug::makeFailure(PackedSite packed, Exception::Type type, ArrayPtr<const Arg> args) {
+  Site site = unpack(packed);
+  if (*site.condition == '\0') site.condition = nullptr;
+  return makeFailure(site, type, args);
+}
+
+Exception Debug::makeFailure(PackedSite site, int osErrorNumber, ArrayPtr<const Arg> args) {
+  return makeFailure(unpack(site), osErrorNumber, args);
+}
+
 #if _WIN32 || __CYGWIN__
+Exception Debug::makeFailure(PackedSite site, Win32Result osErrorNumber,
+    ArrayPtr<const Arg> args) {
+  return makeFailure(unpack(site), osErrorNumber, args);
+}
+
 Exception Debug::makeFailure(
     const Site& site, Win32Result osErrorNumber, ArrayPtr<const Arg> args) {
   KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);

@@ -109,9 +109,9 @@
 //   message will not necessarily be evaluated.
 // * For every macro `FOO` above except `LOG`, there is also a `FAIL_FOO` macro used to report
 //   failures that already happened.  For the macros that check a boolean condition, `FAIL_FOO`
-//   omits the first parameter and behaves like it was `false`.  `FAIL_SYSCALL` takes a string and
-//   an OS error number as the first two parameters.  The string should be the name of the failed
-//   system call.
+//   omits the first parameter and behaves like it was `false`.  `FAIL_SYSCALL` takes a string
+//   literal and an OS error number as the first two parameters.  The string should be the name of
+//   the failed system call.
 // * For every macro `FOO` above except `ASSUME`, there is a `DFOO` version which is only executed
 //   in debug mode, i.e. when KJ_DEBUG is defined.
 //   KJ_DEBUG is defined automatically by common.h when compiling without optimization (unless
@@ -139,12 +139,14 @@ namespace kj {
 // NOLINTBEGIN(readability-inconsistent-ifelse-braces)
 
 #define KJ_DEBUG_SITE(condition, macroArgs) \
-  ([]() -> const ::kj::_::Debug::Site& { \
-    static constexpr ::kj::_::Debug::Site _kjSite = { __FILE__, __LINE__, condition, macroArgs }; \
-    return _kjSite; \
-  }())
-// The Debug::Site of a check, in static storage, so that the failure path only passes a pointer to
-// it. Wrapped in a lambda, since an expression can't declare a static variable.
+  (::kj::_::Debug::PackedSite { \
+    __FILE__ "\0" KJ_DEBUG_STRINGIFY(__LINE__) "\0" condition "\0" macroArgs })
+// The Debug::Site of a check, packed into one string literal, so that the failure path only passes
+// a pointer to it, and the program doesn't need to relocate it when it's loaded. `condition` must
+// be a string literal, empty if there is none.
+
+#define KJ_DEBUG_STRINGIFY(x) KJ_DEBUG_STRINGIFY_(x)
+#define KJ_DEBUG_STRINGIFY_(x) #x
 
 #define KJ_DEBUG_SITE_AT(location, condition, macroArgs) \
   (::kj::_::Debug::Site { (location).fileName, static_cast<int>((location).lineNumber), \
@@ -192,7 +194,7 @@ namespace kj {
         ::kj::Exception::Type::FAILED, _kjCondition, __VA_ARGS__)
 
 #define KJ_FAIL_REQUIRE(...) \
-  ::kj::_::Debug::fail(KJ_DEBUG_SITE(nullptr, "" #__VA_ARGS__), \
+  ::kj::_::Debug::fail(KJ_DEBUG_SITE("", "" #__VA_ARGS__), \
       ::kj::Exception::Type::FAILED, __VA_ARGS__)
 
 #define KJ_FAIL_REQUIRE_AT(location, ...) \
@@ -232,7 +234,7 @@ namespace kj {
 #endif  // _WIN32 || __CYGWIN__
 
 #define KJ_UNIMPLEMENTED(...) \
-  ::kj::_::Debug::fail(KJ_DEBUG_SITE(nullptr, "" #__VA_ARGS__), \
+  ::kj::_::Debug::fail(KJ_DEBUG_SITE("", "" #__VA_ARGS__), \
       ::kj::Exception::Type::UNIMPLEMENTED, __VA_ARGS__)
 
 #define KJ_DTOR_REQUIRE(cond, ...) \
@@ -241,7 +243,7 @@ namespace kj {
         ::kj::Exception::Type::FAILED, _kjCondition, __VA_ARGS__)
 
 #define KJ_DTOR_FAIL_REQUIRE(...) \
-  ::kj::_::Debug::failUnlessUnwinding(KJ_DEBUG_SITE(nullptr, "" #__VA_ARGS__), \
+  ::kj::_::Debug::failUnlessUnwinding(KJ_DEBUG_SITE("", "" #__VA_ARGS__), \
       ::kj::Exception::Type::FAILED, __VA_ARGS__)
 
 #define KJ_DTOR_SYSCALL(call, ...) \
@@ -331,7 +333,7 @@ namespace kj {
         ::kj::Exception::Type::FAILED, _kjCondition, ##__VA_ARGS__)
 
 #define KJ_FAIL_REQUIRE(...) \
-  ::kj::_::Debug::fail(KJ_DEBUG_SITE(nullptr, #__VA_ARGS__), \
+  ::kj::_::Debug::fail(KJ_DEBUG_SITE("", #__VA_ARGS__), \
       ::kj::Exception::Type::FAILED __VA_OPT__(,) __VA_ARGS__)
 
 #define KJ_FAIL_REQUIRE_AT(location, ...) \
@@ -376,7 +378,7 @@ namespace kj {
 #endif
 
 #define KJ_UNIMPLEMENTED(...) \
-  ::kj::_::Debug::fail(KJ_DEBUG_SITE(nullptr, #__VA_ARGS__), \
+  ::kj::_::Debug::fail(KJ_DEBUG_SITE("", #__VA_ARGS__), \
       ::kj::Exception::Type::UNIMPLEMENTED __VA_OPT__(,) __VA_ARGS__)
 
 #define KJ_DTOR_REQUIRE(cond, ...) \
@@ -388,7 +390,7 @@ namespace kj {
 // throwing (which would terminate the process). See `kj::throwExceptionUnlessUnwinding()`.
 
 #define KJ_DTOR_FAIL_REQUIRE(...) \
-  ::kj::_::Debug::failUnlessUnwinding(KJ_DEBUG_SITE(nullptr, #__VA_ARGS__), \
+  ::kj::_::Debug::failUnlessUnwinding(KJ_DEBUG_SITE("", #__VA_ARGS__), \
       ::kj::Exception::Type::FAILED __VA_OPT__(,) __VA_ARGS__)
 
 #define KJ_DTOR_SYSCALL(call, ...) \
@@ -663,13 +665,20 @@ public:
                   Params&&... params);
 
   struct Site {
-    // Where a check is, its condition and the names of the macro's arguments. These are constants
-    // in all but the _AT macros, so the macros put the Site in static storage (see KJ_DEBUG_SITE),
-    // and the failure path passes one pointer rather than four arguments.
+    // Where a check is, its condition (null if none) and the names of the macro's arguments.
     const char* file;
     int line;
     const char* condition;
     const char* macroArgs;
+  };
+
+  struct PackedSite {
+    // A Site of constants, packed into one string literal by KJ_DEBUG_SITE: the file, line,
+    // condition (empty if none) and macro arguments, each followed by a NUL. The failure path
+    // passes one pointer rather than four arguments, and since the literal contains no pointers,
+    // it doesn't need to be relocated when the program is loaded, unlike a Site in static storage.
+    // All but the _AT macros use one.
+    const char* text;
   };
 
   struct Arg {
@@ -700,31 +709,29 @@ public:
   };
 
 #if KJ_DEBUG_FAIL_BY_VALUE
-  template <typename Code, typename... Params>
-  static KJ_DEBUG_FAIL_INLINE KJ_NORETURN(void fail(const Site& site, Code code,
-      Params&&... params));
-  template <typename Code, typename... Params>
-  static KJ_DEBUG_FAIL_INLINE void failUnlessUnwinding(const Site& site, Code code,
-      Params&&... params);
+  template <typename S, typename Code, typename... Params>
+  static KJ_DEBUG_FAIL_INLINE KJ_NORETURN(void fail(S site, Code code, Params&&... params));
+  template <typename S, typename Code, typename... Params>
+  static KJ_DEBUG_FAIL_INLINE void failUnlessUnwinding(S site, Code code, Params&&... params);
   // Forward to failImpl() / failUnlessUnwindingImpl(), passing cheap arguments by value (see
   // `DebugParam`). Always inlined, even in debug builds, so that they don't add a frame to the
   // stack trace.
 
-  template <typename Code, typename... Params>
-  static KJ_NOINLINE KJ_DEBUG_COLD KJ_NORETURN(void failImpl(const Site& site, Code code,
+  template <typename S, typename Code, typename... Params>
+  static KJ_NOINLINE KJ_DEBUG_COLD KJ_NORETURN(void failImpl(S site, Code code,
       Params... params));
-  template <typename Code, typename... Params>
+  template <typename S, typename Code, typename... Params>
   static KJ_NOINLINE KJ_DEBUG_COLD KJ_NOT_TAIL_CALLED void failUnlessUnwindingImpl(
-      const Site& site, Code code, Params... params);
+      S site, Code code, Params... params);
 #else
-  template <typename Code, typename... Params>
-  static KJ_NOINLINE KJ_NORETURN(void fail(const Site& site, Code code, Params&&... params));
-  template <typename Code, typename... Params>
-  static KJ_NOINLINE KJ_NOT_TAIL_CALLED void failUnlessUnwinding(const Site& site, Code code,
+  template <typename S, typename Code, typename... Params>
+  static KJ_NOINLINE KJ_NORETURN(void fail(S site, Code code, Params&&... params));
+  template <typename S, typename Code, typename... Params>
+  static KJ_NOINLINE KJ_NOT_TAIL_CALLED void failUnlessUnwinding(S site, Code code,
       Params&&... params);
 #endif
   // fail() throws an exception describing a failed check. Used by the check macros. Kept out of
-  // line so that the call site is just a branch and a call.
+  // line so that the call site is just a branch and a call. `site` is a PackedSite or a Site.
   //
   // failUnlessUnwinding() throws an exception describing a failed check, unless another exception
   // is unwinding the stack, in which case it logs the failure and returns; see
@@ -820,14 +827,18 @@ private:
   static int getOsErrorNumber(bool nonblocking);
   // Get the error code of the last error (e.g. from errno).  Returns -1 on EINTR.
 
-  template <typename Code, typename... Params>
-  static Exception makeFailureWithParams(const Site& site, Code code, Params&&... params);
+  template <typename S, typename Code, typename... Params>
+  static Exception makeFailureWithParams(S site, Code code, Params&&... params);
   // Builds the exception describing a failed check, stringifying `params`.
 
   static Exception makeFailure(const Site& site, Exception::Type type, ArrayPtr<const Arg> args);
   static Exception makeFailure(const Site& site, int osErrorNumber, ArrayPtr<const Arg> args);
+  static Exception makeFailure(PackedSite site, Exception::Type type, ArrayPtr<const Arg> args);
+  static Exception makeFailure(PackedSite site, int osErrorNumber, ArrayPtr<const Arg> args);
 #if _WIN32 || __CYGWIN__
   static Exception makeFailure(const Site& site, Win32Result osErrorNumber,
+      ArrayPtr<const Arg> args);
+  static Exception makeFailure(PackedSite site, Win32Result osErrorNumber,
       ArrayPtr<const Arg> args);
 #endif
   // Stringifies `args` and builds the exception describing a failed check.
@@ -845,8 +856,8 @@ inline void Debug::log<>(const char* file, int line, LogSeverity severity, const
   logInternal(file, line, severity, macroArgs, nullptr);
 }
 
-template <typename Code, typename... Params>
-Exception Debug::makeFailureWithParams(const Site& site, Code code, Params&&... params) {
+template <typename S, typename Code, typename... Params>
+Exception Debug::makeFailureWithParams(S site, Code code, Params&&... params) {
   if constexpr (sizeof...(Params) == 0) {
     return makeFailure(site, code, nullptr);
   } else {
@@ -857,38 +868,38 @@ Exception Debug::makeFailureWithParams(const Site& site, Code code, Params&&... 
 
 #if KJ_DEBUG_FAIL_BY_VALUE
 
-template <typename Code, typename... Params>
-inline void Debug::fail(const Site& site, Code code, Params&&... params) {
-  failImpl<Code, DebugParam<Params>...>(site, code, kj::fwd<Params>(params)...);
+template <typename S, typename Code, typename... Params>
+inline void Debug::fail(S site, Code code, Params&&... params) {
+  failImpl<S, Code, DebugParam<Params>...>(site, code, kj::fwd<Params>(params)...);
 }
 
-template <typename Code, typename... Params>
-inline void Debug::failUnlessUnwinding(const Site& site, Code code, Params&&... params) {
-  failUnlessUnwindingImpl<Code, DebugParam<Params>...>(site, code, kj::fwd<Params>(params)...);
+template <typename S, typename Code, typename... Params>
+inline void Debug::failUnlessUnwinding(S site, Code code, Params&&... params) {
+  failUnlessUnwindingImpl<S, Code, DebugParam<Params>...>(site, code, kj::fwd<Params>(params)...);
 }
 
-template <typename Code, typename... Params>
-void Debug::failImpl(const Site& site, Code code, Params... params) {
+template <typename S, typename Code, typename... Params>
+void Debug::failImpl(S site, Code code, Params... params) {
   // ignoreCount = 1 to skip this frame, so the trace starts at the failed check.
   throwException(makeFailureWithParams(site, code, params...), 1);
 }
 
-template <typename Code, typename... Params>
-void Debug::failUnlessUnwindingImpl(const Site& site, Code code, Params... params) {
+template <typename S, typename Code, typename... Params>
+void Debug::failUnlessUnwindingImpl(S site, Code code, Params... params) {
   // ignoreCount = 1 to skip this frame, so the trace starts at the failed check.
   throwExceptionUnlessUnwinding(makeFailureWithParams(site, code, params...), 1);
 }
 
 #else  // KJ_DEBUG_FAIL_BY_VALUE
 
-template <typename Code, typename... Params>
-void Debug::fail(const Site& site, Code code, Params&&... params) {
+template <typename S, typename Code, typename... Params>
+void Debug::fail(S site, Code code, Params&&... params) {
   // ignoreCount = 1 to skip this frame, so the trace starts at the failed check.
   throwException(makeFailureWithParams(site, code, params...), 1);
 }
 
-template <typename Code, typename... Params>
-void Debug::failUnlessUnwinding(const Site& site, Code code, Params&&... params) {
+template <typename S, typename Code, typename... Params>
+void Debug::failUnlessUnwinding(S site, Code code, Params&&... params) {
   // ignoreCount = 1 to skip this frame, so the trace starts at the failed check.
   throwExceptionUnlessUnwinding(makeFailureWithParams(site, code, params...), 1);
 }

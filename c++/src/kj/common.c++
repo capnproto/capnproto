@@ -39,13 +39,14 @@ void inlineRequireFailure(const char* file, int line, const char* expectation,
 void inlineRequireFailure(const char* file, int line, const char* expectation,
                           const char* macroArgs, const char* message, size_t arg1) {
   const char* msg = message ? message : "";
-  Debug::fail({ file, line, expectation, macroArgs }, kj::Exception::Type::FAILED, msg, arg1);
+  Debug::fail(Debug::Site { file, line, expectation, macroArgs }, kj::Exception::Type::FAILED,
+              msg, arg1);
 }
 
 void inlineRequireFailure(const char* file, int line, const char* expectation,
                           const char* macroArgs, const char* message, size_t arg1, size_t arg2) {
   const char* msg = message ? message : "";
-  Debug::fail({ file, line, expectation, macroArgs }, kj::Exception::Type::FAILED,
+  Debug::fail(Debug::Site { file, line, expectation, macroArgs }, kj::Exception::Type::FAILED,
               msg, arg1, arg2);
 }
 
@@ -53,7 +54,7 @@ void inlineRequireFailure(const char* file, int line, const char* expectation,
                           const char* macroArgs, const char* message, size_t arg1, size_t arg2,
                           size_t arg3) {
   const char* msg = message ? message : "";
-  Debug::fail({ file, line, expectation, macroArgs }, kj::Exception::Type::FAILED,
+  Debug::fail(Debug::Site { file, line, expectation, macroArgs }, kj::Exception::Type::FAILED,
               msg, arg1, arg2, arg3);
 }
 
