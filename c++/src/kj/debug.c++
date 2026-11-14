@@ -361,32 +361,47 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
   }
 }
 
+constexpr size_t STACK_ARGS = 4;
+// Most checks and log messages have at most this many arguments, which are stringified into an
+// array on the stack. (Every element is constructed and destroyed, so it shouldn't be bigger.)
+
+void stringifyArgs(ArrayPtr<const Debug::Arg> args, ArrayPtr<String> argValues) {
+  for (auto i: kj::indices(args)) {
+    argValues[i] = args[i].stringify(args[i].value);
+  }
+}
+
 }  // namespace
 
 void Debug::logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
-                        ArrayPtr<String> argValues) {
+                        ArrayPtr<const Arg> args) {
+  KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
+  stringifyArgs(args, argValues);
   getExceptionCallback().logMessage(severity, trimSourceFilename(file).cStr(), line, 0,
       makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, argValues));
 }
 
-Exception Debug::makeFailure(
-    const char* file, int line, Exception::Type type,
-    const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
-  return Exception(type, file, line,
-      makeDescriptionImpl(ASSERTION, condition, 0, nullptr, macroArgs, argValues));
+Exception Debug::makeFailure(const Site& site, Exception::Type type, ArrayPtr<const Arg> args) {
+  KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
+  stringifyArgs(args, argValues);
+  return Exception(type, site.file, site.line,
+      makeDescriptionImpl(ASSERTION, site.condition, 0, nullptr, site.macroArgs, argValues));
 }
 
-Exception Debug::makeFailure(
-    const char* file, int line, int osErrorNumber,
-    const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
-  return Exception(typeOfErrno(osErrorNumber), file, line,
-      makeDescriptionImpl(SYSCALL, condition, osErrorNumber, nullptr, macroArgs, argValues));
+Exception Debug::makeFailure(const Site& site, int osErrorNumber, ArrayPtr<const Arg> args) {
+  KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
+  stringifyArgs(args, argValues);
+  return Exception(typeOfErrno(osErrorNumber), site.file, site.line,
+      makeDescriptionImpl(SYSCALL, site.condition, osErrorNumber, nullptr, site.macroArgs,
+                          argValues));
 }
 
 #if _WIN32 || __CYGWIN__
 Exception Debug::makeFailure(
-    const char* file, int line, Win32Result osErrorNumber,
-    const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
+    const Site& site, Win32Result osErrorNumber, ArrayPtr<const Arg> args) {
+  KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
+  stringifyArgs(args, argValues);
+
   LPVOID ptr;
   // TODO(someday): Why doesn't this work for winsock errors?
   DWORD result = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER |
@@ -409,13 +424,21 @@ Exception Debug::makeFailure(
     message = kj::str("win32 error code: ", osErrorNumber.number);
   }
 
-  return Exception(typeOfWin32Error(osErrorNumber.number), file, line,
-      makeDescriptionImpl(SYSCALL, condition, 0, message.cStr(),
-                          macroArgs, argValues));
+  return Exception(typeOfWin32Error(osErrorNumber.number), site.file, site.line,
+      makeDescriptionImpl(SYSCALL, site.condition, 0, message.cStr(),
+                          site.macroArgs, argValues));
 }
 #endif
 
-String Debug::makeDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues) {
+String stringifyDebugComparison(const Debug::Arg& left, StringPtr op, const Debug::Arg& right) {
+  String leftValue = left.stringify(left.value);
+  String rightValue = right.stringify(right.value);
+  return str(leftValue, op, rightValue);
+}
+
+String Debug::makeDescriptionInternal(const char* macroArgs, ArrayPtr<const Arg> args) {
+  KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
+  stringifyArgs(args, argValues);
   return makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, argValues);
 }
 

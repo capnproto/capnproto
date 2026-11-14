@@ -619,6 +619,96 @@ KJ_TEST("assertion diagnostics do not require moving their arguments") {
   }
 }
 
+struct SmallDiagnostic {
+  // Trivially copyable and as big as two pointers, like an iterator.
+  const int* ptr;
+  size_t size;
+
+  bool operator==(const SmallDiagnostic& other) const { return size == other.size; }
+};
+
+kj::String KJ_STRINGIFY(const SmallDiagnostic& value) {
+  return kj::str("small ", value.size);
+}
+
+struct PointerDiagnostic {
+  // Trivially copyable and as big as a pointer, like most iterators.
+  const int* ptr;
+
+  bool operator==(const PointerDiagnostic& other) const { return ptr == other.ptr; }
+};
+
+kj::String KJ_STRINGIFY(const PointerDiagnostic& value) {
+  return kj::str("pointer to ", *value.ptr);
+}
+
+struct Unstringifiable {
+  int value;
+  bool operator==(const Unstringifiable& other) const { return value == other.value; }
+};
+
+KJ_TEST("assertion diagnostics stringify arguments of any type") {
+  {
+    int i = 0;
+    SmallDiagnostic small { &i, 7 };
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE("message", small);
+    }));
+    KJ_EXPECT(exception.getDescription() == "message; small = small 7");
+  }
+
+  {
+    int i = 0;
+    SmallDiagnostic a { &i, 7 };
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_ASSERT(a == SmallDiagnostic({ &i, 8 }));
+    }));
+    KJ_EXPECT(exception.getDescription() ==
+        "expected a == SmallDiagnostic({ &i, 8 }) [small 7 == small 8]");
+  }
+
+  {
+    int i = 1;
+    int j = 2;
+    PointerDiagnostic a { &i };
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_ASSERT(a == PointerDiagnostic { &j });
+    }));
+    KJ_EXPECT(exception.getDescription() ==
+        "expected a == PointerDiagnostic { &j } [pointer to 1 == pointer to 2]");
+  }
+
+  {
+    Unstringifiable a { 1 };
+    Unstringifiable b { 2 };
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_ASSERT(a == b);
+    }));
+    KJ_EXPECT(exception.getDescription() ==
+        "expected a == b [(can't stringify) == (can't stringify)]");
+  }
+
+  {
+    // A char array is stringified up to the first NUL, whatever its size.
+    char buffer[8] = { 'a', 'b', '\0', 'c' };
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(buffer);
+    }));
+    KJ_EXPECT(exception.getDescription() == "buffer = ab");
+    KJ_EXPECT(KJ_EXCEPTION(FAILED, buffer).getDescription() == "buffer = ab");
+  }
+
+  {
+    // More arguments than are stringified on the stack.
+    int a = 1, b = 2, c = 3, d = 4, e = 5;
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_ASSERT(a == b, "message", a, b, c, d, e);
+    }));
+    KJ_EXPECT(exception.getDescription() ==
+        "expected a == b [1 == 2]; message; a = 1; b = 2; c = 3; d = 4; e = 5");
+  }
+}
+
 KJ_NOINLINE void failFailAssert(void*& callerFrame) {
   callerFrame = KJ_CALLING_ADDRESS();
   KJ_FAIL_ASSERT();
@@ -916,6 +1006,29 @@ KJ_NOINLINE void assertStringPtrArg() {
   KJ_FRAME_PROBE();
 }
 
+KJ_NOINLINE void assertSmallClassArg() {
+  // SmallDiagnostic is trivially copyable and fits in two registers.
+  int* ptr = opaque(&value);
+  SmallDiagnostic small { opaque(&value), opaque(size_t(1)) };
+  KJ_ASSERT(ptr, "ptr must be set", small);
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertSmallClassEq() {
+  // The operands are compared by reference, since together they don't fit in two registers.
+  SmallDiagnostic a { opaque(&value), opaque(size_t(1)) };
+  SmallDiagnostic b { opaque(&value), opaque(size_t(1)) };
+  KJ_ASSERT(a == b);
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertPointerClassEq() {
+  PointerDiagnostic a { opaque(&value) };
+  PointerDiagnostic b { opaque(&value) };
+  KJ_ASSERT(a == b);
+  KJ_FRAME_PROBE();
+}
+
 KJ_NOINLINE void assertExpensiveArg() {
   // kj::String isn't trivially copyable. Here it's a reference to an object outside the frame.
   int* ptr = opaque(&value);
@@ -983,6 +1096,9 @@ KJ_TEST("stack frame overhead of assertion macros") {
   KJ_EXPECT_FRAME(assertNeMessage, 0);
   KJ_EXPECT_FRAME(assertCheapArgs, 0);
   KJ_EXPECT_FRAME(assertStringPtrArg, 16);
+  KJ_EXPECT_FRAME(assertSmallClassArg, 0);
+  KJ_EXPECT_FRAME(assertSmallClassEq, 32);
+  KJ_EXPECT_FRAME(assertPointerClassEq, 0);
   KJ_EXPECT_FRAME(assertExpensiveArg, 0);
   KJ_EXPECT_FRAME(failAssert, 0);
   KJ_EXPECT_FRAME(failAssertCheapArg, 0);
