@@ -699,6 +699,16 @@ KJ_TEST("assertion diagnostics stringify arguments of any type") {
   }
 
   {
+    // A lone argument is labeled unless it's a literal.
+    int i = 1;
+    KJ_EXPECT(KJ_EXCEPTION(FAILED, "foo").getDescription() == "foo");
+    KJ_EXPECT(KJ_EXCEPTION(FAILED, "foo, " "bar").getDescription() == "foo, bar");
+    KJ_EXPECT(KJ_EXCEPTION(FAILED, "").getDescription() == "");
+    KJ_EXPECT(KJ_EXCEPTION(FAILED, i).getDescription() == "i = 1");
+    KJ_EXPECT(KJ_EXCEPTION(FAILED, kj::str("foo", i)).getDescription() == "foo1");
+  }
+
+  {
     // More arguments than are stringified on the stack.
     int a = 1, b = 2, c = 3, d = 4, e = 5;
     auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
