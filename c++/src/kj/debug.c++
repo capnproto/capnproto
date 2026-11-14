@@ -371,14 +371,29 @@ void stringifyArgs(ArrayPtr<const Debug::Arg> args, ArrayPtr<String> argValues) 
   }
 }
 
+bool isLoneLiteral(const char* macroArgs, ArrayPtr<const Debug::Arg> args) {
+  // Whether the only argument of a log message or exception is a string literal, e.g.
+  // `KJ_EXCEPTION(FAILED, "foo")`. Then makeDescriptionImpl(LOG, ...) returns the literal as is:
+  // a literal needs no label, and a lone argument no delimiter.
+  if (args.size() != 1) return false;
+  while (isspace(*macroArgs)) ++macroArgs;
+  return *macroArgs == '\"';
+}
+
 }  // namespace
 
 void Debug::logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
                         ArrayPtr<const Arg> args) {
-  KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
-  stringifyArgs(args, argValues);
+  String description;
+  if (isLoneLiteral(macroArgs, args)) {
+    description = args[0].stringify(args[0].value);
+  } else {
+    KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
+    stringifyArgs(args, argValues);
+    description = makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, argValues);
+  }
   getExceptionCallback().logMessage(severity, trimSourceFilename(file).cStr(), line, 0,
-      makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, argValues));
+      kj::mv(description));
 }
 
 Exception Debug::makeFailure(const Site& site, Exception::Type type, ArrayPtr<const Arg> args) {
@@ -437,6 +452,9 @@ String stringifyDebugComparison(const Debug::Arg& left, StringPtr op, const Debu
 }
 
 String Debug::makeDescriptionInternal(const char* macroArgs, ArrayPtr<const Arg> args) {
+  if (isLoneLiteral(macroArgs, args)) {
+    return args[0].stringify(args[0].value);
+  }
   KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
   stringifyArgs(args, argValues);
   return makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, argValues);
