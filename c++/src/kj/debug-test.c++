@@ -145,21 +145,6 @@ TEST(Debug, Log) {
     EXPECT_FATAL(KJ_ASSERT(1 == 2)); line = __LINE__;
   }, kj::str("exception: ", fileLine(__FILE__, line), ": failed: expected 1 == 2 [1 == 2]\n"));
 
-  KJ_ASSERT(1 == 1) {
-    ADD_FAILURE() << "Shouldn't call recovery code when check passes.";
-    break;
-  };
-
-  // The recovery block runs before the exception is thrown.
-  bool recovered = false;
-  EXPECT_LOG_EQ([&](){
-    EXPECT_FATAL(KJ_ASSERT(1 == 2, "1 is not 2") { recovered = true; break; }); line = __LINE__;
-  }, kj::str(
-    "exception: ", fileLine(__FILE__, line), ": "
-    "failed: expected 1 == 2 [1 == 2]; 1 is not 2\n"
-  ));
-  EXPECT_TRUE(recovered);
-
   EXPECT_LOG_EQ([&](){
     EXPECT_FATAL(KJ_ASSERT(1 == 2, i, "hi", str)); line = __LINE__;
   }, kj::str(
@@ -327,26 +312,7 @@ TEST(Debug, Catch) {
   int line;
 
   {
-    // Catch recoverable as kj::Exception.
-    Maybe<Exception> exception = kj::runCatchingExceptions([&](){
-      line = __LINE__; KJ_FAIL_ASSERT("foo") { break; }
-    });
-
-    KJ_IF_SOME(e, exception) {
-      String what = str(e);
-      KJ_IF_SOME(eol, what.findFirst('\n')) {
-        auto firstLine = kj::str(what.first(eol));
-        what = kj::mv(firstLine);
-      }
-      kj::StringPtr text = what;
-      EXPECT_EQ(kj::str(fileLine(__FILE__, line), ": failed: foo"), text);
-    } else {
-      ADD_FAILURE() << "Expected exception.";
-    }
-  }
-
-  {
-    // Catch fatal as kj::Exception.
+    // Catch as kj::Exception.
     Maybe<Exception> exception = kj::runCatchingExceptions([&](){
       line = __LINE__; KJ_FAIL_ASSERT("foo");
     });
@@ -431,16 +397,28 @@ TEST(Debug, Syscall) {
   ));
 
   int result = 0;
-  bool recovered = false;
   EXPECT_LOG_EQ([&](){
-    EXPECT_FATAL(KJ_SYSCALL(result = mockSyscall(-2, EBADF), i, "bar", str) { recovered = true; break; }); line = __LINE__;
+    EXPECT_FATAL(KJ_SYSCALL(result = mockSyscall(-2, EBADF), i, "bar", str)); line = __LINE__;
   }, kj::str(
     "exception: ", fileLine(__FILE__, line),
         ": failed: mockSyscall(-2, EBADF): ", strerror(EBADF),
         "; i = 123; bar; str = foo\n"
   ));
   EXPECT_EQ(-2, result);
-  EXPECT_TRUE(recovered);
+}
+
+KJ_TEST("check macros are safe to use in unbraced if/else") {
+  // The macros expand to `if (...) {} else ...`, so a following `else` must bind to the outer
+  // `if`, not to the macro's.
+  int elseCount = 0;
+  bool no = false;
+  // NOLINTBEGIN(readability-braces-around-statements)
+  if (no) KJ_ASSERT(1 == 2); else ++elseCount;
+  if (no) KJ_FAIL_ASSERT("unreachable"); else ++elseCount;
+  if (no) KJ_SYSCALL(mockSyscall(-1, EBADF)); else ++elseCount;
+  if (no) KJ_LOG(ERROR, "unreachable"); else ++elseCount;
+  // NOLINTEND(readability-braces-around-statements)
+  KJ_EXPECT(elseCount == 4);
 }
 
 TEST(Debug, Context) {
