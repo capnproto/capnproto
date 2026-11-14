@@ -226,6 +226,9 @@ void myAssertNonnull(kj::Maybe<int> value, kj::SourceLocation location = {}) {
 void myLog(kj::SourceLocation location = {}) {
   KJ_LOG_AT(WARNING, location, "a_message");
 }
+void myRequireEq(int a, int b, kj::SourceLocation location = {}) {
+  KJ_REQUIRE_AT(a == b, location, "a_message");
+}
 // Using functional versions of the utility macros used elsewhere, because the __builtin_LINE()
 // primitive used by SourceLocation is inaccurate in macros:
 void expectLogEq(auto&& f, auto&& expTextFunc) {
@@ -261,6 +264,13 @@ TEST(Debug, LogAt) {
   }, [&](){
     return kj::str("exception: ", fileLine(__FILE__, line), ": "
         "failed: expected cond; a_message\n");
+  });
+
+  expectLogEq([&](){
+    expectFatal([&](){ myRequireEq(1, 2); }); line = __LINE__;
+  }, [&](){
+    return kj::str("exception: ", fileLine(__FILE__, line), ": "
+        "failed: expected a == b [1 == 2]; a_message\n");
   });
 
   expectLogEq([&](){

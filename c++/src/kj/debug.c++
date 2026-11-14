@@ -207,7 +207,7 @@ String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNu
                            ArrayPtr<const Debug::Arg> args) {
   // Stringifies `args` and describes them, labeled with their names parsed from `macroArgs`.
 
-  if (style == ASSERTION && code == nullptr) {
+  if (style == ASSERTION && *code == '\0') {
     // A check without a condition, e.g. KJ_FAIL_ASSERT(), is described by its arguments alone.
     style = LOG;
   }
@@ -388,6 +388,22 @@ String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNu
   }
 }
 
+Debug::Site unpack(PackedSite site) {
+  // Splits a KJ_PACKED_SITE_ literal into its fields.
+  auto next = [](const char* field) { return field + strlen(field) + 1; };
+  const char* file = site.text;
+  const char* lineText = next(file);
+  const char* condition = next(lineText);
+  const char* macroArgs = next(condition);
+
+  uint line = 0;
+  for (const char* digit = lineText; *digit >= '0' && *digit <= '9'; ++digit) {
+    line = line * 10 + (*digit - '0');
+  }
+
+  return { file, static_cast<int>(line), condition, macroArgs };
+}
+
 }  // namespace
 
 void Debug::logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
@@ -396,24 +412,19 @@ void Debug::logInternal(const char* file, int line, LogSeverity severity, const 
       makeDescriptionInternal(macroArgs, args));
 }
 
-Exception Debug::makeFailure(
-    const char* file, int line, Exception::Type type,
-    const char* condition, const char* macroArgs, ArrayPtr<const Arg> args) {
-  return Exception(type, file, line,
-      makeDescriptionImpl(ASSERTION, condition, 0, nullptr, macroArgs, args));
+Exception Debug::makeFailure(const Site& site, Exception::Type type, ArrayPtr<const Arg> args) {
+  return Exception(type, site.file, site.line,
+      makeDescriptionImpl(ASSERTION, site.condition, 0, nullptr, site.macroArgs, args));
 }
 
-Exception Debug::makeFailure(
-    const char* file, int line, int osErrorNumber,
-    const char* condition, const char* macroArgs, ArrayPtr<const Arg> args) {
-  return Exception(typeOfErrno(osErrorNumber), file, line,
-      makeDescriptionImpl(SYSCALL, condition, osErrorNumber, nullptr, macroArgs, args));
+Exception Debug::makeFailure(const Site& site, int osErrorNumber, ArrayPtr<const Arg> args) {
+  return Exception(typeOfErrno(osErrorNumber), site.file, site.line,
+      makeDescriptionImpl(SYSCALL, site.condition, osErrorNumber, nullptr, site.macroArgs, args));
 }
 
 #if _WIN32 || __CYGWIN__
-Exception Debug::makeFailure(
-    const char* file, int line, Win32Result osErrorNumber,
-    const char* condition, const char* macroArgs, ArrayPtr<const Arg> args) {
+Exception Debug::makeFailure(const Site& site, Win32Result osErrorNumber,
+                             ArrayPtr<const Arg> args) {
   LPVOID ptr;
   // TODO(someday): Why doesn't this work for winsock errors?
   DWORD result = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER |
@@ -436,9 +447,24 @@ Exception Debug::makeFailure(
     message = kj::str("win32 error code: ", osErrorNumber.number);
   }
 
-  return Exception(typeOfWin32Error(osErrorNumber.number), file, line,
-      makeDescriptionImpl(SYSCALL, condition, 0, message.cStr(),
-                          macroArgs, args));
+  return Exception(typeOfWin32Error(osErrorNumber.number), site.file, site.line,
+      makeDescriptionImpl(SYSCALL, site.condition, 0, message.cStr(),
+                          site.macroArgs, args));
+}
+#endif
+
+Exception Debug::makeFailure(PackedSite site, Exception::Type type, ArrayPtr<const Arg> args) {
+  return makeFailure(unpack(site), type, args);
+}
+
+Exception Debug::makeFailure(PackedSite site, int osErrorNumber, ArrayPtr<const Arg> args) {
+  return makeFailure(unpack(site), osErrorNumber, args);
+}
+
+#if _WIN32 || __CYGWIN__
+Exception Debug::makeFailure(PackedSite site, Win32Result osErrorNumber,
+                             ArrayPtr<const Arg> args) {
+  return makeFailure(unpack(site), osErrorNumber, args);
 }
 #endif
 
