@@ -46,7 +46,7 @@ KJ_BEGIN_HEADER
 
 namespace kj {
 
-#define KJ_HTTP_FOR_EACH_METHOD(MACRO) \
+#define KJ_HTTP_FOR_EACH_REQUEST_METHOD(MACRO) \
   MACRO(GET) \
   MACRO(HEAD) \
   MACRO(POST) \
@@ -57,8 +57,6 @@ namespace kj {
   MACRO(OPTIONS) \
   MACRO(TRACE) \
   /* standard methods */ \
-  /* */ \
-  /* (CONNECT is intentionally omitted since it should be handled specially in HttpServer) */ \
   \
   MACRO(COPY) \
   MACRO(LOCK) \
@@ -87,6 +85,13 @@ namespace kj {
   /* https://www.ietf.org/archive/id/draft-ietf-httpbis-safe-method-w-body-05.html */ \
   MACRO(BAN) \
   /* Non-standard method name requested by a Cloudflare customer. */
+// Every method except CONNECT.
+
+#define KJ_HTTP_FOR_EACH_METHOD(MACRO) \
+  KJ_HTTP_FOR_EACH_REQUEST_METHOD(MACRO) \
+  MACRO(CONNECT)
+// CONNECT is dispatched to connect(), never request(). It's listed last to keep the values of the
+// other methods stable.
 
 enum class HttpMethod {
   // Enum of known HTTP methods.
@@ -99,17 +104,8 @@ KJ_HTTP_FOR_EACH_METHOD(DECLARE_METHOD)
 #undef DECLARE_METHOD
 };
 
-struct HttpConnectMethod {};
-// CONNECT is handled specially and separately from the other HttpMethods.
-
 kj::StringPtr KJ_STRINGIFY(HttpMethod method);
-kj::StringPtr KJ_STRINGIFY(HttpConnectMethod method);
 kj::Maybe<HttpMethod> tryParseHttpMethod(kj::StringPtr name);
-kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> tryParseHttpMethodAllowingConnect(
-    kj::StringPtr name);
-// Like tryParseHttpMethod but, as the name suggests, explicitly allows for the CONNECT
-// method. Added as a separate function instead of modifying tryParseHttpMethod to avoid
-// breaking API changes in existing uses of tryParseHttpMethod.
 
 class HttpHeaderTable;
 
@@ -1397,7 +1393,7 @@ public:
     // Nothing, this is an opaque type.
 
   private:
-    SuspendedRequest(kj::Array<byte>, kj::ArrayPtr<byte>, kj::OneOf<HttpMethod, HttpConnectMethod>, kj::StringPtr, HttpHeaders);
+    SuspendedRequest(kj::Array<byte>, kj::ArrayPtr<byte>, HttpMethod, kj::StringPtr, HttpHeaders);
 
     kj::Array<byte> buffer;
     // A buffer containing at least the request's method, URL, and headers, and possibly content
@@ -1407,7 +1403,7 @@ public:
     // Pointer to the end of the request headers. If this has a non-zero length, then our buffer
     // contains additional content, presumably the head of the request body.
 
-    kj::OneOf<HttpMethod, HttpConnectMethod> method;
+    HttpMethod method;
     kj::StringPtr url;
     HttpHeaders headers;
     // Parsed request front matter. `url` and `headers` both store pointers into `buffer`.
@@ -1471,7 +1467,7 @@ class HttpServer::SuspendableRequest {
   // Interface passed to the SuspendableHttpServiceFactory parameter of listenHttpCleanDrain().
 
 public:
-  kj::OneOf<HttpMethod,HttpConnectMethod> method;
+  HttpMethod method;
   kj::StringPtr url;
   const HttpHeaders& headers;
   // Parsed request front matter, so the implementer can decide whether to suspend the request.
@@ -1486,7 +1482,7 @@ public:
 
 private:
   explicit SuspendableRequest(
-      Connection& connection, kj::OneOf<HttpMethod, HttpConnectMethod> method, kj::StringPtr url, const HttpHeaders& headers)
+      Connection& connection, HttpMethod method, kj::StringPtr url, const HttpHeaders& headers)
       : method(method), url(url), headers(headers), connection(connection) {}
   KJ_DISALLOW_COPY_AND_MOVE(SuspendableRequest);
 

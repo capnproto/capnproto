@@ -168,10 +168,9 @@ struct HttpResponse {
 }
 
 enum HttpMethod {
-  # This enum aligns precisely with the kj::HttpMethod enum. However, the backwards-compat
-  # constraints of a public-facing C++ enum vs. an internal Cap'n Proto interface differ in
-  # several ways, which could possibly lead to divergence someday. For now, a unit test verifies
-  # that they match exactly; if that test ever fails, we'll have to figure out what to do about it.
+  # Each enumerant stands for the kj::HttpMethod of the same name. A method added to
+  # KJ_HTTP_FOR_EACH_REQUEST_METHOD needs an enumerant here too. CONNECT has none: CONNECT requests
+  # use `HttpService.connect()`.
 
   get @0;
   head @1;
