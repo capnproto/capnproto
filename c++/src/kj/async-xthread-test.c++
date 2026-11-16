@@ -119,7 +119,7 @@ KJ_TEST("synchronous simple cross-thread events") {
 
     KJ_EXPECT_THROW_MESSAGE("test exception", exec->executeSync([&]() {
       KJ_ASSERT(isChild);
-      KJ_FAIL_ASSERT("test exception") { break; }
+      KJ_FAIL_ASSERT("test exception");
     }));
 
     uint i = exec->executeSync([&]() {
@@ -171,7 +171,7 @@ KJ_TEST("asynchronous simple cross-thread events") {
 
     KJ_EXPECT_THROW_MESSAGE("test exception", exec->executeAsync([&]() {
       KJ_ASSERT(isChild);
-      KJ_FAIL_ASSERT("test exception") { break; }
+      KJ_FAIL_ASSERT("test exception");
     }).wait(waitScope));
 
     Promise<uint> promise = exec->executeAsync([&]() {

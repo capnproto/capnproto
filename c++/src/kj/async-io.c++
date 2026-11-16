@@ -3011,9 +3011,7 @@ kj::Promise<Maybe<Own<AsyncCapabilityStream>>> AsyncCapabilityStream::tryReceive
     }
 
     KJ_REQUIRE(actual.capCount == 1,
-        "expected to receive a capability (e.g. file descriptor via SCM_RIGHTS), but didn't") {
-      return kj::none;
-    }
+        "expected to receive a capability (e.g. file descriptor via SCM_RIGHTS), but didn't");
 
     return kj::mv(result->stream);
   });
@@ -3050,9 +3048,7 @@ kj::Promise<kj::Maybe<OwnFd>> AsyncCapabilityStream::tryReceiveFd() {
     }
 
     KJ_REQUIRE(actual.capCount == 1,
-        "expected to receive a file descriptor (e.g. via SCM_RIGHTS), but didn't") {
-      return kj::none;
-    }
+        "expected to receive a file descriptor (e.g. via SCM_RIGHTS), but didn't");
 
     return kj::mv(result->fd);
   });
@@ -3067,31 +3063,31 @@ Promise<void> AsyncCapabilityStream::sendFd(int fd) {
 }
 
 void AsyncIoStream::getsockopt(int level, int option, void* value, uint* length) {
-  KJ_UNIMPLEMENTED("Not a socket.") { *length = 0; break; }
+  KJ_UNIMPLEMENTED("Not a socket.");
 }
 void AsyncIoStream::setsockopt(int level, int option, const void* value, uint length) {
-  KJ_UNIMPLEMENTED("Not a socket.") { break; }
+  KJ_UNIMPLEMENTED("Not a socket.");
 }
 void AsyncIoStream::getsockname(struct sockaddr* addr, uint* length) {
-  KJ_UNIMPLEMENTED("Not a socket.") { *length = 0; break; }
+  KJ_UNIMPLEMENTED("Not a socket.");
 }
 void AsyncIoStream::getpeername(struct sockaddr* addr, uint* length) {
-  KJ_UNIMPLEMENTED("Not a socket.") { *length = 0; break; }
+  KJ_UNIMPLEMENTED("Not a socket.");
 }
 void ConnectionReceiver::getsockopt(int level, int option, void* value, uint* length) {
-  KJ_UNIMPLEMENTED("Not a socket.") { *length = 0; break; }
+  KJ_UNIMPLEMENTED("Not a socket.");
 }
 void ConnectionReceiver::setsockopt(int level, int option, const void* value, uint length) {
-  KJ_UNIMPLEMENTED("Not a socket.") { break; }
+  KJ_UNIMPLEMENTED("Not a socket.");
 }
 void ConnectionReceiver::getsockname(struct sockaddr* addr, uint* length) {
-  KJ_UNIMPLEMENTED("Not a socket.") { *length = 0; break; }
+  KJ_UNIMPLEMENTED("Not a socket.");
 }
 void DatagramPort::getsockopt(int level, int option, void* value, uint* length) {
-  KJ_UNIMPLEMENTED("Not a socket.") { *length = 0; break; }
+  KJ_UNIMPLEMENTED("Not a socket.");
 }
 void DatagramPort::setsockopt(int level, int option, const void* value, uint length) {
-  KJ_UNIMPLEMENTED("Not a socket.") { break; }
+  KJ_UNIMPLEMENTED("Not a socket.");
 }
 Own<DatagramPort> NetworkAddress::bindDatagramPort() {
   KJ_UNIMPLEMENTED("Datagram sockets not implemented.");

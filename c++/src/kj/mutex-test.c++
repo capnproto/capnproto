@@ -510,8 +510,7 @@ TEST(Mutex, LazyException) {
 
   auto exception = kj::runCatchingExceptions([&]() {
     lazy.get([&](SpaceFor<uint>& space) -> Own<uint> {
-          KJ_FAIL_ASSERT("foo") { break; }
-          return space.construct(123);
+          KJ_FAIL_ASSERT("foo");
         });
   });
   EXPECT_TRUE(exception != kj::none);

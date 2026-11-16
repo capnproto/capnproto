@@ -450,19 +450,14 @@ String Url::toString(Context context) const {
     if (HOST_CHARS.containsAll(host)) {
       chars.addAll(host);
     } else {
-      KJ_FAIL_REQUIRE("invalid hostname when stringifying URL", host) {
-        chars.addAll("invalid-host"_kj);
-        break;
-      }
+      KJ_FAIL_REQUIRE("invalid hostname when stringifying URL", host);
     }
   }
 
   for (auto& pathPart: path) {
     // Protect against path injection.
     KJ_REQUIRE((pathPart != "" || options.allowEmpty) && pathPart != "." && pathPart != "..",
-               "invalid name in URL path", path) {
-      continue;
-    }
+               "invalid name in URL path", path);
     chars.add('/');
     chars.addAll(options.percentDecode ? encodeUriPath(pathPart) : kj::str(pathPart));
   }

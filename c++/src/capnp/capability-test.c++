@@ -510,8 +510,7 @@ public:
       EXPECT_ANY_THROW(context.getParams());
       return kj::READY_NOW;
     } else {
-      KJ_UNIMPLEMENTED("Method not implemented", methodName) { break; }
-      return kj::READY_NOW;
+      KJ_UNIMPLEMENTED("Method not implemented", methodName);
     }
   }
 };

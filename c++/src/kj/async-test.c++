@@ -140,7 +140,7 @@ TEST(Async, Exception) {
   WaitScope waitScope(loop);
 
   Promise<int> promise = evalLater(
-      [&]() -> int { KJ_FAIL_ASSERT("foo") { return 123; } });
+      [&]() -> int { KJ_FAIL_ASSERT("foo"); });
   KJ_EXPECT_THROW_MESSAGE("foo", promise.wait(waitScope));
 }
 
@@ -149,7 +149,7 @@ TEST(Async, HandleException) {
   WaitScope waitScope(loop);
 
   Promise<int> promise = evalLater(
-      [&]() -> int { KJ_FAIL_ASSERT("foo") { return 123; } });
+      [&]() -> int { KJ_FAIL_ASSERT("foo"); });
   int line = __LINE__ - 1;
 
   promise = promise.then(
@@ -164,7 +164,7 @@ TEST(Async, PropagateException) {
   WaitScope waitScope(loop);
 
   Promise<int> promise = evalLater(
-      [&]() -> int { KJ_FAIL_ASSERT("foo") { return 123; } });
+      [&]() -> int { KJ_FAIL_ASSERT("foo"); });
   int line = __LINE__ - 1;
 
   promise = promise.then([](int i) { return i + 1; });
@@ -181,7 +181,7 @@ TEST(Async, PropagateExceptionTypeChange) {
   WaitScope waitScope(loop);
 
   Promise<int> promise = evalLater(
-      [&]() -> int { KJ_FAIL_ASSERT("foo") { return 123; } });
+      [&]() -> int { KJ_FAIL_ASSERT("foo"); });
   int line = __LINE__ - 1;
 
   Promise<StringPtr> promise2 = promise.then([](int i) -> StringPtr { return "foo"; });
@@ -1007,7 +1007,7 @@ TEST(Async, TaskSet) {
   }));
   tasks.add(evalLater([&]() {
     EXPECT_EQ(1, counter++);
-    KJ_FAIL_ASSERT("example TaskSet failure") { break; }
+    KJ_FAIL_ASSERT("example TaskSet failure");
   }));
   tasks.add(evalLater([&]() {
     EXPECT_EQ(2, counter++);
@@ -1364,7 +1364,7 @@ TEST(Async, Detach) {
     auto ignore KJ_UNUSED = evalLater([&]() { ran1 = true; });
   }
   evalLater([&]() { ran2 = true; }).detach([](kj::Exception&&) { ADD_FAILURE(); });
-  evalLater([]() { KJ_FAIL_ASSERT("foo"){break;} }).detach([&](kj::Exception&& e) { ran3 = true; });
+  evalLater([]() { KJ_FAIL_ASSERT("foo"); }).detach([&](kj::Exception&& e) { ran3 = true; });
 
   EXPECT_FALSE(ran1);
   EXPECT_FALSE(ran2);

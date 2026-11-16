@@ -518,7 +518,7 @@ KJ_TEST("magic assert stringification") {
     auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
       int foo = 123;
       int bar = 456;
-      KJ_ASSERT(foo == bar) { break; }
+      KJ_ASSERT(foo == bar);
     }));
 
     KJ_EXPECT(exception.getDescription() == "expected foo == bar [123 == 456]");
@@ -528,7 +528,7 @@ KJ_TEST("magic assert stringification") {
     auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
       auto foo = kj::str("hello");
       auto bar = kj::str("world!");
-      KJ_ASSERT(foo == bar, foo.size(), bar.size()) { break; }
+      KJ_ASSERT(foo == bar, foo.size(), bar.size());
     }));
 
     KJ_EXPECT(exception.getDescription() ==
@@ -537,7 +537,7 @@ KJ_TEST("magic assert stringification") {
 
   {
     auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
-      KJ_ASSERT(kj::str("hello") == kj::str("world!")) { break; }
+      KJ_ASSERT(kj::str("hello") == kj::str("world!"));
     }));
 
     KJ_EXPECT(exception.getDescription() ==
@@ -548,7 +548,7 @@ KJ_TEST("magic assert stringification") {
     auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
       int foo = 123;
       int bar = 456;
-      KJ_ASSERT((foo == bar)) { break; }
+      KJ_ASSERT((foo == bar));
     }));
 
     KJ_EXPECT(exception.getDescription() == "expected (foo == bar)");
@@ -559,7 +559,7 @@ KJ_TEST("magic assert stringification") {
     auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
       int foo = 123;
       int bar = 456;
-      KJ_ASSERT(foo << 2 == bar) { break; }
+      KJ_ASSERT(foo << 2 == bar);
     }));
 
     KJ_EXPECT(exception.getDescription() == "expected foo << 2 == bar [492 == 456]");
@@ -571,7 +571,7 @@ KJ_TEST("magic assert stringification") {
     KJ_ASSERT(foo & 4);
 
     auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
-      KJ_ASSERT(foo & 2) { break; }
+      KJ_ASSERT(foo & 2);
     }));
 
     KJ_EXPECT(exception.getDescription() == "expected foo & 2");

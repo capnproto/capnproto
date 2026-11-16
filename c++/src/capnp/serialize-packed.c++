@@ -54,9 +54,7 @@ size_t PackedInputStream::tryRead(kj::ArrayPtr<byte> dstArray, size_t minBytes) 
 #define REFRESH_BUFFER() \
   inner.skip(buffer.size()); \
   buffer = inner.getReadBuffer(); \
-  KJ_REQUIRE(buffer.size() > 0, "Premature end of packed input.") { \
-    return out - dst; \
-  } \
+  KJ_REQUIRE(buffer.size() > 0, "Premature end of packed input."); \
   in = reinterpret_cast<const uint8_t*>(buffer.begin())
 
 #define BUFFER_END (reinterpret_cast<const uint8_t*>(buffer.end()))
@@ -126,9 +124,7 @@ size_t PackedInputStream::tryRead(kj::ArrayPtr<byte> dstArray, size_t minBytes) 
       uint runLength = *in++ * sizeof(word);
 
       KJ_REQUIRE(runLength <= outEnd - out,
-                 "Packed input did not end cleanly on a segment boundary.") {
-        return out - dst;
-      }
+                 "Packed input did not end cleanly on a segment boundary.");
       kj::arrayPtr(out, runLength).fill(0);
       out += runLength;
 
@@ -138,9 +134,7 @@ size_t PackedInputStream::tryRead(kj::ArrayPtr<byte> dstArray, size_t minBytes) 
       uint runLength = *in++ * sizeof(word);
 
       KJ_REQUIRE(runLength <= outEnd - out,
-                 "Packed input did not end cleanly on a segment boundary.") {
-        return out - dst;
-      }
+                 "Packed input did not end cleanly on a segment boundary.");
 
       size_t inRemaining = BUFFER_REMAINING;
       if (inRemaining >= runLength) {
@@ -197,7 +191,7 @@ void PackedInputStream::skip(size_t bytes) {
 #define REFRESH_BUFFER() \
   inner.skip(buffer.size()); \
   buffer = inner.getReadBuffer(); \
-  KJ_REQUIRE(buffer.size() > 0, "Premature end of packed input.") { return; } \
+  KJ_REQUIRE(buffer.size() > 0, "Premature end of packed input."); \
   in = reinterpret_cast<const uint8_t*>(buffer.begin())
 
   for (;;) {
@@ -251,9 +245,7 @@ void PackedInputStream::skip(size_t bytes) {
 
       uint runLength = *in++ * sizeof(word);
 
-      KJ_REQUIRE(runLength <= bytes, "Packed input did not end cleanly on a segment boundary.") {
-        return;
-      }
+      KJ_REQUIRE(runLength <= bytes, "Packed input did not end cleanly on a segment boundary.");
 
       bytes -= runLength;
 
@@ -262,9 +254,7 @@ void PackedInputStream::skip(size_t bytes) {
 
       uint runLength = *in++ * sizeof(word);
 
-      KJ_REQUIRE(runLength <= bytes, "Packed input did not end cleanly on a segment boundary.") {
-        return;
-      }
+      KJ_REQUIRE(runLength <= bytes, "Packed input did not end cleanly on a segment boundary.");
 
       bytes -= runLength;
 

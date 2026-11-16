@@ -53,7 +53,7 @@ uint64_t generateRandomId() {
   HCRYPTPROV handle;
   KJ_ASSERT(CryptAcquireContextW(&handle, nullptr, nullptr,
                                  PROV_RSA_FULL, CRYPT_VERIFYCONTEXT | CRYPT_SILENT));
-  KJ_DEFER(KJ_ASSERT(CryptReleaseContext(handle, 0)) {break;});
+  KJ_DEFER(KJ_DTOR_ASSERT(CryptReleaseContext(handle, 0)));
 
   KJ_ASSERT(CryptGenRandom(handle, sizeof(result), reinterpret_cast<BYTE*>(&result)));
 

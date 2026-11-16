@@ -97,8 +97,7 @@ static void setCloexec(int fd) {
     case EOPNOTSUPP:
       break;
     default:
-      KJ_FAIL_SYSCALL("ioctl(fd, FIOCLEX)", error) { break; }
-      break;
+      KJ_FAIL_SYSCALL("ioctl(fd, FIOCLEX)", error);
   } else {
     // success
     return;
@@ -211,19 +210,17 @@ static bool rmrf(int fd, StringPtr path) {
       // Doesn't exist.
       return false;
     default:
-      KJ_FAIL_SYSCALL("lstat(path)", error, path) { return false; }
+      KJ_FAIL_SYSCALL("lstat(path)", error, path);
   }
 
   if (S_ISDIR(stats.st_mode)) {
     int subdirFd;
     KJ_SYSCALL(subdirFd = openat(
-        fd, path.cStr(), O_RDONLY | MAYBE_O_DIRECTORY | MAYBE_O_CLOEXEC | O_NOFOLLOW)) {
-      return false;
-    }
+        fd, path.cStr(), O_RDONLY | MAYBE_O_DIRECTORY | MAYBE_O_CLOEXEC | O_NOFOLLOW));
     rmrfChildrenAndClose(subdirFd);
-    KJ_SYSCALL(unlinkat(fd, path.cStr(), AT_REMOVEDIR)) { return false; }
+    KJ_SYSCALL(unlinkat(fd, path.cStr(), AT_REMOVEDIR));
   } else {
-    KJ_SYSCALL(unlinkat(fd, path.cStr(), 0)) { return false; }
+    KJ_SYSCALL(unlinkat(fd, path.cStr(), 0));
   }
 
   return true;
@@ -259,7 +256,7 @@ protected:
                    size_t capacity, void (*destroyElement)(void*)) const override {
     auto range = getMmapRange(reinterpret_cast<uintptr_t>(firstElement),
                               elementSize * elementCount);
-    KJ_SYSCALL(munmap(reinterpret_cast<byte*>(range.offset), range.size)) { break; }
+    KJ_DTOR_SYSCALL(munmap(reinterpret_cast<byte*>(range.offset), range.size));
   }
 };
 
@@ -289,8 +286,7 @@ public:
         // fall back
         break;
       default:
-        KJ_FAIL_SYSCALL("fnctl(fd, F_DUPFD_CLOEXEC, 3)", error) { break; }
-        break;
+        KJ_FAIL_SYSCALL("fnctl(fd, F_DUPFD_CLOEXEC, 3)", error);
     } else {
       return OwnFd(fd2);
     }
@@ -458,7 +454,7 @@ public:
         // fall back to below
         break;
       default:
-        KJ_FAIL_SYSCALL("fallocate(FALLOC_FL_PUNCH_HOLE)", error) { return; }
+        KJ_FAIL_SYSCALL("fallocate(FALLOC_FL_PUNCH_HOLE)", error);
     } else {
       return;
     }
@@ -553,7 +549,7 @@ public:
           case ENOSYS:
             goto sendfileNotAvailable;
           default:
-            KJ_FAIL_SYSCALL("sendfile", error) { return fromPos - fromOffset; }
+            KJ_FAIL_SYSCALL("sendfile", error);
         }
         if (n == 0) break;
       }
@@ -625,7 +621,7 @@ public:
               // Past EOF. Stop here.
               return fromPos - fromOffset;
             default:
-              KJ_FAIL_SYSCALL("lseek(fd, pos, SEEK_HOLE)", error) { return fromPos - fromOffset; }
+              KJ_FAIL_SYSCALL("lseek(fd, pos, SEEK_HOLE)", error);
           }
 #else
           // SEEK_HOLE not supported. Assume no holes.
@@ -669,7 +665,7 @@ public:
               }
               break;
             default:
-              KJ_FAIL_SYSCALL("lseek(fd, pos, SEEK_HOLE)", error) { return fromPos - fromOffset; }
+              KJ_FAIL_SYSCALL("lseek(fd, pos, SEEK_HOLE)", error);
           }
 
           // Write zeros.
@@ -769,7 +765,7 @@ public:
       case ENOTDIR:
         return false;
       default:
-        KJ_FAIL_SYSCALL("faccessat(fd, path)", error, path) { return false; }
+        KJ_FAIL_SYSCALL("faccessat(fd, path)", error, path);
     }
     return true;
   }
@@ -781,7 +777,7 @@ public:
       case ENOTDIR:
         return kj::none;
       default:
-        KJ_FAIL_SYSCALL("faccessat(fd, path)", error, path) { return kj::none; }
+        KJ_FAIL_SYSCALL("faccessat(fd, path)", error, path);
     }
     return statToMetadata(stats);
   }
@@ -794,7 +790,7 @@ public:
       case ENOTDIR:
         return kj::none;
       default:
-        KJ_FAIL_SYSCALL("openat(fd, path, O_RDONLY)", error, path) { return kj::none; }
+        KJ_FAIL_SYSCALL("openat(fd, path, O_RDONLY)", error, path);
     }
 
     kj::OwnFd result(newFd);
@@ -820,7 +816,7 @@ public:
         }
         KJ_FALLTHROUGH;
       default:
-        KJ_FAIL_SYSCALL("openat(fd, path, O_DIRECTORY)", error, path) { return kj::none; }
+        KJ_FAIL_SYSCALL("openat(fd, path, O_DIRECTORY)", error, path);
     }
 
     kj::OwnFd result(newFd);
@@ -850,7 +846,7 @@ public:
           case EINVAL:    // not a link
             return kj::none;
           default:
-            KJ_FAIL_SYSCALL("readlinkat(fd, path)", error, path) { return kj::none; }
+            KJ_FAIL_SYSCALL("readlinkat(fd, path)", error, path);
         }
       }
 
@@ -970,7 +966,7 @@ public:
     // temporary location and then rename()ing it into place.
 
     if (path.size() == 0) {
-      KJ_FAIL_REQUIRE("can't replace self") { return false; }
+      KJ_FAIL_REQUIRE("can't replace self");
     }
 
     auto filename = path.toString();
@@ -995,7 +991,7 @@ public:
           }
           KJ_FALLTHROUGH;
         default:
-          KJ_FAIL_SYSCALL("create(path)", error, path) { return false; }
+          KJ_FAIL_SYSCALL("create(path)", error, path);
       } else {
         // Success.
         return true;
@@ -1067,7 +1063,7 @@ public:
             return kj::none;
           }
 
-          KJ_FAIL_REQUIRE("parent is not a directory", path) { return kj::none; }
+          KJ_FAIL_REQUIRE("parent is not a directory", path);
         } else {
           // MODIFY-only mode. ENOENT = doesn't exist = return null.
           return kj::none;
@@ -1086,7 +1082,7 @@ public:
         goto failed;
       default:
       failed:
-        KJ_FAIL_SYSCALL("openat(fd, path, O_RDWR | ...)", error, path) { return kj::none; }
+        KJ_FAIL_SYSCALL("openat(fd, path, O_RDWR | ...)", error, path);
     }
 
     kj::OwnFd result(newFd);
@@ -1112,7 +1108,7 @@ public:
           break;
         default:
           if (errorReason == nullptr) {
-            KJ_FAIL_SYSCALL("rename(fromPath, toPath)", error, fromPath, toPath) { return false; }
+            KJ_FAIL_SYSCALL("rename(fromPath, toPath)", error, fromPath, toPath);
           } else {
             *errorReason = error;
             return false;
@@ -1144,16 +1140,14 @@ public:
           if (has(mode, WriteMode::CREATE)) {
             KJ_FAIL_ASSERT("rename(tmp, path) claimed path exists but "
                 "renameat2(fromPath, toPath, EXCHANGE) said it doesn't; concurrent modification?",
-                fromPath, toPath) { return false; }
+                fromPath, toPath);
           } else {
             // Assume target doesn't exist.
             return false;
           }
         default:
           if (errorReason == nullptr) {
-            KJ_FAIL_SYSCALL("renameat2(fromPath, toPath, EXCHANGE)", error, fromPath, toPath) {
-              return false;
-            }
+            KJ_FAIL_SYSCALL("renameat2(fromPath, toPath, EXCHANGE)", error, fromPath, toPath);
           } else {
             *errorReason = error;
             return false;
@@ -1175,9 +1169,7 @@ public:
           return false;
         default:
           if (errorReason == nullptr) {
-            KJ_FAIL_SYSCALL("renameat2(fromPath, toPath, NOREPLACE)", error, fromPath, toPath) {
-              return false;
-            }
+            KJ_FAIL_SYSCALL("renameat2(fromPath, toPath, NOREPLACE)", error, fromPath, toPath);
           } else {
             *errorReason = error;
             return false;
@@ -1196,7 +1188,7 @@ public:
 
       // Find out what kind of file exists at the target path.
       struct stat stats;
-      KJ_SYSCALL(fstatat(fd, toPath.cStr(), &stats, AT_SYMLINK_NOFOLLOW)) { return false; }
+      KJ_SYSCALL(fstatat(fd, toPath.cStr(), &stats, AT_SYMLINK_NOFOLLOW));
 
       // Create a temporary location to move the existing object to. Note that rename() allows a
       // non-directory to replace a non-directory, and allows a directory to replace an empty
@@ -1222,10 +1214,11 @@ public:
       });
 
       // OK, now move the target object to replace the thing we just created.
-      KJ_SYSCALL(renameat(fd, toPath.cStr(), fd, away.cStr())) {
-        // Something went wrong. Remove the thing we just created.
-        unlinkat(fd, away.cStr(), S_ISDIR(stats.st_mode) ? AT_REMOVEDIR : 0);
-        return false;
+      KJ_SYSCALL_HANDLE_ERRORS(renameat(fd, toPath.cStr(), fd, away.cStr())) {
+        default:
+          // Something went wrong. Remove the thing we just created.
+          unlinkat(fd, away.cStr(), S_ISDIR(stats.st_mode) ? AT_REMOVEDIR : 0);
+          KJ_FAIL_SYSCALL("renameat(fd, toPath.cStr(), fd, away.cStr())", error);
       }
 
       // Now move the source object to the target location.
@@ -1238,9 +1231,7 @@ public:
           }
 
           if (errorReason == nullptr) {
-            KJ_FAIL_SYSCALL("rename(fromPath, toPath)", error, fromPath, toPath) {
-              return false;
-            }
+            KJ_FAIL_SYSCALL("rename(fromPath, toPath)", error, fromPath, toPath);
           } else {
             *errorReason = error;
             return false;
@@ -1260,7 +1251,7 @@ public:
           case ENOTDIR:
             break;  // doesn't exist; continue
           default:
-            KJ_FAIL_SYSCALL("fstatat(fd, toPath)", error, toPath) { return false; }
+            KJ_FAIL_SYSCALL("fstatat(fd, toPath)", error, toPath);
         } else {
           return false;  // already exists; fail
         }
@@ -1271,7 +1262,7 @@ public:
           case ENOTDIR:
             return false;  // doesn't exist; fail
           default:
-            KJ_FAIL_SYSCALL("fstatat(fd, toPath)", error, toPath) { return false; }
+            KJ_FAIL_SYSCALL("fstatat(fd, toPath)", error, toPath);
         } else {
           // already exists; continue
         }
@@ -1307,7 +1298,7 @@ public:
     }
 
     bool tryCommit() override {
-      KJ_ASSERT(!committed, "already committed") { return false; }
+      KJ_ASSERT(!committed, "already committed");
       return committed = handle.tryCommitReplacement(path, handle.fd, tempPath,
                                                      Directory::Replacer<T>::mode);
     }
@@ -1377,8 +1368,7 @@ public:
         // Maybe not supported by this kernel / filesystem. Fall back to below.
         break;
       default:
-        KJ_FAIL_SYSCALL("open(O_TMPFILE)", error) { break; }
-        break;
+        KJ_FAIL_SYSCALL("open(O_TMPFILE)", error);
     } else {
       OwnFd newFd(newFd_);
 #ifndef O_CLOEXEC
@@ -1397,7 +1387,7 @@ public:
     setCloexec(newFd);
 #endif
     auto result = newDiskFile(kj::mv(newFd));
-    KJ_SYSCALL(unlinkat(fd, temp.cStr(), 0)) { break; }
+    KJ_SYSCALL(unlinkat(fd, temp.cStr(), 0));
     return kj::mv(result);
   }
 
@@ -1446,7 +1436,7 @@ public:
   bool tryTransfer(PathPtr toPath, WriteMode toMode,
                    const Directory& fromDirectory, PathPtr fromPath,
                    TransferMode mode, const Directory& self) const {
-    KJ_REQUIRE(toPath.size() > 0, "can't replace self") { return false; }
+    KJ_REQUIRE(toPath.size() > 0, "can't replace self");
 
     if (mode == TransferMode::LINK) {
       KJ_IF_SOME(fromFd, fromDirectory.getFd()) {
@@ -1487,9 +1477,7 @@ public:
             }
             return false;
           default:
-            KJ_FAIL_SYSCALL("rename(fromPath, toPath)", error, fromPath, toPath) {
-              return false;
-            }
+            KJ_FAIL_SYSCALL("rename(fromPath, toPath)", error, fromPath, toPath);
         }
       }
     }
@@ -1739,10 +1727,10 @@ private:
       Path result = nullptr;
       struct stat pwdStat, dotStat;
       KJ_IF_SOME(e, kj::runCatchingExceptions([&]() {
-        KJ_ASSERT(pwd[0] == '/') { return; }
+        KJ_ASSERT(pwd[0] == '/');
         result = Path::parse(pwd + 1);
-        KJ_SYSCALL(lstat(result.toString(true).cStr(), &pwdStat), result) { return; }
-        KJ_SYSCALL(lstat(".", &dotStat)) { return; }
+        KJ_SYSCALL(lstat(result.toString(true).cStr(), &pwdStat), result);
+        KJ_SYSCALL(lstat(".", &dotStat));
       })) {
         // failed, give up on PWD
         KJ_LOG(WARNING, "PWD environment variable seems invalid", pwd, e);

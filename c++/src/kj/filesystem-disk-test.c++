@@ -155,9 +155,9 @@ private:
     if (handle == INVALID_HANDLE_VALUE) {
       auto error = GetLastError();
       if (error == ERROR_FILE_NOT_FOUND) return;
-      KJ_FAIL_WIN32("FindFirstFile", error, path) { return; }
+      KJ_FAIL_WIN32("FindFirstFile", error, path);
     }
-    KJ_DEFER(KJ_WIN32(FindClose(handle)) { break; });
+    KJ_DEFER(KJ_DTOR_WIN32(FindClose(handle)));
 
     do {
       // Ignore "." and "..", ugh.
@@ -182,7 +182,7 @@ private:
 
     auto error = GetLastError();
     if (error != ERROR_NO_MORE_FILES) {
-      KJ_FAIL_WIN32("FindNextFile", error, path) { return; }
+      KJ_FAIL_WIN32("FindNextFile", error, path);
     }
 
     uint retryCount = 0;
@@ -195,7 +195,7 @@ private:
         }
         KJ_FALLTHROUGH;
       default:
-        KJ_FAIL_WIN32("RemoveDirectory", error) { break; }
+        KJ_FAIL_WIN32("RemoveDirectory", error);
     }
   }
 };

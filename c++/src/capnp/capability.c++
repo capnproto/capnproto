@@ -1196,9 +1196,7 @@ uint BuilderCapabilityTable::injectCap(kj::Own<ClientHook>&& cap) {
 }
 
 void BuilderCapabilityTable::dropCap(uint index) {
-  KJ_ASSERT(index < table.size(), "Invalid capability descriptor in message.") {
-    return;
-  }
+  KJ_ASSERT(index < table.size(), "Invalid capability descriptor in message.");
   table[index] = kj::none;
 }
 

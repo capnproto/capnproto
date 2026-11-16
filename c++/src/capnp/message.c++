@@ -98,9 +98,7 @@ AnyPointer::Reader MessageReader::getRootInternal() {
   _::SegmentReader* segment = arena()->tryGetSegment(_::SegmentId(0));
   KJ_REQUIRE(segment != nullptr &&
              segment->checkObject(segment->getStartPtr(), ONE * WORDS),
-             "Message did not contain a root pointer.") {
-    return AnyPointer::Reader();
-  }
+             "Message did not contain a root pointer.");
 
   // const_cast here is safe because dummyCapTableReader has no state.
   return AnyPointer::Reader(_::PointerReader::getRoot(

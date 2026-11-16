@@ -350,8 +350,7 @@ public:
     jSum += context.getParams().getJ();
 
     if (jShouldThrow) {
-      KJ_FAIL_ASSERT("throw requested") { break; }
-      return kj::READY_NOW;
+      KJ_FAIL_ASSERT("throw requested");
     }
 
     auto paf = kj::newPromiseAndFulfiller<void>();

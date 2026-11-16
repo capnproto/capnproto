@@ -65,25 +65,17 @@ void FlatArrayMessageReader::init(kj::ArrayPtr<const word> array) {
   uint segmentCount = table[0].get() + 1;
   size_t offset = segmentCount / 2u + 1u;
 
-  KJ_REQUIRE(segmentCount != 0, "Message segment count too large, caused overflow.") {
-    return;
-  }
+  KJ_REQUIRE(segmentCount != 0, "Message segment count too large, caused overflow.");
 
-  KJ_REQUIRE(array.size() >= offset, "Message ends prematurely in segment table.") {
-    return;
-  }
+  KJ_REQUIRE(array.size() >= offset, "Message ends prematurely in segment table.");
 
-  {
-    uint segmentSize = table[1].get();
+  uint segment0Size = table[1].get();
 
-    KJ_REQUIRE(array.size() - offset >= segmentSize,
-               "Message ends prematurely in first segment.") {
-      return;
-    }
+  KJ_REQUIRE(array.size() - offset >= segment0Size,
+             "Message ends prematurely in first segment.");
 
-    segment0 = array.slice(offset, offset + segmentSize);
-    offset += segmentSize;
-  }
+  segment0 = array.slice(offset, offset + segment0Size);
+  offset += segment0Size;
 
   if (segmentCount > 1) {
     moreSegments = kj::heapArray<kj::ArrayPtr<const word>>(segmentCount - 1);
@@ -91,10 +83,7 @@ void FlatArrayMessageReader::init(kj::ArrayPtr<const word> array) {
     for (uint i = 1; i < segmentCount; i++) {
       uint segmentSize = table[i + 1].get();
 
-      KJ_REQUIRE(array.size() - offset >= segmentSize, "Message ends prematurely.") {
-        moreSegments = nullptr;
-        return;
-      }
+      KJ_REQUIRE(array.size() - offset >= segmentSize, "Message ends prematurely.");
 
       moreSegments[i - 1] = array.slice(offset, offset + segmentSize);
       offset += segmentSize;
@@ -214,11 +203,7 @@ InputStreamMessageReader::InputStreamMessageReader(
   // Reject messages with too many segments for security reasons.
   // Use firstWord[0].get() here instead of segmentCount to catch overflow. The actual limit
   // we are enforcing is 512, but firstWord[0] contains segmentCount - 1, hence we compare to 511.
-  KJ_REQUIRE(firstWord[0].get() < 511, "Message has too many segments.") {
-    segmentCount = 1;
-    segment0Size = 1;
-    break;
-  }
+  KJ_REQUIRE(firstWord[0].get() < 511, "Message has too many segments.");
 
   // Read sizes for all segments except the first.  Include padding if necessary.
   KJ_STACK_ARRAY(_::WireValue<uint32_t>, moreSizes, segmentCount & ~1, 16, 64);
@@ -234,12 +219,7 @@ InputStreamMessageReader::InputStreamMessageReader(
   // size to make the receiver allocate excessive space and possibly crash.
   KJ_REQUIRE(totalWords <= options.traversalLimitInWords,
              "Message is too large.  To increase the limit on the receiving end, see "
-             "capnp::ReaderOptions.") {
-    segmentCount = 1;
-    segment0Size = kj::min(segment0Size, options.traversalLimitInWords);
-    totalWords = segment0Size;
-    break;
-  }
+             "capnp::ReaderOptions.");
 
   if (scratchSpace.size() < totalWords) {
     // TODO(perf):  Consider allocating each segment as a separate chunk to reduce memory

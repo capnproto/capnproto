@@ -180,20 +180,7 @@ public:
 
   Promise<void> write(ArrayPtr<const byte> buffer) override {
     ssize_t n;
-    KJ_NONBLOCKING_SYSCALL(n = ::write(fd, buffer.begin(), buffer.size())) {
-      // Error.
-
-      // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
-      // a bug that exists in both Clang and GCC:
-      //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
-      //   http://llvm.org/bugs/show_bug.cgi?id=12286
-      goto error;
-    }
-    if (false) {
-    error:
-      return kj::READY_NOW;
-    }
-
+    KJ_NONBLOCKING_SYSCALL(n = ::write(fd, buffer.begin(), buffer.size()));
     if (n < 0) {
       // EAGAIN -- need to wait for writability and try again.
       return observer.whenBecomesWritable().then([buffer, this]() {
@@ -561,15 +548,7 @@ private:
 
     ssize_t n;
     if (maxFds == 0 && ancillaryMsgCallback == kj::none) {
-      KJ_NONBLOCKING_SYSCALL(n = ::read(fd, buffer, maxBytes)) {
-        // Error.
-
-        // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
-        // a bug that exists in both Clang and GCC:
-        //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
-        //   http://llvm.org/bugs/show_bug.cgi?id=12286
-        goto error;
-      }
+      KJ_NONBLOCKING_SYSCALL(n = ::read(fd, buffer, maxBytes));
     } else {
       struct msghdr msg = {};
 
@@ -628,15 +607,7 @@ private:
       static constexpr int RECVMSG_FLAGS = 0;
 #endif
 
-      KJ_NONBLOCKING_SYSCALL(n = ::recvmsg(fd, &msg, RECVMSG_FLAGS)) {
-        // Error.
-
-        // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
-        // a bug that exists in both Clang and GCC:
-        //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
-        //   http://llvm.org/bugs/show_bug.cgi?id=12286
-        goto error;
-      }
+      KJ_NONBLOCKING_SYSCALL(n = ::recvmsg(fd, &msg, RECVMSG_FLAGS));
 
       if (n >= 0) {
         // Process all messages.
@@ -702,11 +673,6 @@ private:
       }
     }
 
-    if (false) {
-    error:
-      return alreadyRead;
-    }
-
     if (n < 0) {
       // Read would block.
       return observer.whenBecomesReadable().then(
@@ -768,15 +734,7 @@ private:
 
     ssize_t n;
     if (fds.size() == 0) {
-      KJ_NONBLOCKING_SYSCALL(n = ::writev(fd, iov.begin(), iov.size()), iovTotal, iov.size()) {
-        // Error.
-
-        // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
-        // a bug that exists in both Clang and GCC:
-        //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
-        //   http://llvm.org/bugs/show_bug.cgi?id=12286
-        goto error;
-      }
+      KJ_NONBLOCKING_SYSCALL(n = ::writev(fd, iov.begin(), iov.size()), iovTotal, iov.size());
     } else {
       struct msghdr msg = {};
       msg.msg_iov = iov.begin();
@@ -803,20 +761,7 @@ private:
       cmsg->cmsg_len = CMSG_LEN(sizeof(int) * fds.size());
       memcpy(CMSG_DATA(cmsg), fds.begin(), fds.asBytes().size());
 
-      KJ_NONBLOCKING_SYSCALL(n = ::sendmsg(fd, &msg, 0)) {
-        // Error.
-
-        // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
-        // a bug that exists in both Clang and GCC:
-        //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
-        //   http://llvm.org/bugs/show_bug.cgi?id=12286
-        goto error;
-      }
-    }
-
-    if (false) {
-    error:
-      return kj::READY_NOW;
+      KJ_NONBLOCKING_SYSCALL(n = ::sendmsg(fd, &msg, 0));
     }
 
     if (n < 0) {
@@ -954,8 +899,7 @@ public:
         char buffer[INET6_ADDRSTRLEN]{};
         if (inet_ntop(addr.inet4.sin_family, &addr.inet4.sin_addr,
                       buffer, sizeof(buffer)) == nullptr) {
-          KJ_FAIL_SYSCALL("inet_ntop", errno) { break; }
-          return heapString("(inet_ntop error)");
+          KJ_FAIL_SYSCALL("inet_ntop", errno);
         }
         return str(buffer, ':', ntohs(addr.inet4.sin_port));
       }
@@ -963,8 +907,7 @@ public:
         char buffer[INET6_ADDRSTRLEN]{};
         if (inet_ntop(addr.inet6.sin6_family, &addr.inet6.sin6_addr,
                       buffer, sizeof(buffer)) == nullptr) {
-          KJ_FAIL_SYSCALL("inet_ntop", errno) { break; }
-          return heapString("(inet_ntop error)");
+          KJ_FAIL_SYSCALL("inet_ntop", errno);
         }
         return str('[', buffer, "]:", ntohs(addr.inet6.sin6_port));
       }
@@ -1279,14 +1222,10 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
           cur = cur->ai_next;
         }
       } else if (status == EAI_SYSTEM) {
-        KJ_FAIL_SYSCALL("getaddrinfo", errno, params.host, params.service) {
-          return;
-        }
+        KJ_FAIL_SYSCALL("getaddrinfo", errno, params.host, params.service);
       } else {
         KJ_FAIL_REQUIRE("DNS lookup failed.",
-                        params.host, params.service, gai_strerror(status)) {
-          return;
-        }
+                        params.host, params.service, gai_strerror(status));
       }
     })) {
       fulfiller->reject(kj::mv(exception));
@@ -1511,8 +1450,7 @@ public:
           break;
         } else if (error != EINTR) {
           auto address = SocketAddress(addr, addrlen).toString();
-          KJ_FAIL_SYSCALL("connect()", error, address) { break; }
-          return Own<AsyncIoStream>();
+          KJ_FAIL_SYSCALL("connect()", error, address);
         }
       } else {
         // no error
@@ -1526,7 +1464,7 @@ public:
       socklen_t errlen = sizeof(err);
       KJ_SYSCALL(getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &errlen));
       if (err != 0) {
-        KJ_FAIL_SYSCALL("connect()", err) { break; }
+        KJ_FAIL_SYSCALL("connect()", err);
       }
       return kj::mv(stream);
     });
@@ -1751,7 +1689,7 @@ public:
   Own<NetworkAddress> getSockaddr(const void* sockaddr, uint len) override {
     auto array = kj::heapArrayBuilder<SocketAddress>(1);
     array.add(SocketAddress(sockaddr, len));
-    KJ_REQUIRE(array[0].allowedBy(filter), "address blocked by restrictPeers()") { break; }
+    KJ_REQUIRE(array[0].allowedBy(filter), "address blocked by restrictPeers()");
     return Own<NetworkAddress>(heap<NetworkAddressImpl>(lowLevel, filter, array.finish()));
   }
 

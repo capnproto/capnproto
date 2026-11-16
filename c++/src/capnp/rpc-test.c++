@@ -1678,7 +1678,7 @@ KJ_TEST("embargo error") {
   auto call4 = getCallSequence(pipeline, 4);
   auto call5 = getCallSequence(pipeline, 5);
 
-  paf.fulfiller->rejectIfThrows([]() { KJ_FAIL_ASSERT("foo") { break; } });
+  paf.fulfiller->rejectIfThrows([]() { KJ_FAIL_ASSERT("foo"); });
 
   expectPromiseThrows(kj::mv(call0), context.waitScope);
   expectPromiseThrows(kj::mv(call1), context.waitScope);
@@ -1752,7 +1752,7 @@ KJ_TEST("call promise that later rejects") {
 
   KJ_EXPECT(!returned);
 
-  paf.fulfiller->rejectIfThrows([]() { KJ_FAIL_ASSERT("foo") { break; } });
+  paf.fulfiller->rejectIfThrows([]() { KJ_FAIL_ASSERT("foo"); });
 
   expectPromiseThrows(kj::mv(req), context.waitScope);
   KJ_EXPECT(returned);

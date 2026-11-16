@@ -119,7 +119,7 @@ Thread::~Thread() noexcept(false) {
 void Thread::sendSignal(int signo) {
   int pthreadResult = pthread_kill(*reinterpret_cast<pthread_t*>(&threadId), signo);
   if (pthreadResult != 0) {
-    KJ_FAIL_SYSCALL("pthread_kill", pthreadResult) { break; }
+    KJ_FAIL_SYSCALL("pthread_kill", pthreadResult);
   }
 }
 
@@ -127,7 +127,7 @@ void Thread::detach() {
   KJ_ASSERT(!detached);
   int pthreadResult = pthread_detach(*reinterpret_cast<pthread_t*>(&threadId));
   if (pthreadResult != 0) {
-    KJ_FAIL_SYSCALL("pthread_detach", pthreadResult) { break; }
+    KJ_FAIL_SYSCALL("pthread_detach", pthreadResult);
   }
   detached = true;
   state->unref();

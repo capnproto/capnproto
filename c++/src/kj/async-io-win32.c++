@@ -257,13 +257,7 @@ public:
     LPFN_CONNECTEX connectEx = nullptr;
     DWORD n = 0;
     KJ_WINSOCK(WSAIoctl(fd, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid),
-                        &connectEx, sizeof(connectEx), &n, NULL, NULL)) {
-      goto fail;  // avoid memory leak due to compiler bugs
-    }
-    if (false) {
-    fail:
-      return kj::READY_NOW;
-    }
+                        &connectEx, sizeof(connectEx), &n, NULL, NULL));
 
     // OK, phew, we now have our ConnectEx function pointer. Call it.
     auto op = observer->newOperation(0);
@@ -271,14 +265,13 @@ public:
     if (!connectEx(fd, addr, addrlen, NULL, 0, NULL, op->getOverlapped())) {
       DWORD error = WSAGetLastError();
       if (error != ERROR_IO_PENDING) {
-        KJ_FAIL_WIN32("ConnectEx()", error) { break; }
-        return kj::READY_NOW;
+        KJ_FAIL_WIN32("ConnectEx()", error);
       }
     }
 
     return op->onComplete().then([this](Win32EventPort::IoResult result) {
       if (result.errorCode != ERROR_SUCCESS) {
-        KJ_FAIL_WIN32("ConnectEx()", result.errorCode) { return; }
+        KJ_FAIL_WIN32("ConnectEx()", result.errorCode);
       }
 
       // Enable shutdown() to work.
@@ -360,8 +353,7 @@ private:
                 op->getOverlapped(), NULL) == SOCKET_ERROR) {
       DWORD error = WSAGetLastError();
       if (error != WSA_IO_PENDING) {
-        KJ_FAIL_WIN32("WSARecv()", error) { break; }
-        return alreadyRead;
+        KJ_FAIL_WIN32("WSARecv()", error);
       }
     }
 
@@ -373,8 +365,7 @@ private:
           // Report what we already read.
           return alreadyRead;
         } else {
-          KJ_FAIL_WIN32("WSARecv()", result.errorCode) { break; }
-          return size_t(0);
+          KJ_FAIL_WIN32("WSARecv()", result.errorCode);
         }
       }
 
@@ -412,16 +403,14 @@ private:
                 op->getOverlapped(), NULL) == SOCKET_ERROR) {
       DWORD error = WSAGetLastError();
       if (error != WSA_IO_PENDING) {
-        KJ_FAIL_WIN32("WSASend()", error) { break; }
-        return kj::READY_NOW;
+        KJ_FAIL_WIN32("WSASend()", error);
       }
     }
 
     return op->onComplete()
         .then([this,KJ_CPCAP(bufs)](Win32IocpEventPort::IoResult result) mutable -> Promise<void> {
       if (result.errorCode != ERROR_SUCCESS) {
-        KJ_FAIL_WIN32("WSASend()", result.errorCode) { break; }
-        return kj::READY_NOW;
+        KJ_FAIL_WIN32("WSASend()", result.errorCode);
       }
 
       while (bufs.size() > 0 && result.bytesTransferred >= bufs[0].len) {
@@ -474,7 +463,7 @@ public:
     SOCKET result = ::socket(addr.generic.sa_family, type, 0);
 
     if (result == INVALID_SOCKET) {
-      KJ_FAIL_WIN32("WSASocket()", WSAGetLastError()) { return INVALID_SOCKET; }
+      KJ_FAIL_WIN32("WSASocket()", WSAGetLastError());
     }
 
     if (isStream && (addr.generic.sa_family == AF_INET ||
@@ -521,8 +510,7 @@ public:
         char buffer[16];
         if (InetNtopA(addr.inet4.sin_family, const_cast<struct in_addr*>(&addr.inet4.sin_addr),
                       buffer, sizeof(buffer)) == nullptr) {
-          KJ_FAIL_WIN32("InetNtop", WSAGetLastError()) { break; }
-          return heapString("(inet_ntop error)");
+          KJ_FAIL_WIN32("InetNtop", WSAGetLastError());
         }
         return str(buffer, ':', ntohs(addr.inet4.sin_port));
       }
@@ -530,8 +518,7 @@ public:
         char buffer[46];
         if (InetNtopA(addr.inet6.sin6_family, const_cast<struct in6_addr*>(&addr.inet6.sin6_addr),
                       buffer, sizeof(buffer)) == nullptr) {
-          KJ_FAIL_WIN32("InetNtop", WSAGetLastError()) { break; }
-          return heapString("(inet_ntop error)");
+          KJ_FAIL_WIN32("InetNtop", WSAGetLastError());
         }
         return str('[', buffer, "]:", ntohs(addr.inet6.sin6_port));
       }
@@ -804,9 +791,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
           cur = cur->ai_next;
         }
       } else {
-        KJ_FAIL_WIN32("getaddrinfo()", status, params.host, params.service) {
-          return;
-        }
+        KJ_FAIL_WIN32("getaddrinfo()", status, params.host, params.service);
       }
     })) {
       fulfiller->reject(kj::mv(exception));
@@ -866,10 +851,7 @@ public:
     GUID guid = WSAID_ACCEPTEX;
     DWORD n = 0;
     KJ_WINSOCK(WSAIoctl(fd, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid),
-                        &acceptEx, sizeof(acceptEx), &n, NULL, NULL)) {
-      acceptEx = nullptr;
-      return;
-    }
+                        &acceptEx, sizeof(acceptEx), &n, NULL, NULL));
   }
 
   Promise<Own<AsyncIoStream>> accept() override {
@@ -891,8 +873,7 @@ public:
     if (!acceptEx(fd, newFd, scratch.begin(), 0, 128, 128, &dummy, op->getOverlapped())) {
       DWORD error = WSAGetLastError();
       if (error != ERROR_IO_PENDING) {
-        KJ_FAIL_WIN32("AcceptEx()", error) { break; }
-        return AuthenticatedStream { kj::mv(result), UnknownPeerIdentity::newInstance() }; // dummy, won't be used
+        KJ_FAIL_WIN32("AcceptEx()", error);
       }
     }
 
@@ -905,7 +886,7 @@ public:
           // The queued connection died before we could take it. Move on to the next one.
           return acceptImpl(authenticated);
         }
-        KJ_FAIL_WIN32("AcceptEx()", ioResult.errorCode) { break; }
+        KJ_FAIL_WIN32("AcceptEx()", ioResult.errorCode);
       } else {
         SOCKET me = fd;
         stream->setsockopt(SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
@@ -969,10 +950,7 @@ public:
     GUID guid = WSAID_WSARECVMSG;
     DWORD n = 0;
     KJ_WINSOCK(WSAIoctl(fd, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid),
-                        &recvMsg, sizeof(recvMsg), &n, NULL, NULL)) {
-      recvMsg = nullptr;
-      return;
-    }
+                        &recvMsg, sizeof(recvMsg), &n, NULL, NULL));
   }
 
   Promise<size_t> send(ArrayPtr<const byte> buffer, NetworkAddress& destination) override;
@@ -1223,7 +1201,7 @@ public:
   Own<NetworkAddress> getSockaddr(const void* sockaddr, uint len) override {
     auto array = kj::heapArrayBuilder<SocketAddress>(1);
     array.add(SocketAddress(sockaddr, len));
-    KJ_REQUIRE(array[0].allowedBy(filter), "address blocked by restrictPeers()") { break; }
+    KJ_REQUIRE(array[0].allowedBy(filter), "address blocked by restrictPeers()");
     return Own<NetworkAddress>(heap<NetworkAddressImpl>(lowLevel, filter, array.finish()));
   }
 
@@ -1271,16 +1249,14 @@ Promise<size_t> DatagramPortImpl::send(
                 op->getOverlapped(), NULL) == SOCKET_ERROR) {
     DWORD error = WSAGetLastError();
     if (error != WSA_IO_PENDING) {
-      KJ_FAIL_WIN32("WSASendTo()", error) { break; }
-      return size_t(0);
+      KJ_FAIL_WIN32("WSASendTo()", error);
     }
   }
 
   // IOCP reports completion even when Winsock completes the operation immediately.
   return op->onComplete().then([](Win32EventPort::IoResult result) -> size_t {
     if (result.errorCode != ERROR_SUCCESS) {
-      KJ_FAIL_WIN32("WSASendTo()", result.errorCode) { break; }
-      return 0;
+      KJ_FAIL_WIN32("WSASendTo()", result.errorCode);
     }
     return result.bytesTransferred;
   }).attach(kj::mv(state));
@@ -1316,8 +1292,7 @@ public:
       if (error == WSAEMSGSIZE) {
         return finishReceive(error, received);
       } else if (error != WSA_IO_PENDING) {
-        KJ_FAIL_WIN32("WSARecvMsg()", error) { break; }
-        return READY_NOW;
+        KJ_FAIL_WIN32("WSARecvMsg()", error);
       }
     }
 
@@ -1356,8 +1331,7 @@ private:
 
   Promise<void> finishReceive(DWORD error, size_t size) {
     if (error != ERROR_SUCCESS && !isTruncationError(error)) {
-      KJ_FAIL_WIN32("WSARecvMsg()", error) { break; }
-      return READY_NOW;
+      KJ_FAIL_WIN32("WSARecvMsg()", error);
     }
 
     // Discard blocked datagrams and continue waiting on the same receiver.
