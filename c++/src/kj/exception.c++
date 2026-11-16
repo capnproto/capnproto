@@ -71,27 +71,28 @@
 #define KJ_BACKTRACE_INTERCEPTED 0
 #endif
 
-#ifndef KJ_BACKTRACE_WITH_UNWINDER
+#ifndef KJ_BYPASS_BACKTRACE_INTERCEPTOR
 // The sanitizers' backtrace() interceptor takes a scratch buffer from the sanitizer's internal
 // allocator, under a spin lock that a thread cannot take twice. A signal handler that traces a
 // thread interrupted while it held that lock, as it briefly does in every backtrace() call, would
-// spin forever. So under ASan we call the unwinder directly, as glibc's backtrace() does,
-// bypassing the interceptor.
+// spin forever. So under ASan we call glibc's __backtrace(), of which backtrace() is an alias and
+// which the sanitizers don't intercept.
 //
 // TSan delivers crash signals such as SIGSEGV at once too, but doing so under TSan isn't safe in
 // the first place: the handler's instrumented code takes a TSan lock that the interrupted thread
 // may hold, so it can deadlock before it gets here. Define this to 1 to bypass the interceptor
 // anyway, or to 0 to keep it under ASan.
-#if __linux__ && KJ_HAS_BACKTRACE && \
+#if KJ_BACKTRACE_INTERCEPTED && \
     (KJ_HAS_COMPILER_FEATURE(address_sanitizer) || defined(__SANITIZE_ADDRESS__))
-#define KJ_BACKTRACE_WITH_UNWINDER 1
+#define KJ_BYPASS_BACKTRACE_INTERCEPTOR 1
 #else
-#define KJ_BACKTRACE_WITH_UNWINDER 0
+#define KJ_BYPASS_BACKTRACE_INTERCEPTOR 0
 #endif
 #endif
 
-#if KJ_BACKTRACE_WITH_UNWINDER
-#include <unwind.h>
+#if KJ_BYPASS_BACKTRACE_INTERCEPTOR
+// glibc exports this, but no header declares it.
+extern "C" int __backtrace(void** array, int size);
 #endif
 
 #if _WIN32 || __CYGWIN__
@@ -415,49 +416,6 @@ String stringifyStackTraceWithLlvm(ArrayPtr<void* const> trace) {
 
 #endif
 
-#if KJ_BACKTRACE_WITH_UNWINDER
-namespace {
-
-struct UnwinderTrace {
-  ArrayPtr<void*> space;
-  size_t size = 0;
-  bool skippedOwnFrame = false;
-  _Unwind_Word lastCfa = 0;
-};
-
-_Unwind_Reason_Code addUnwinderFrame(_Unwind_Context* context, void* arg) {
-  auto& trace = *static_cast<UnwinderTrace*>(arg);
-  if (!trace.skippedOwnFrame) {
-    // The first frame is unwinderBacktrace() itself, which backtrace() wouldn't report either.
-    trace.skippedOwnFrame = true;
-    return _URC_NO_REASON;
-  }
-
-  auto ip = reinterpret_cast<void*>(_Unwind_GetIP(context));
-  auto cfa = _Unwind_GetCFA(context);
-  if (trace.size > 0 && trace.space[trace.size - 1] == ip && trace.lastCfa == cfa) {
-    // Like backtrace(), stop if the unwinder isn't making progress.
-    return _URC_END_OF_STACK;
-  }
-  trace.space[trace.size++] = ip;
-  trace.lastCfa = cfa;
-  return trace.size == trace.space.size() ? _URC_END_OF_STACK : _URC_NO_REASON;
-}
-
-KJ_NOINLINE size_t unwinderBacktrace(ArrayPtr<void*> space) {
-  // Equivalent to backtrace(space.begin(), space.size()), without the ASan interceptor.
-  UnwinderTrace trace{.space = space};
-  _Unwind_Backtrace(&addUnwinderFrame, &trace);
-  if (trace.size > 1 && trace.space[trace.size - 1] == nullptr) {
-    // Like backtrace(), drop the null address the unwinder reports above _start.
-    --trace.size;
-  }
-  return trace.size;
-}
-
-}  // namespace
-#endif
-
 bool isStackTraceSupported() {
 #if KJ_USE_WIN32_DBGHELP || KJ_HAS_BACKTRACE
   return true;
@@ -482,8 +440,8 @@ KJ_NOINLINE ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space) {
   RtlCaptureContext(&context);
   return getStackTrace(space, GetCurrentThread(), context);
 #elif KJ_HAS_BACKTRACE
-#if KJ_BACKTRACE_WITH_UNWINDER
-  size_t size = unwinderBacktrace(space);
+#if KJ_BYPASS_BACKTRACE_INTERCEPTOR
+  size_t size = __backtrace(space.begin(), space.size());
 #else
   size_t size = backtrace(space.begin(), space.size());
 #endif
@@ -511,7 +469,7 @@ size_t saturatingAdd(size_t a, size_t b) {
 }
 
 ArrayPtr<void* const> trimStackTrace(ArrayPtr<void* const> trace, size_t ignoreCount) {
-#if KJ_BACKTRACE_INTERCEPTED && !KJ_BACKTRACE_WITH_UNWINDER
+#if KJ_BACKTRACE_INTERCEPTED && !KJ_BYPASS_BACKTRACE_INTERCEPTOR
   // The sanitizer's backtrace() interceptor adds a frame.
   constexpr size_t interceptorFrames = 1;
 #else
