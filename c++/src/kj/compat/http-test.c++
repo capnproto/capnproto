@@ -85,6 +85,15 @@ KJ_TEST("HttpMethod parse / stringify") {
   KJ_EXPECT(tryParseHttpMethod("GET ") == kj::none);
   KJ_EXPECT(tryParseHttpMethod("get") == kj::none);
 
+  // Prefixes and near-misses of the MK* methods (MKCOL, MKCALENDAR, MKACTIVITY) share parser
+  // branches, so make sure they don't parse.
+  KJ_EXPECT(tryParseHttpMethod("MKC") == kj::none);
+  KJ_EXPECT(tryParseHttpMethod("MKCA") == kj::none);
+  KJ_EXPECT(tryParseHttpMethod("MKCO") == kj::none);
+  KJ_EXPECT(tryParseHttpMethod("MKCALENDA") == kj::none);
+  KJ_EXPECT(tryParseHttpMethod("MKCALENDARS") == kj::none);
+  KJ_EXPECT(tryParseHttpMethod("MKCOLL") == kj::none);
+
   KJ_EXPECT(KJ_ASSERT_NONNULL(tryParseHttpMethodAllowingConnect("CONNECT"))
       .is<HttpConnectMethod>());
   KJ_EXPECT(tryParseHttpMethod("connect") == kj::none);

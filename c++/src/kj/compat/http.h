@@ -86,7 +86,10 @@ namespace kj {
   MACRO(QUERY) \
   /* https://www.ietf.org/archive/id/draft-ietf-httpbis-safe-method-w-body-05.html */ \
   MACRO(BAN) \
-  /* Non-standard method name requested by a Cloudflare customer. */
+  /* Non-standard method name requested by a Cloudflare customer. */ \
+  \
+  MACRO(MKCALENDAR) \
+  /* https://www.rfc-editor.org/rfc/rfc4791#section-5.3.1 (CalDAV) */
 
 enum class HttpMethod {
   // Enum of known HTTP methods.

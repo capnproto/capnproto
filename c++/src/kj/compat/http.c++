@@ -390,7 +390,12 @@ static kj::Maybe<kj::OneOf<HttpMethod, HttpConnectMethod>> consumeHttpMethod(cha
         case 'K':
           switch (*p++) {
             case 'A': EXPECT_REST(MKA,CTIVITY)
-            case 'C': EXPECT_REST(MKC,OL)
+            case 'C':
+              switch (*p++) {
+                case 'A': EXPECT_REST(MKCA,LENDAR)
+                case 'O': EXPECT_REST(MKCO,L)
+                default: return kj::none;
+              }
             default: return kj::none;
           }
         case 'O': EXPECT_REST(MO,VE)
