@@ -369,22 +369,6 @@ void Debug::logInternal(const char* file, int line, LogSeverity severity, const 
       makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, argValues));
 }
 
-Debug::Fault::~Fault() noexcept(false) {
-  if (exception != nullptr) {
-    Exception copy = mv(*exception);
-    delete exception;
-    throwRecoverableException(mv(copy), 1);
-  }
-}
-
-void Debug::Fault::fatal() {
-  Exception copy = mv(*exception);
-  delete exception;
-  exception = nullptr;
-  throwException(mv(copy), 1);
-  KJ_KNOWN_UNREACHABLE(abort());
-}
-
 Exception Debug::makeFailure(
     const char* file, int line, Exception::Type type,
     const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
