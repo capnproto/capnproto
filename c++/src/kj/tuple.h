@@ -115,17 +115,36 @@ struct TupleElement {
   constexpr inline TupleElement(U&& value): value(kj::fwd<U>(value)) {}
 };
 
+template <typename T, typename U>
+concept DerivesFromSource = __is_base_of(Decay<U>, Decay<T>) && !isSameType<Decay<U>, Decay<T>>();
+// Concept: Decay<T> is a class derived from Decay<U>. For an lvalue u of such a U,
+// static_cast<T&>(u) downcasts u itself, even if U has a conversion operator to T&.
+
+template <typename T, typename U>
+concept TupleElementConstructibleFrom = ConstructibleFrom<T, U> &&
+    (!isReference<T>() || !DerivesFromSource<T, U> || ImplicitlyConstructibleFrom<T, U>);
+// Concept: a TupleElement<index, T> can be constructed from U&&. This matches ConstructibleFrom,
+// except that a reference element whose type derives from its source accepts only implicit
+// conversions; see TupleElement<index, T&>.
+
 template <uint index, typename T>
 struct TupleElement<index, T&> {
   // A tuple containing references can be constructed using refTuple().
 
   T& value;
   template <typename U>
-    requires (!isSameType<Decay<U>, TupleElement>() && ConstructibleFrom<T&, U>)
+    requires (!isSameType<Decay<U>, TupleElement>() && ConstructibleFrom<T&, U> &&
+              !DerivesFromSource<T&, U>)
   constexpr inline TupleElement(U&& value): value(static_cast<T&>(kj::fwd<U>(value))) {}
   // GCC and MSVC reject explicit conversion operators when directly binding a reference in a
-  // template. static_cast<T&> performs the same direct-initialization; the downcasts it would
-  // additionally allow are excluded by ConstructibleFrom.
+  // template. static_cast<T&> performs the same direct-initialization when T does not derive
+  // from U.
+  template <typename U>
+    requires (!isSameType<Decay<U>, TupleElement>() && ImplicitlyConstructibleFrom<T&, U> &&
+              DerivesFromSource<T&, U>)
+  constexpr inline TupleElement(U&& value): value(kj::fwd<U>(value)) {}
+  // Here static_cast<T&> would downcast the source itself instead of calling its conversion
+  // operator. Binding directly calls the operator, which GCC permits only for implicit ones.
 };
 
 template <uint index, typename... T>
@@ -178,15 +197,15 @@ public:
   Tuple() = default;
 
   template <typename... U>
-    requires (sizeof...(T) == sizeof...(U) && (ConstructibleFrom<T, U> && ...))
+    requires (sizeof...(T) == sizeof...(U) && (TupleElementConstructibleFrom<T, U> && ...))
   explicit(!(ImplicitlyConstructibleFrom<T, U> && ...))
   constexpr inline Tuple(Tuple<U...>&& other): impl(kj::mv(other)) {}
   template <typename... U>
-    requires (sizeof...(T) == sizeof...(U) && (ConstructibleFrom<T, U&> && ...))
+    requires (sizeof...(T) == sizeof...(U) && (TupleElementConstructibleFrom<T, U&> && ...))
   explicit(!(ImplicitlyConstructibleFrom<T, U&> && ...))
   constexpr inline Tuple(Tuple<U...>& other): impl(other) {}
   template <typename... U>
-    requires (sizeof...(T) == sizeof...(U) && (ConstructibleFrom<T, const U&> && ...))
+    requires (sizeof...(T) == sizeof...(U) && (TupleElementConstructibleFrom<T, const U&> && ...))
   explicit(!(ImplicitlyConstructibleFrom<T, const U&> && ...))
   constexpr inline Tuple(const Tuple<U...>& other): impl(other) {}
   // Convert each element directly when both tuples have the same size and every corresponding

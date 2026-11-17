@@ -290,5 +290,44 @@ TEST(Tuple, RefTuple) {
   EXPECT_EQ(get<3>(t), "bar");
 }
 
+struct TupleConvertingDerived;
+struct TupleConvertingBase {
+  TupleConvertingDerived* referent;
+  operator TupleConvertingDerived&() const { return *referent; }
+};
+struct TupleConvertingDerived: TupleConvertingBase {
+  int value = 123;
+};
+
+struct TupleExplicitDerived;
+struct TupleExplicitBase {
+  TupleExplicitDerived* referent;
+  explicit operator TupleExplicitDerived&() const { return *referent; }
+};
+struct TupleExplicitDerived: TupleExplicitBase {};
+
+KJ_TEST("Tuple reference conversion to a derived type uses the conversion operator") {
+  // The source is not itself a TupleConvertingDerived, so treating it as one would be invalid.
+  TupleConvertingDerived target{};
+  TupleConvertingBase source{&target};
+  int number = 1;
+
+  auto refs = kj::refTuple(source, number);
+  const auto& constRefs = refs;
+  Tuple<TupleConvertingDerived&, int&> fromRefs = refs;
+  Tuple<const TupleConvertingDerived&, const int&> fromConstRefs = constRefs;
+  KJ_EXPECT(&get<0>(fromRefs) == &target);
+  KJ_EXPECT(&get<0>(fromConstRefs) == &target);
+
+  auto values = kj::tuple(TupleConvertingBase{&target}, 1);
+  Tuple<TupleConvertingDerived&, int> fromValues = values;
+  KJ_EXPECT(&get<0>(fromValues) == &target);
+
+  // Binding the element directly honors only implicit conversion operators on every supported
+  // compiler, so explicit conversions to a derived reference are rejected.
+  using ExplicitRefs = Tuple<TupleExplicitDerived&, int&>;
+  static_assert(!_::ConstructibleFrom<ExplicitRefs, Tuple<TupleExplicitBase&, int&>&>);
+}
+
 }  // namespace
 }  // namespace kj
