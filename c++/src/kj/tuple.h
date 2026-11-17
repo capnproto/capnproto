@@ -115,6 +115,23 @@ struct TupleElement {
   constexpr inline TupleElement(U&& value): value(pointerSafeSource<T>(kj::fwd<U>(value))) {}
 };
 
+#if __has_builtin(__reference_constructs_from_temporary)
+template <typename T, typename U>
+concept BindsTemporary = __reference_constructs_from_temporary(T, U&&);
+#else
+template <typename T, typename U>
+concept BindsTemporary = false;
+#endif
+// Concept: T is a reference that, initialized from U&&, would bind to a temporary. Compilers
+// without the builtin do not detect this case.
+
+template <typename T, typename U>
+concept TupleElementConstructibleFrom = PointerSafeConstructibleFrom<T, U> &&
+    !BindsTemporary<T, U>;
+// Concept: a TupleElement<index, T> can be constructed from U&&. This matches
+// PointerSafeConstructibleFrom, except that a reference element never binds to a temporary,
+// which would leave it dangling.
+
 template <typename T, typename U>
 constexpr T& bindTupleReference(U&& value) {
   T& result(kj::fwd<U>(value));
@@ -189,21 +206,35 @@ public:
   Tuple() = default;
 
   template <typename... U>
-    requires (sizeof...(T) == sizeof...(U) && (PointerSafeConstructibleFrom<T, U> && ...))
+    requires (sizeof...(T) == sizeof...(U) && (TupleElementConstructibleFrom<T, U> && ...))
   explicit(!(ImplicitlyConstructibleFrom<T, U> && ...))
   constexpr inline Tuple(Tuple<U...>&& other): impl(kj::mv(other)) {}
   template <typename... U>
-    requires (sizeof...(T) == sizeof...(U) && (PointerSafeConstructibleFrom<T, U&> && ...))
+    requires (sizeof...(T) == sizeof...(U) && (TupleElementConstructibleFrom<T, U&> && ...))
   explicit(!(ImplicitlyConstructibleFrom<T, U&> && ...))
   constexpr inline Tuple(Tuple<U...>& other): impl(other) {}
   template <typename... U>
-    requires (sizeof...(T) == sizeof...(U) && (PointerSafeConstructibleFrom<T, const U&> && ...))
+    requires (sizeof...(T) == sizeof...(U) && (TupleElementConstructibleFrom<T, const U&> && ...))
   explicit(!(ImplicitlyConstructibleFrom<T, const U&> && ...))
   constexpr inline Tuple(const Tuple<U...>& other): impl(other) {}
   // Convert each element directly when both tuples have the same size and every corresponding
   // element can be constructed. Implicit iff all element conversions are implicit.
   // Lvalues preserve mutable/const access; rvalues move stored values but not reference elements.
   // Borrowed results do not retain their owners.
+
+  template <typename... U>
+    requires (sizeof...(T) == sizeof...(U) && (BindsTemporary<T, U> || ...))
+  Tuple(Tuple<U...>&& other) = delete;
+  template <typename... U>
+    requires (sizeof...(T) == sizeof...(U) && (BindsTemporary<T, U&> || ...))
+  Tuple(Tuple<U...>& other) = delete;
+  template <typename... U>
+    requires (sizeof...(T) == sizeof...(U) && (BindsTemporary<T, const U&> || ...))
+  Tuple(const Tuple<U...>& other) = delete;
+  // A conversion that would bind a reference element to a temporary, such as a `const int&`
+  // element from a `long` element, would leave that element dangling. Deleting it, rather than
+  // only leaving it out of the constructors above, keeps overload resolution from falling back to
+  // the private constructor below.
 
 private:
   template <typename... Params>
