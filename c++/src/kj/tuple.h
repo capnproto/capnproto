@@ -115,17 +115,28 @@ struct TupleElement {
   constexpr inline TupleElement(U&& value): value(kj::fwd<U>(value)) {}
 };
 
+#if __has_builtin(__reference_constructs_from_temporary)
+template <typename T, typename U>
+concept BindsTemporary = __reference_constructs_from_temporary(T, U);
+#else
+template <typename T, typename U>
+concept BindsTemporary = false;
+#endif
+// Concept: T is a reference that, initialized from U&&, would bind to a temporary. Compilers
+// without the builtin do not detect this case.
+
 template <typename T, typename U>
 concept DerivesFromSource = __is_base_of(Decay<U>, Decay<T>) && !isSameType<Decay<U>, Decay<T>>();
 // Concept: Decay<T> is a class derived from Decay<U>. For an lvalue u of such a U,
 // static_cast<T&>(u) downcasts u itself, even if U has a conversion operator to T&.
 
 template <typename T, typename U>
-concept TupleElementConstructibleFrom = ConstructibleFrom<T, U> &&
+concept TupleElementConstructibleFrom = ConstructibleFrom<T, U> && !BindsTemporary<T, U> &&
     (!isReference<T>() || !DerivesFromSource<T, U> || ImplicitlyConstructibleFrom<T, U>);
 // Concept: a TupleElement<index, T> can be constructed from U&&. This matches ConstructibleFrom,
 // except that a reference element whose type derives from its source accepts only implicit
-// conversions; see TupleElement<index, T&>.
+// conversions (see TupleElement<index, T&>), and a reference element never binds to a temporary,
+// which would leave it dangling.
 
 template <uint index, typename T>
 struct TupleElement<index, T&> {
@@ -212,6 +223,20 @@ public:
   // element can be constructed. Implicit iff all element conversions are implicit.
   // Lvalues preserve mutable/const access; rvalues move stored values but not reference elements.
   // Borrowed results do not retain their owners.
+
+  template <typename... U>
+    requires (sizeof...(T) == sizeof...(U) && (BindsTemporary<T, U> || ...))
+  Tuple(Tuple<U...>&& other) = delete;
+  template <typename... U>
+    requires (sizeof...(T) == sizeof...(U) && (BindsTemporary<T, U&> || ...))
+  Tuple(Tuple<U...>& other) = delete;
+  template <typename... U>
+    requires (sizeof...(T) == sizeof...(U) && (BindsTemporary<T, const U&> || ...))
+  Tuple(const Tuple<U...>& other) = delete;
+  // A conversion that would bind a reference element to a temporary, such as a `const int&`
+  // element from a `long` element, would leave that element dangling. Deleting it, rather than
+  // only leaving it out of the constructors above, keeps overload resolution from falling back to
+  // the private constructor below.
 
 private:
   template <typename... Params>

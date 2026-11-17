@@ -329,5 +329,34 @@ KJ_TEST("Tuple reference conversion to a derived type uses the conversion operat
   static_assert(!_::ConstructibleFrom<ExplicitRefs, Tuple<TupleExplicitBase&, int&>&>);
 }
 
+KJ_TEST("Tuple conversions do not bind reference elements to temporaries") {
+  // Converting a long to an int creates a temporary, which would die at the end of the
+  // conversion and leave the const reference element dangling.
+  static_assert(!_::ConstructibleFrom<Tuple<const int&, int&>, Tuple<long&, int&>&>);
+  static_assert(!_::ConstructibleFrom<Tuple<const int&, int&>, const Tuple<long&, int&>&>);
+  static_assert(!_::ConstructibleFrom<Tuple<const int&, int>, Tuple<long, int>&&>);
+
+  struct Converts {
+    operator StringPtr() const { return "foo"; }
+  };
+  static_assert(!_::ConstructibleFrom<Tuple<const StringPtr&, int>, Tuple<Converts, int>&>);
+
+  // A by-value conversion to a derived type also creates a temporary, rather than a downcast.
+  struct Derived;
+  struct Base {
+    operator Derived() const;
+  };
+  struct Derived: Base {};
+  static_assert(!_::ConstructibleFrom<Tuple<const Derived&, int>, Tuple<Base, int>&>);
+
+  // Reference elements that bind to the source's own elements remain convertible.
+  int i = 123;
+  int j = 456;
+  auto refs = refTuple(i, j);
+  Tuple<const int&, int&> constRefs = refs;
+  KJ_EXPECT(&get<0>(constRefs) == &i);
+  KJ_EXPECT(&get<1>(constRefs) == &j);
+}
+
 }  // namespace
 }  // namespace kj
