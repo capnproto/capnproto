@@ -115,6 +115,15 @@ struct TupleElement {
   constexpr inline TupleElement(U&& value): value(pointerSafeSource<T>(kj::fwd<U>(value))) {}
 };
 
+template <typename T, typename U>
+constexpr T& bindTupleReference(U&& value) {
+  T& result(kj::fwd<U>(value));
+  return result;
+}
+// Direct-initializing a local reference supports explicit conversion operators even on compilers
+// that reject them in reference member initializers. static_cast<T&> could instead downcast the
+// source object itself when T derives from U, bypassing its conversion operator.
+
 template <uint index, typename T>
 struct TupleElement<index, T&> {
   // A tuple containing references can be constructed using refTuple().
@@ -122,10 +131,12 @@ struct TupleElement<index, T&> {
   T& value;
   template <typename U>
     requires (!isSameType<Decay<U>, TupleElement>() && ConstructibleFrom<T&, U>)
-  constexpr inline TupleElement(U&& value): value(static_cast<T&>(kj::fwd<U>(value))) {}
-  // GCC and MSVC reject explicit conversion operators when directly binding a reference in a
-  // template. static_cast<T&> performs the same direct-initialization; the downcasts it would
-  // additionally allow are excluded by ConstructibleFrom.
+#if defined(_MSC_VER) && !defined(__clang__)
+  // MSVC rejects explicit conversion operators in local reference initializers.
+  constexpr inline TupleElement(U&& value): value(kj::fwd<U>(value)) {}
+#else
+  constexpr inline TupleElement(U&& value): value(bindTupleReference<T>(kj::fwd<U>(value))) {}
+#endif
 };
 
 template <uint index, typename... T>

@@ -307,5 +307,82 @@ TEST(Tuple, RefTuple) {
   EXPECT_EQ(get<3>(t), "bar");
 }
 
+struct TupleConvertingDerived;
+struct TupleConvertingBase {
+  TupleConvertingDerived* referent;
+  operator TupleConvertingDerived&() const { return *referent; }
+};
+struct TupleConvertingDerived: TupleConvertingBase {
+  int value = 123;
+};
+
+struct TupleExplicitDerived;
+struct TupleExplicitBase {
+  TupleExplicitDerived* referent;
+  explicit operator TupleExplicitDerived&() const { return *referent; }
+};
+struct TupleExplicitDerived: TupleExplicitBase {};
+
+struct TupleOpaque;
+struct TupleOpaqueSource {
+  TupleOpaque& referent;
+  operator TupleOpaque&() const { return referent; }
+};
+struct TupleExplicitOpaqueSource {
+  TupleOpaque& referent;
+  explicit operator TupleOpaque&() const { return referent; }
+};
+
+void checkOpaqueTupleReferences(TupleOpaque& target) {
+  // These conversions must compile while TupleOpaque is still incomplete.
+  int number = 1;
+  TupleOpaqueSource source{target};
+  auto refs = refTuple(source, number);
+  Tuple<TupleOpaque&, int&> borrowed = refs;
+  Tuple<const TupleOpaque&, const int&> constBorrowed = refs;
+  KJ_EXPECT(&get<0>(borrowed) == &target);
+  KJ_EXPECT(&get<0>(constBorrowed) == &target);
+
+  TupleExplicitOpaqueSource explicitSource{target};
+  auto explicitRefs = refTuple(explicitSource, number);
+  Tuple<TupleOpaque&, int&> explicitBorrowed(explicitRefs);
+  Tuple<const TupleOpaque&, const int&> explicitConstBorrowed(explicitRefs);
+  KJ_EXPECT(&get<0>(explicitBorrowed) == &target);
+  KJ_EXPECT(&get<0>(explicitConstBorrowed) == &target);
+}
+
+struct TupleOpaque {};
+
+KJ_TEST("Tuple reference conversions do not need complete referent types") {
+  TupleOpaque target;
+  checkOpaqueTupleReferences(target);
+}
+
+KJ_TEST("Tuple reference conversion to a derived type uses the conversion operator") {
+  // The source is not itself a TupleConvertingDerived, so treating it as one would be invalid.
+  TupleConvertingDerived target{};
+  TupleConvertingBase source{&target};
+  int number = 1;
+
+  auto refs = kj::refTuple(source, number);
+  const auto& constRefs = refs;
+  Tuple<TupleConvertingDerived&, int&> fromRefs = refs;
+  Tuple<const TupleConvertingDerived&, const int&> fromConstRefs = constRefs;
+  KJ_EXPECT(&get<0>(fromRefs) == &target);
+  KJ_EXPECT(&get<0>(fromConstRefs) == &target);
+
+  auto values = kj::tuple(TupleConvertingBase{&target}, 1);
+  Tuple<TupleConvertingDerived&, int> fromValues = values;
+  KJ_EXPECT(&get<0>(fromValues) == &target);
+
+  TupleExplicitDerived explicitTarget{};
+  TupleExplicitBase explicitSource{&explicitTarget};
+  auto explicitRefs = kj::refTuple(explicitSource, number);
+  Tuple<TupleExplicitDerived&, int&> fromExplicitRefs(explicitRefs);
+  Tuple<const TupleExplicitDerived&, const int&> constFromExplicitRefs(explicitRefs);
+  KJ_EXPECT(&get<0>(fromExplicitRefs) == &explicitTarget);
+  KJ_EXPECT(&get<0>(constFromExplicitRefs) == &explicitTarget);
+}
+
 }  // namespace
 }  // namespace kj
