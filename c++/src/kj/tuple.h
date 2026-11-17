@@ -111,8 +111,8 @@ struct TupleElement {
   T value;
   TupleElement() = default;
   template <typename U>
-    requires (!isSameType<Decay<U>, TupleElement>() && ConstructibleFrom<T, U>)
-  constexpr inline TupleElement(U&& value): value(kj::fwd<U>(value)) {}
+    requires (!isSameType<Decay<U>, TupleElement>() && PointerSafeConstructibleFrom<T, U>)
+  constexpr inline TupleElement(U&& value): value(pointerSafeSource<T>(kj::fwd<U>(value))) {}
 };
 
 template <uint index, typename T>
@@ -178,15 +178,15 @@ public:
   Tuple() = default;
 
   template <typename... U>
-    requires (sizeof...(T) == sizeof...(U) && (ConstructibleFrom<T, U> && ...))
+    requires (sizeof...(T) == sizeof...(U) && (PointerSafeConstructibleFrom<T, U> && ...))
   explicit(!(ImplicitlyConstructibleFrom<T, U> && ...))
   constexpr inline Tuple(Tuple<U...>&& other): impl(kj::mv(other)) {}
   template <typename... U>
-    requires (sizeof...(T) == sizeof...(U) && (ConstructibleFrom<T, U&> && ...))
+    requires (sizeof...(T) == sizeof...(U) && (PointerSafeConstructibleFrom<T, U&> && ...))
   explicit(!(ImplicitlyConstructibleFrom<T, U&> && ...))
   constexpr inline Tuple(Tuple<U...>& other): impl(other) {}
   template <typename... U>
-    requires (sizeof...(T) == sizeof...(U) && (ConstructibleFrom<T, const U&> && ...))
+    requires (sizeof...(T) == sizeof...(U) && (PointerSafeConstructibleFrom<T, const U&> && ...))
   explicit(!(ImplicitlyConstructibleFrom<T, const U&> && ...))
   constexpr inline Tuple(const Tuple<U...>& other): impl(other) {}
   // Convert each element directly when both tuples have the same size and every corresponding

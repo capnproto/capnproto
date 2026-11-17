@@ -131,6 +131,23 @@ struct TupleImmovableConstructor {
   int value;
 };
 
+struct TupleCopyingStringOwner {
+  operator String() const;
+};
+struct TupleExplicitViewOwner {
+  explicit operator ArrayPtr<const int>() const { return kj::arrayPtr(value); }
+  int value = 42;
+};
+
+// Direct-initializing a StringPtr from TupleCopyingStringOwner constructs it from a temporary
+// String, so the element would point at a destroyed object. Explicit conversion operators that
+// return the pointer type remain available.
+static_assert(!_::ConstructibleFrom<Tuple<StringPtr, int>, Tuple<TupleCopyingStringOwner, int>&>);
+static_assert(!_::ConstructibleFrom<Tuple<StringPtr, int>, Tuple<TupleCopyingStringOwner, int>>);
+static_assert(_::ConstructibleFrom<Tuple<ArrayPtr<const int>, int>,
+                                   Tuple<TupleExplicitViewOwner, int>&>);
+static_assert(!canConvert<Tuple<TupleExplicitViewOwner, int>&, Tuple<ArrayPtr<const int>, int>>());
+
 static_assert(canConvert<Tuple<String, Array<int>>&, Tuple<StringPtr, ArrayPtr<int>>>());
 static_assert(canConvert<const Tuple<String, Array<int>>&,
                         Tuple<StringPtr, ArrayPtr<const int>>>());

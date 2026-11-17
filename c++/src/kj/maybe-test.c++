@@ -67,6 +67,33 @@ static_assert(_::AssignableFrom<Maybe<long>, Maybe<int>>);
 static_assert(_::AssignableFrom<Maybe<long>, const Maybe<int>&>);
 static_assert(_::AssignableFrom<Maybe<long>, Maybe<int&>>);
 
+struct CopyingStringOwner {
+  operator String() const;
+};
+struct ExplicitViewOwner {
+  explicit operator ArrayPtr<const int>() const noexcept;
+};
+struct ThrowingExplicitViewOwner {
+  explicit operator ArrayPtr<const int>() &&;
+};
+
+// Direct-initializing a StringPtr from CopyingStringOwner constructs it from a temporary String,
+// so the contained pointer would refer to a destroyed object.
+static_assert(!_::ConstructibleFrom<Maybe<StringPtr>, Maybe<CopyingStringOwner>&>);
+static_assert(!_::ConstructibleFrom<Maybe<StringPtr>, const Maybe<CopyingStringOwner>&>);
+static_assert(!_::ConstructibleFrom<Maybe<StringPtr>, Maybe<CopyingStringOwner>>);
+static_assert(!_::ConstructibleFrom<Maybe<StringPtr>, Maybe<CopyingStringOwner&>>);
+// Explicit conversion operators that return the pointer type remain available, and noexcept
+// follows the conversion that is actually performed.
+static_assert(_::ConstructibleFrom<Maybe<ArrayPtr<const int>>, Maybe<ExplicitViewOwner>&>);
+static_assert(!canConvert<Maybe<ExplicitViewOwner>&, Maybe<ArrayPtr<const int>>>());
+static_assert(_::NoThrowConstructibleFrom<
+    Maybe<ArrayPtr<const int>>, Maybe<ExplicitViewOwner>>);
+static_assert(_::NoThrowConstructibleFrom<
+    Maybe<ArrayPtr<const int>>, Maybe<ArrayPtr<int>>>);
+static_assert(!_::NoThrowConstructibleFrom<
+    Maybe<ArrayPtr<const int>>, Maybe<ThrowingExplicitViewOwner>>);
+
 struct Immovable {
   Immovable() = default;
   KJ_DISALLOW_COPY_AND_MOVE(Immovable);
