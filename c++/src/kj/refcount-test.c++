@@ -60,6 +60,9 @@ struct ExplicitViewOwner {
   bool& destroyed;
   int value = 42;
 };
+struct CopyingStringOwner {
+  operator String() const;
+};
 }  // namespace _
 
 template <>
@@ -131,6 +134,11 @@ static_assert(!canConvert<Rc<ExplicitViewOwner>, Rc<ArrayPtr<const int>>>());
 static_assert(!canConvert<Arc<ExplicitViewOwner>, Arc<ArrayPtr<const int>>>());
 static_assert(!canConvert<Rc<int>, Rc<long>>());
 static_assert(!canConvert<Arc<int>, Arc<long>>());
+
+// Direct-initializing a StringPtr from CopyingStringOwner constructs it from a temporary String,
+// which nothing keeps alive, so neither conversion is available even explicitly.
+static_assert(!_::ConstructibleFrom<Rc<StringPtr>, Rc<_::CopyingStringOwner>>);
+static_assert(!_::ConstructibleFrom<Arc<StringPtr>, Arc<_::CopyingStringOwner>>);
 
 // Read-only pointer types are exposed as const and cannot be re-pointed through *rc. Mutable ones
 // stay non-const so that their non-const accessors (e.g. builder setters) remain usable.

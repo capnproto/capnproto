@@ -268,6 +268,23 @@ constexpr bool canConvertRc() {
   }
 }
 
+template <typename T, typename U>
+concept ProjectsToPointer = ImplicitlyConstructibleFrom<T, U> ||
+    requires(U&& u) { { kj::fwd<U>(u).operator T() } -> SameAs<T>; };
+// Concept: U&& converts to the pointer type T either implicitly or through an explicit conversion
+// operator of U. Other direct-initializations may convert U to an intermediate temporary and
+// construct T from that, leaving T pointing at an object the owner does not keep alive.
+
+template <typename T, typename U>
+inline T projectToPointer(U&& u) {
+  // Performs exactly the conversion that ProjectsToPointer<T, U> accepted.
+  if constexpr (ImplicitlyConstructibleFrom<T, U>) {
+    return kj::fwd<U>(u);
+  } else {
+    return kj::fwd<U>(u).operator T();
+  }
+}
+
 template <typename T, typename Owner, bool>
 class HandleImpl {
   // Shared implementation of Rc<T> and Arc<T>; see the RcImpl and ArcImpl aliases below. A handle
@@ -441,8 +458,10 @@ class Rc {
   //
   //     auto bytes = owner.addRef().project([](auto& array) { return array.asPtr(); });
   //
-  // If T& can construct a pointer type U, Rc<T> converts to Rc<U> by projection.
-  // Conversions are implicit iff the underlying conversion is implicit.
+  // If T& converts to a pointer type U, implicitly or through an explicit conversion operator of T,
+  // Rc<T> converts to Rc<U> by projection. Conversions are implicit iff the underlying conversion
+  // is implicit. Other explicit constructions of U are excluded because they may construct U from
+  // a temporary that the owner does not keep alive.
   // The conversion consumes the Rc, preserves null handles, and keeps the original owner alive
   // without an allocation. The owner must cover the pointer's target and context, as with project():
   //
@@ -490,11 +509,13 @@ public:
 
   template <typename U>
     requires (!isPointerType<U>() && isPointerType<T>() &&
-        _::ConstructibleFrom<RemoveConst<T>, U&>)
+        _::ProjectsToPointer<RemoveConst<T>, U&>)
   explicit(!_::ImplicitlyConstructibleFrom<RemoveConst<T>, U&>)
   inline Rc(Rc<U>&& other) {
     if (other == nullptr) return;
-    auto projected = kj::mv(other).project([](U& value) { return RemoveConst<T>(value); });
+    auto projected = kj::mv(other).project([](U& value) {
+      return _::projectToPointer<RemoveConst<T>>(value);
+    });
     impl = Impl(kj::mv(projected.impl));
   }
 
@@ -1102,9 +1123,10 @@ class Arc {
   // exposes only `const` members of T and thus is closer to `kj::Rc<const T>`.
   //
   // Pointer types are stored inline as with Rc, but must be read-only: project mutable
-  // builders/ArrayPtrs to their reader/const-element types first. If const T& can construct a
-  // read-only pointer type U, Arc<T> converts to Arc<U> by projection, implicitly iff the underlying
-  // conversion is implicit, preserving null handles and ownership without an allocation.
+  // builders/ArrayPtrs to their reader/const-element types first. If const T& converts to a
+  // read-only pointer type U, as for Rc, Arc<T> converts to Arc<U> by projection, implicitly iff
+  // the underlying conversion is implicit, preserving null handles and ownership without an
+  // allocation.
   // As with project(), the owner must cover the pointer's target and context. As with ordinary Arc,
   // the backing context and its destruction must obey their own threading contracts.
   static_assert(!isPointerType<T>() || PointerTraits<RemoveConst<T>>::isReadOnly,
@@ -1123,11 +1145,13 @@ public:
 
   template <typename U>
     requires (!isPointerType<U>() && isPointerType<T>() &&
-        _::ConstructibleFrom<RemoveConst<T>, const U&>)
+        _::ProjectsToPointer<RemoveConst<T>, const U&>)
   explicit(!_::ImplicitlyConstructibleFrom<RemoveConst<T>, const U&>)
   inline Arc(Arc<U>&& other) {
     if (other == nullptr) return;
-    auto projected = kj::mv(other).project([](const U& value) { return RemoveConst<T>(value); });
+    auto projected = kj::mv(other).project([](const U& value) {
+      return _::projectToPointer<RemoveConst<T>>(value);
+    });
     impl = Impl(kj::mv(projected.impl));
   }
 
