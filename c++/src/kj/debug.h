@@ -184,13 +184,13 @@ namespace kj {
 
 #define KJ_REQUIRE(cond, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
-    ::kj::_::Debug::fail(KJ_DEBUG_SITE(#cond, "_kjCondition," #__VA_ARGS__), \
-        ::kj::Exception::Type::FAILED, _kjCondition, __VA_ARGS__)
+    ::kj::_::Debug::fail(KJ_DEBUG_SITE(#cond, "" #__VA_ARGS__), \
+        ::kj::_::Debug::ConditionFailed(), _kjCondition, __VA_ARGS__)
 
 #define KJ_REQUIRE_AT(cond, location, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
-    ::kj::_::Debug::fail(KJ_DEBUG_SITE_AT(location, #cond, "_kjCondition," #__VA_ARGS__), \
-        ::kj::Exception::Type::FAILED, _kjCondition, __VA_ARGS__)
+    ::kj::_::Debug::fail(KJ_DEBUG_SITE_AT(location, #cond, "" #__VA_ARGS__), \
+        ::kj::_::Debug::ConditionFailed(), _kjCondition, __VA_ARGS__)
 
 #define KJ_FAIL_REQUIRE(...) \
   KJ_FAIL_NORETURN_ ::kj::_::Debug::fail(KJ_DEBUG_SITE("", "" #__VA_ARGS__), \
@@ -238,8 +238,8 @@ namespace kj {
 
 #define KJ_DTOR_REQUIRE(cond, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
-    ::kj::_::Debug::failUnlessUnwinding(KJ_DEBUG_SITE(#cond, "_kjCondition," #__VA_ARGS__), \
-        ::kj::Exception::Type::FAILED, _kjCondition, __VA_ARGS__)
+    ::kj::_::Debug::failUnlessUnwinding(KJ_DEBUG_SITE(#cond, "" #__VA_ARGS__), \
+        ::kj::_::Debug::ConditionFailed(), _kjCondition, __VA_ARGS__)
 
 #define KJ_DTOR_FAIL_REQUIRE(...) \
   ::kj::_::Debug::failUnlessUnwinding(KJ_DEBUG_SITE("", "" #__VA_ARGS__), \
@@ -323,13 +323,13 @@ namespace kj {
 
 #define KJ_REQUIRE(cond, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
-    ::kj::_::Debug::fail(KJ_DEBUG_SITE(#cond, "_kjCondition," #__VA_ARGS__), \
-        ::kj::Exception::Type::FAILED, _kjCondition, ##__VA_ARGS__)
+    ::kj::_::Debug::fail(KJ_DEBUG_SITE(#cond, #__VA_ARGS__), \
+        ::kj::_::Debug::ConditionFailed(), _kjCondition, ##__VA_ARGS__)
 
 #define KJ_REQUIRE_AT(cond, location, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
-    ::kj::_::Debug::fail(KJ_DEBUG_SITE_AT(location, #cond, "_kjCondition," #__VA_ARGS__), \
-        ::kj::Exception::Type::FAILED, _kjCondition, ##__VA_ARGS__)
+    ::kj::_::Debug::fail(KJ_DEBUG_SITE_AT(location, #cond, #__VA_ARGS__), \
+        ::kj::_::Debug::ConditionFailed(), _kjCondition, ##__VA_ARGS__)
 
 #define KJ_FAIL_REQUIRE(...) \
   KJ_FAIL_NORETURN_ ::kj::_::Debug::fail(KJ_DEBUG_SITE("", #__VA_ARGS__), \
@@ -382,8 +382,8 @@ namespace kj {
 
 #define KJ_DTOR_REQUIRE(cond, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
-    ::kj::_::Debug::failUnlessUnwinding(KJ_DEBUG_SITE(#cond, "_kjCondition," #__VA_ARGS__), \
-        ::kj::Exception::Type::FAILED, _kjCondition, ##__VA_ARGS__)
+    ::kj::_::Debug::failUnlessUnwinding(KJ_DEBUG_SITE(#cond, #__VA_ARGS__), \
+        ::kj::_::Debug::ConditionFailed(), _kjCondition, ##__VA_ARGS__)
 // Like KJ_REQUIRE, but for destructors: if the check fails while another exception is unwinding
 // the stack, the failure is logged and execution continues with the next statement, instead of
 // throwing (which would terminate the process). See `kj::throwExceptionUnlessUnwinding()`.
@@ -637,6 +637,12 @@ using DebugParam = typename DebugParam_<T>::Type;
 
 #endif  // KJ_DEBUG_FAIL_BY_VALUE
 
+template <typename T>
+struct DebugIsComparison_ { static constexpr bool value = false; };
+// Whether a check's evaluated condition is a comparison (a DebugComparison, or what DebugParam
+// passes one as), whose operands are shown when the check fails. Specialized next to those types,
+// below.
+
 class Debug {
 public:
   Debug() = delete;
@@ -662,6 +668,18 @@ public:
   template <typename... Params>
   static void log(const char* file, int line, LogSeverity severity, const char* macroArgs,
                   Params&&... params);
+
+  struct ConditionFailed {};
+  // The code that the check macros pass to fail() when their condition is false. The exception's
+  // type is FAILED, and the first param is the evaluated condition. If it's a comparison (see
+  // DebugIsComparison_), its operands are shown after the condition's text, e.g.
+  // "expected a == b [1 == 2]". Anything else, e.g. a DebugExpression or the bool that `&&`
+  // returns, isn't shown.
+
+  template <typename S, typename... Params>
+  static void logFailedCheck(LogSeverity severity, S site, Params&&... params);
+  // Logs a failed check, described like fail(site, ConditionFailed(), params...) would but
+  // prefixed with "failed: ". Used by KJ_EXPECT, whose failure doesn't throw.
 
   struct Site {
     // Where a check is, its condition (null if none) and the names of the macro's arguments.
@@ -819,9 +837,18 @@ private:
 
   template <typename S, typename Code, typename... Params>
   static Exception makeFailureWithParams(S site, Code code, Params&&... params);
+  template <typename S, typename Condition, typename... Params>
+  static Exception makeFailureWithParams(S site, ConditionFailed code, Condition&& condition,
+                                         Params&&... params);
   // Builds the exception describing a failed check, stringifying `params`.
 
+  static void logFailure(LogSeverity severity, const Exception& exception);
+
   static Exception makeFailure(const Site& site, Exception::Type type, ArrayPtr<const Arg> args);
+  static Exception makeFailure(const Site& site, Exception::Type type, const Arg& comparison,
+                               ArrayPtr<const Arg> args);
+  static Exception makeFailure(PackedSite site, Exception::Type type, const Arg& comparison,
+                               ArrayPtr<const Arg> args);
   static Exception makeFailure(const Site& site, int osErrorNumber, ArrayPtr<const Arg> args);
   static Exception makeFailure(PackedSite site, Exception::Type type, ArrayPtr<const Arg> args);
   static Exception makeFailure(PackedSite site, int osErrorNumber, ArrayPtr<const Arg> args);
@@ -846,6 +873,13 @@ inline void Debug::log<>(const char* file, int line, LogSeverity severity, const
   logInternal(file, line, severity, macroArgs, nullptr);
 }
 
+template <typename S, typename... Params>
+void Debug::logFailedCheck(LogSeverity severity, S site, Params&&... params) {
+  if (shouldLog(severity)) {
+    logFailure(severity, makeFailureWithParams(site, ConditionFailed(), params...));
+  }
+}
+
 template <typename S, typename Code, typename... Params>
 Exception Debug::makeFailureWithParams(S site, Code code, Params&&... params) {
   if constexpr (sizeof...(Params) == 0) {
@@ -853,6 +887,18 @@ Exception Debug::makeFailureWithParams(S site, Code code, Params&&... params) {
   } else {
     const Arg args[sizeof...(Params)] = { Arg::of(params)... };
     return makeFailure(site, code, arrayPtr(args, sizeof...(Params)));
+  }
+}
+
+template <typename S, typename Condition, typename... Params>
+Exception Debug::makeFailureWithParams(S site, ConditionFailed code, Condition&& condition,
+                                       Params&&... params) {
+  if constexpr (DebugIsComparison_<Decay<Condition>>::value) {
+    const Arg args[sizeof...(Params) + 1] = { Arg::of(condition), Arg::of(params)... };
+    return makeFailure(site, Exception::Type::FAILED, args[0],
+                       arrayPtr(args + 1, sizeof...(Params)));
+  } else {
+    return makeFailureWithParams(site, Exception::Type::FAILED, params...);
   }
 }
 
@@ -1034,6 +1080,9 @@ String KJ_STRINGIFY(DebugComparison<Left, Right, Op>& cmp) {
   return stringifyDebugComparison(debugOperand(&cmp.left), Op::op(), debugOperand(&cmp.right));
 }
 
+template <typename Left, typename Right, typename Op>
+struct DebugIsComparison_<DebugComparison<Left, Right, Op>> { static constexpr bool value = true; };
+
 #if KJ_DEBUG_FAIL_BY_VALUE
 
 template <typename T, bool = DebugByValue_<T>::value>
@@ -1069,6 +1118,11 @@ template <typename Left, typename Right, typename Op>
 String KJ_STRINGIFY(DebugComparisonOperands<Left, Right, Op>& cmp) {
   return stringifyDebugComparison(debugOperand(&cmp.left), Op::op(), debugOperand(&cmp.right));
 }
+
+template <typename Left, typename Right, typename Op>
+struct DebugIsComparison_<DebugComparisonOperands<Left, Right, Op>> {
+  static constexpr bool value = true;
+};
 
 template <typename Left, typename Right, typename Op>
 struct DebugParam_<DebugComparison<Left, Right, Op>&> {
@@ -1119,24 +1173,15 @@ struct DebugExpression {
   }
 };
 
-template <typename T>
-StringPtr KJ_STRINGIFY(const DebugExpression<T>& exp) {
-  // Hack: This will only ever be called in cases where the expression's truthiness was asserted
-  //   directly, and was determined to be falsy.
-  return "false"_kj;
-}
-
 #if KJ_DEBUG_FAIL_BY_VALUE
 
 struct DebugFalse {
-  // A failed DebugExpression, as passed to Debug::failImpl(). Its stringification doesn't depend
-  // on the value, so it's empty and takes no register or stack space.
+  // A failed DebugExpression, as passed to Debug::failImpl(). Its value isn't shown, so it's
+  // empty and takes no register or stack space.
 
   template <typename T>
   DebugFalse(const DebugExpression<T>&) {}
 };
-
-inline StringPtr KJ_STRINGIFY(DebugFalse) { return "false"_kj; }
 
 template <typename T>
 struct DebugParam_<DebugExpression<T>&> { typedef DebugFalse Type; };

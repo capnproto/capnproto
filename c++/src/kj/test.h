@@ -90,8 +90,8 @@ private:
   do { \
     [&](auto&& _kjCondition) { \
       if (!_kjCondition) { \
-        KJ_INDIRECT_EXPAND(KJ_FAIL_EXPECT, \
-            ("failed: expected " #cond , _kjCondition, __VA_ARGS__)) \
+        ::kj::_::Debug::logFailedCheck(::kj::LogSeverity::ERROR, \
+            KJ_DEBUG_SITE(#cond, "" #__VA_ARGS__), _kjCondition, __VA_ARGS__); \
       } \
     }(::kj::_::MAGIC_ASSERT << cond); \
   } while (false);
@@ -102,7 +102,8 @@ private:
   do { \
     [&](auto&& _kjCondition) { \
       if (!_kjCondition) { \
-        KJ_FAIL_EXPECT("failed: expected " #cond, _kjCondition, ##__VA_ARGS__) \
+        ::kj::_::Debug::logFailedCheck(::kj::LogSeverity::ERROR, \
+            KJ_DEBUG_SITE(#cond, #__VA_ARGS__), _kjCondition, ##__VA_ARGS__); \
       } \
     }(::kj::_::MAGIC_ASSERT << cond); \
   } while (false);

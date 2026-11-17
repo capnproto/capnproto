@@ -554,6 +554,27 @@ KJ_TEST("magic assert stringification") {
 
     KJ_EXPECT(exception.getDescription() == "expected foo & 2");
   }
+
+  // A condition using `&&` evaluates to a plain bool, which isn't shown, unlike a comparison.
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      int foo = 123;
+      KJ_ASSERT(foo == 123 && foo == 456, "message", foo);
+    }));
+
+    KJ_EXPECT(exception.getDescription() ==
+        "expected foo == 123 && foo == 456; message; foo = 123");
+  }
+
+  // Nor is a condition without a comparison, even if it's also passed as an argument.
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      bool foo = false;
+      KJ_ASSERT(foo, foo);
+    }));
+
+    KJ_EXPECT(exception.getDescription() == "expected foo; foo = false");
+  }
 }
 
 KJ_TEST("assertion diagnostics are captured before argument temporaries are destroyed") {

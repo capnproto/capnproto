@@ -190,7 +190,10 @@ enum DescriptionStyle {
 
 static String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNumber,
                                   const char* sysErrorString, const char* macroArgs,
-                                  ArrayPtr<String> argValues) {
+                                  ArrayPtr<String> argValues, StringPtr comparison = nullptr) {
+  // `comparison` is the stringified comparison of a failed ASSERTION, e.g. "1 == 2", shown in
+  // brackets after its code. Empty if none.
+
   KJ_STACK_ARRAY(ArrayPtr<const char>, argNames, argValues.size(), 8, 64);
 
   if (argValues.size() > 0) {
@@ -293,6 +296,9 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
         break;
       case ASSERTION:
         totalSize += expected.size() + codeArray.size();
+        if (comparison.size() > 0) {
+          totalSize += openBracket.size() + comparison.size() + closeBracket.size();
+        }
         break;
       case SYSCALL:
         totalSize += codeArray.size() + colon.size() + sysErrorArray.size();
@@ -304,16 +310,6 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
     };
 
     for (size_t i = 0; i < argValues.size(); i++) {
-      if (argNames[i] == "_kjCondition"_kj) {
-        // Special handling: don't output delimiter, we want to append this to the previous item,
-        // in brackets. Also, if it's just "[false]" (meaning we didn't manage to extract a
-        // comparison), don't add it at all.
-        if (argValues[i] != "false") {
-          totalSize += openBracket.size() + argValues[i].size() + closeBracket.size();
-        }
-        continue;
-      }
-
       if (i > 0 || style != LOG) {
         totalSize += delim.size();
       }
@@ -331,6 +327,9 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
         break;
       case ASSERTION:
         pos = _::fill(pos, expected, codeArray);
+        if (comparison.size() > 0) {
+          pos = _::fill(pos, openBracket, comparison, closeBracket);
+        }
         break;
       case SYSCALL:
         pos = _::fill(pos, codeArray, colon, sysErrorArray);
@@ -338,16 +337,6 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
     }
 
     for (size_t i = 0; i < argValues.size(); i++) {
-      if (argNames[i] == "_kjCondition"_kj) {
-        // Special handling: don't output delimiter, we want to append this to the previous item,
-        // in brackets. Also, if it's just "[false]" (meaning we didn't manage to extract a
-        // comparison), don't add it at all.
-        if (argValues[i] != "false") {
-          pos = _::fill(pos, openBracket, argValues[i], closeBracket);
-        }
-        continue;
-      }
-
       if (i > 0 || style != LOG) {
         pos = _::fill(pos, delim);
       }
@@ -396,6 +385,22 @@ bool isLoneLiteral(const char* macroArgs, ArrayPtr<const Debug::Arg> args) {
   return *macroArgs == '\"';
 }
 
+Exception makeAssertionFailure(const Debug::Site& site, Exception::Type type,
+                               StringPtr comparison, ArrayPtr<const Debug::Arg> args) {
+  KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
+  stringifyArgs(args, argValues);
+  return Exception(type, site.file, site.line,
+      makeDescriptionImpl(ASSERTION, site.condition, 0, nullptr, site.macroArgs, argValues,
+                          comparison));
+}
+
+Debug::Site unpackCheck(PackedSite packed) {
+  // Like unpack(), but with a null condition if it's empty, as ASSERTION descriptions expect.
+  Debug::Site site = unpack(packed);
+  if (*site.condition == '\0') site.condition = nullptr;
+  return site;
+}
+
 }  // namespace
 
 void Debug::logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
@@ -413,10 +418,22 @@ void Debug::logInternal(const char* file, int line, LogSeverity severity, const 
 }
 
 Exception Debug::makeFailure(const Site& site, Exception::Type type, ArrayPtr<const Arg> args) {
-  KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
-  stringifyArgs(args, argValues);
-  return Exception(type, site.file, site.line,
-      makeDescriptionImpl(ASSERTION, site.condition, 0, nullptr, site.macroArgs, argValues));
+  return makeAssertionFailure(site, type, nullptr, args);
+}
+
+Exception Debug::makeFailure(const Site& site, Exception::Type type, const Arg& comparison,
+                             ArrayPtr<const Arg> args) {
+  return makeAssertionFailure(site, type, comparison.stringify(comparison.value), args);
+}
+
+Exception Debug::makeFailure(PackedSite site, Exception::Type type, const Arg& comparison,
+                             ArrayPtr<const Arg> args) {
+  return makeFailure(unpackCheck(site), type, comparison, args);
+}
+
+void Debug::logFailure(LogSeverity severity, const Exception& exception) {
+  getExceptionCallback().logMessage(severity, exception.getFile(), exception.getLine(), 0,
+      str("failed: ", exception.getDescription()));
 }
 
 Exception Debug::makeFailure(const Site& site, int osErrorNumber, ArrayPtr<const Arg> args) {
@@ -427,10 +444,8 @@ Exception Debug::makeFailure(const Site& site, int osErrorNumber, ArrayPtr<const
                           argValues));
 }
 
-Exception Debug::makeFailure(PackedSite packed, Exception::Type type, ArrayPtr<const Arg> args) {
-  Site site = unpack(packed);
-  if (*site.condition == '\0') site.condition = nullptr;
-  return makeFailure(site, type, args);
+Exception Debug::makeFailure(PackedSite site, Exception::Type type, ArrayPtr<const Arg> args) {
+  return makeFailure(unpackCheck(site), type, args);
 }
 
 Exception Debug::makeFailure(PackedSite site, int osErrorNumber, ArrayPtr<const Arg> args) {
