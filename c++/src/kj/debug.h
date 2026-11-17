@@ -147,16 +147,6 @@ namespace kj {
 #define KJ_FAIL_NORETURN_
 #endif
 
-#define KJ_DEBUG_SITE(condition, macroArgs) \
-  (::kj::_::Debug::PackedSite { \
-    __FILE__ "\0" KJ_DEBUG_STRINGIFY(__LINE__) "\0" condition "\0" macroArgs })
-// The Debug::Site of a check, packed into one string literal, so that the failure path only passes
-// a pointer to it, and the program doesn't need to relocate it when it's loaded. `condition` must
-// be a string literal, empty if there is none.
-
-#define KJ_DEBUG_STRINGIFY(x) KJ_DEBUG_STRINGIFY_(x)
-#define KJ_DEBUG_STRINGIFY_(x) #x
-
 #define KJ_DEBUG_SITE_AT(location, condition, macroArgs) \
   (::kj::_::Debug::Site { (location).fileName, static_cast<int>((location).lineNumber), \
                           condition, macroArgs })
@@ -679,15 +669,6 @@ public:
     int line;
     const char* condition;
     const char* macroArgs;
-  };
-
-  struct PackedSite {
-    // A Site of constants, packed into one string literal by KJ_DEBUG_SITE: the file, line,
-    // condition (empty if none) and macro arguments, each followed by a NUL. The failure path
-    // passes one pointer rather than four arguments, and since the literal contains no pointers,
-    // it doesn't need to be relocated when the program is loaded, unlike a Site in static storage.
-    // All but the _AT macros use one.
-    const char* text;
   };
 
   struct Arg {

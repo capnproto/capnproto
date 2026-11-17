@@ -371,7 +371,7 @@ void stringifyArgs(ArrayPtr<const Debug::Arg> args, ArrayPtr<String> argValues) 
   }
 }
 
-Debug::Site unpack(Debug::PackedSite site) {
+Debug::Site unpack(PackedSite site) {
   // Splits a KJ_DEBUG_SITE literal into its fields.
   auto next = [](const char* field) { return field + strlen(field) + 1; };
   const char* file = site.text;

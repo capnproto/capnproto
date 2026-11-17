@@ -1302,5 +1302,32 @@ KJ_TEST("kj::cp() invokes implicit constructor") {
   }
 }
 
+KJ_TEST("KJ_IREQUIRE failure") {
+  auto check = [](auto&& func, int line, kj::StringPtr description) {
+    KJ_IF_SOME(e, kj::runCatchingExceptions(func)) {
+      KJ_EXPECT(e.getType() == kj::Exception::Type::FAILED);
+      KJ_EXPECT(kj::StringPtr(e.getFile()).endsWith("kj/common-test.c++"), e.getFile());
+      KJ_EXPECT(e.getLine() == line, e.getLine(), line);
+      KJ_EXPECT(e.getDescription() == description, e.getDescription(), description);
+    } else {
+      KJ_FAIL_EXPECT("didn't throw", line);
+    }
+  };
+
+  size_t a = 1, b = 2, c = 3;
+  bool no = false;
+  check([&]() { KJ_IREQUIRE(no); }, __LINE__, "expected no");
+  check([&]() { KJ_IREQUIRE(a == 2, "a must be two"); }, __LINE__,
+        "expected a == 2; a must be two");
+  check([&]() { KJ_IREQUIRE(a > b, "out of order", a); }, __LINE__,
+        "expected a > b; out of order; a = 1");
+  check([&]() { KJ_IREQUIRE(a > b, "out of order", a, b); }, __LINE__,
+        "expected a > b; out of order; a = 1; b = 2");
+  check([&]() { KJ_IREQUIRE(a + b != c, "sum", a, b, c); }, __LINE__,
+        "expected a + b != c; sum; a = 1; b = 2; c = 3");
+  check([&]() { KJ_IREQUIRE(strcmp("a\"b", "c") == 0, "quoted \"x\""); }, __LINE__,
+        "expected strcmp(\"a\\\"b\", \"c\") == 0; quoted \"x\"");
+}
+
 }  // namespace
 }  // namespace kj
