@@ -253,7 +253,8 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
     }
   }
 
-  if (style == ASSERTION && code == nullptr) {
+  if (style == ASSERTION && *code == '\0') {
+    // A check without a condition, e.g. KJ_FAIL_ASSERT(), is described by its arguments alone.
     style = LOG;
   }
 
@@ -394,13 +395,6 @@ Exception makeAssertionFailure(const Debug::Site& site, Exception::Type type,
                           comparison));
 }
 
-Debug::Site unpackCheck(PackedSite packed) {
-  // Like unpack(), but with a null condition if it's empty, as ASSERTION descriptions expect.
-  Debug::Site site = unpack(packed);
-  if (*site.condition == '\0') site.condition = nullptr;
-  return site;
-}
-
 }  // namespace
 
 void Debug::logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
@@ -428,7 +422,7 @@ Exception Debug::makeFailure(const Site& site, Exception::Type type, const Arg& 
 
 Exception Debug::makeFailure(PackedSite site, Exception::Type type, const Arg& comparison,
                              ArrayPtr<const Arg> args) {
-  return makeFailure(unpackCheck(site), type, comparison, args);
+  return makeFailure(unpack(site), type, comparison, args);
 }
 
 void Debug::logFailure(LogSeverity severity, const Exception& exception) {
@@ -445,7 +439,7 @@ Exception Debug::makeFailure(const Site& site, int osErrorNumber, ArrayPtr<const
 }
 
 Exception Debug::makeFailure(PackedSite site, Exception::Type type, ArrayPtr<const Arg> args) {
-  return makeFailure(unpackCheck(site), type, args);
+  return makeFailure(unpack(site), type, args);
 }
 
 Exception Debug::makeFailure(PackedSite site, int osErrorNumber, ArrayPtr<const Arg> args) {

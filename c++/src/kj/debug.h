@@ -151,7 +151,7 @@ namespace kj {
   (::kj::_::Debug::Site { (location).fileName, static_cast<int>((location).lineNumber), \
                           condition, macroArgs })
 // The Debug::Site of a check in an _AT macro. The location is only known at runtime, so the Site
-// is a temporary.
+// is a temporary. Like KJ_DEBUG_SITE, `condition` is empty if there is none.
 
 #if KJ_MSVC_TRADITIONAL_CPP
 // MSVC does __VA_ARGS__ differently from GCC:
@@ -197,7 +197,7 @@ namespace kj {
       ::kj::Exception::Type::FAILED, __VA_ARGS__)
 
 #define KJ_FAIL_REQUIRE_AT(location, ...) \
-  KJ_FAIL_NORETURN_ ::kj::_::Debug::fail(KJ_DEBUG_SITE_AT(location, nullptr, "" #__VA_ARGS__), \
+  KJ_FAIL_NORETURN_ ::kj::_::Debug::fail(KJ_DEBUG_SITE_AT(location, "", "" #__VA_ARGS__), \
       ::kj::Exception::Type::FAILED, __VA_ARGS__)
 
 #define KJ_SYSCALL(call, ...) \
@@ -336,7 +336,7 @@ namespace kj {
       ::kj::Exception::Type::FAILED __VA_OPT__(,) __VA_ARGS__)
 
 #define KJ_FAIL_REQUIRE_AT(location, ...) \
-  KJ_FAIL_NORETURN_ ::kj::_::Debug::fail(KJ_DEBUG_SITE_AT(location, nullptr, #__VA_ARGS__), \
+  KJ_FAIL_NORETURN_ ::kj::_::Debug::fail(KJ_DEBUG_SITE_AT(location, "", #__VA_ARGS__), \
       ::kj::Exception::Type::FAILED, ##__VA_ARGS__)
 
 #define KJ_SYSCALL(call, ...) \
@@ -682,7 +682,7 @@ public:
   // prefixed with "failed: ". Used by KJ_EXPECT, whose failure doesn't throw.
 
   struct Site {
-    // Where a check is, its condition (null if none) and the names of the macro's arguments.
+    // Where a check is, its condition (empty if none) and the names of the macro's arguments.
     const char* file;
     int line;
     const char* condition;
