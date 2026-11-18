@@ -143,15 +143,16 @@ public:
 
   inline bool operator==(const HttpMethod& other) const {
     return id == other.id && (id != Known::OTHER ||
-        kj::StringPtr(nameText) == kj::StringPtr(other.nameText));
+        kj::arrayPtr(nameText, nameSize) == kj::arrayPtr(other.nameText, other.nameSize));
   }
 
   uint hashCode() const;
 
 private:
   Known id;
-  char nameText[MAX_NAME_SIZE + 1] = {};
-  // The name of an OTHER method, NUL-terminated. Empty for known methods.
+  uint8_t nameSize = 0;
+  char nameText[MAX_NAME_SIZE] = {};
+  // The name of an OTHER method, `nameSize` bytes long. Empty for known methods.
 
   explicit HttpMethod(kj::ArrayPtr<const char> otherName);
 
