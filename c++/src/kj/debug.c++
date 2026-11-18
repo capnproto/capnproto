@@ -188,11 +188,48 @@ enum DescriptionStyle {
   SYSCALL
 };
 
-static String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNumber,
-                                  const char* sysErrorString, const char* macroArgs,
-                                  ArrayPtr<String> argValues, StringPtr comparison = nullptr) {
-  // `comparison` is the stringified comparison of a failed ASSERTION, e.g. "1 == 2", shown in
-  // brackets after its code. Empty if none.
+String stringify(const Debug::Arg& arg) {
+  return arg.stringify(arg.value);
+}
+
+bool needsLabel(ArrayPtr<const char> argName) {
+  // Whether the description shows an argument's name before its value. Literals and `kj::str()`
+  // calls are shown as is.
+  return argName.size() > 0 && argName[0] != '\"' && !argName.startsWith("kj::str("_kjc);
+}
+
+constexpr size_t STACK_ARGS = 4;
+// Most checks and log messages have at most this many arguments, which are stringified into an
+// array on the stack. (Every element is constructed and destroyed, so it shouldn't be bigger.)
+
+String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNumber,
+                           const char* sysErrorString, const char* macroArgs,
+                           ArrayPtr<const Debug::Arg> args,
+                           const Debug::Arg* comparison = nullptr) {
+  // Stringifies `args` and describes them, labeled with their names parsed from `macroArgs`.
+  // `comparison` is the condition of a failed ASSERTION if it's a comparison. It's shown in
+  // brackets after the condition's text, e.g. "expected a == b [1 == 2]".
+
+  if (style == ASSERTION && *code == '\0') {
+    // A check without a condition, e.g. KJ_FAIL_ASSERT(), is described by its arguments alone.
+    style = LOG;
+  }
+
+  if (style == LOG && args.size() == 1) {
+    // A lone argument needs no delimiter, so if it needs no label either, e.g.
+    // `KJ_EXCEPTION(FAILED, "foo")`, it's described as is. Skip parsing the macro's arguments.
+    while (isspace(*macroArgs)) ++macroArgs;
+    if (!needsLabel(StringPtr(macroArgs))) {
+      return stringify(args[0]);
+    }
+  }
+
+  KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
+  for (auto i: kj::indices(args)) {
+    argValues[i] = stringify(args[i]);
+  }
+  String comparisonValue = style == ASSERTION && comparison != nullptr
+      ? stringify(*comparison) : String();
 
   KJ_STACK_ARRAY(ArrayPtr<const char>, argNames, argValues.size(), 8, 64);
 
@@ -253,11 +290,6 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
     }
   }
 
-  if (style == ASSERTION && *code == '\0') {
-    // A check without a condition, e.g. KJ_FAIL_ASSERT(), is described by its arguments alone.
-    style = LOG;
-  }
-
   {
     StringPtr expected = "expected ";
     StringPtr codeArray = style == LOG ? nullptr : StringPtr(code);
@@ -297,18 +329,14 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
         break;
       case ASSERTION:
         totalSize += expected.size() + codeArray.size();
-        if (comparison.size() > 0) {
-          totalSize += openBracket.size() + comparison.size() + closeBracket.size();
+        if (comparisonValue.size() > 0) {
+          totalSize += openBracket.size() + comparisonValue.size() + closeBracket.size();
         }
         break;
       case SYSCALL:
         totalSize += codeArray.size() + colon.size() + sysErrorArray.size();
         break;
     }
-
-    auto needsLabel = [](const ArrayPtr<const char> &argName) -> bool {
-      return argName.size() > 0 && argName[0] != '\"' && !argName.startsWith("kj::str("_kjc);
-    };
 
     for (size_t i = 0; i < argValues.size(); i++) {
       if (i > 0 || style != LOG) {
@@ -328,8 +356,8 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
         break;
       case ASSERTION:
         pos = _::fill(pos, expected, codeArray);
-        if (comparison.size() > 0) {
-          pos = _::fill(pos, openBracket, comparison, closeBracket);
+        if (comparisonValue.size() > 0) {
+          pos = _::fill(pos, openBracket, comparisonValue, closeBracket);
         }
         break;
       case SYSCALL:
@@ -351,16 +379,6 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
   }
 }
 
-constexpr size_t STACK_ARGS = 4;
-// Most checks and log messages have at most this many arguments, which are stringified into an
-// array on the stack. (Every element is constructed and destroyed, so it shouldn't be bigger.)
-
-void stringifyArgs(ArrayPtr<const Debug::Arg> args, ArrayPtr<String> argValues) {
-  for (auto i: kj::indices(args)) {
-    argValues[i] = args[i].stringify(args[i].value);
-  }
-}
-
 Debug::Site unpack(PackedSite site) {
   // Splits a KJ_DEBUG_SITE literal into its fields.
   auto next = [](const char* field) { return field + strlen(field) + 1; };
@@ -377,21 +395,10 @@ Debug::Site unpack(PackedSite site) {
   return { file, static_cast<int>(line), condition, macroArgs };
 }
 
-bool isLoneLiteral(const char* macroArgs, ArrayPtr<const Debug::Arg> args) {
-  // Whether the only argument of a log message or exception is a string literal, e.g.
-  // `KJ_EXCEPTION(FAILED, "foo")`. Then makeDescriptionImpl(LOG, ...) returns the literal as is:
-  // a literal needs no label, and a lone argument no delimiter.
-  if (args.size() != 1) return false;
-  while (isspace(*macroArgs)) ++macroArgs;
-  return *macroArgs == '\"';
-}
-
 Exception makeAssertionFailure(const Debug::Site& site, Exception::Type type,
-                               StringPtr comparison, ArrayPtr<const Debug::Arg> args) {
-  KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
-  stringifyArgs(args, argValues);
+                               const Debug::Arg* comparison, ArrayPtr<const Debug::Arg> args) {
   return Exception(type, site.file, site.line,
-      makeDescriptionImpl(ASSERTION, site.condition, 0, nullptr, site.macroArgs, argValues,
+      makeDescriptionImpl(ASSERTION, site.condition, 0, nullptr, site.macroArgs, args,
                           comparison));
 }
 
@@ -399,16 +406,8 @@ Exception makeAssertionFailure(const Debug::Site& site, Exception::Type type,
 
 void Debug::logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
                         ArrayPtr<const Arg> args) {
-  String description;
-  if (isLoneLiteral(macroArgs, args)) {
-    description = args[0].stringify(args[0].value);
-  } else {
-    KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
-    stringifyArgs(args, argValues);
-    description = makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, argValues);
-  }
   getExceptionCallback().logMessage(severity, trimSourceFilename(file).cStr(), line, 0,
-      kj::mv(description));
+      makeDescriptionInternal(macroArgs, args));
 }
 
 Exception Debug::makeFailure(const Site& site, Exception::Type type, ArrayPtr<const Arg> args) {
@@ -417,7 +416,7 @@ Exception Debug::makeFailure(const Site& site, Exception::Type type, ArrayPtr<co
 
 Exception Debug::makeFailure(const Site& site, Exception::Type type, const Arg& comparison,
                              ArrayPtr<const Arg> args) {
-  return makeAssertionFailure(site, type, comparison.stringify(comparison.value), args);
+  return makeAssertionFailure(site, type, &comparison, args);
 }
 
 Exception Debug::makeFailure(PackedSite site, Exception::Type type, const Arg& comparison,
@@ -431,11 +430,8 @@ void Debug::logFailure(LogSeverity severity, const Exception& exception) {
 }
 
 Exception Debug::makeFailure(const Site& site, int osErrorNumber, ArrayPtr<const Arg> args) {
-  KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
-  stringifyArgs(args, argValues);
   return Exception(typeOfErrno(osErrorNumber), site.file, site.line,
-      makeDescriptionImpl(SYSCALL, site.condition, osErrorNumber, nullptr, site.macroArgs,
-                          argValues));
+      makeDescriptionImpl(SYSCALL, site.condition, osErrorNumber, nullptr, site.macroArgs, args));
 }
 
 Exception Debug::makeFailure(PackedSite site, Exception::Type type, ArrayPtr<const Arg> args) {
@@ -454,9 +450,6 @@ Exception Debug::makeFailure(PackedSite site, Win32Result osErrorNumber,
 
 Exception Debug::makeFailure(
     const Site& site, Win32Result osErrorNumber, ArrayPtr<const Arg> args) {
-  KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
-  stringifyArgs(args, argValues);
-
   LPVOID ptr;
   // TODO(someday): Why doesn't this work for winsock errors?
   DWORD result = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER |
@@ -481,23 +474,18 @@ Exception Debug::makeFailure(
 
   return Exception(typeOfWin32Error(osErrorNumber.number), site.file, site.line,
       makeDescriptionImpl(SYSCALL, site.condition, 0, message.cStr(),
-                          site.macroArgs, argValues));
+                          site.macroArgs, args));
 }
 #endif
 
 String stringifyDebugComparison(const Debug::Arg& left, StringPtr op, const Debug::Arg& right) {
-  String leftValue = left.stringify(left.value);
-  String rightValue = right.stringify(right.value);
+  String leftValue = stringify(left);
+  String rightValue = stringify(right);
   return str(leftValue, op, rightValue);
 }
 
 String Debug::makeDescriptionInternal(const char* macroArgs, ArrayPtr<const Arg> args) {
-  if (isLoneLiteral(macroArgs, args)) {
-    return args[0].stringify(args[0].value);
-  }
-  KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
-  stringifyArgs(args, argValues);
-  return makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, argValues);
+  return makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, args);
 }
 
 int Debug::getOsErrorNumber(bool nonblocking) {
