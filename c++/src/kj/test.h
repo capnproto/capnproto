@@ -95,6 +95,17 @@ private:
       } \
     }(::kj::_::MAGIC_ASSERT << cond); \
   } while (false);
+#define KJ_FAIL_EXPECT_AT(location, ...) \
+  KJ_INDIRECT_EXPAND(KJ_LOG_AT, (ERROR , location, __VA_ARGS__));
+#define KJ_EXPECT_AT(cond, location, ...) \
+  do { \
+    [&](auto&& _kjCondition) { \
+      if (!_kjCondition) { \
+        ::kj::_::Debug::logFailedCheck(::kj::LogSeverity::ERROR, \
+            KJ_DEBUG_SITE_AT(location, #cond, "" #__VA_ARGS__), _kjCondition, __VA_ARGS__); \
+      } \
+    }(::kj::_::MAGIC_ASSERT << cond); \
+  } while (false);
 #else
 #define KJ_FAIL_EXPECT(...) \
   KJ_LOG(ERROR __VA_OPT__(,) __VA_ARGS__);
@@ -107,7 +118,20 @@ private:
       } \
     }(::kj::_::MAGIC_ASSERT << cond); \
   } while (false);
+#define KJ_FAIL_EXPECT_AT(location, ...) \
+  KJ_LOG_AT(ERROR, location __VA_OPT__(,) __VA_ARGS__);
+#define KJ_EXPECT_AT(cond, location, ...) \
+  do { \
+    [&](auto&& _kjCondition) { \
+      if (!_kjCondition) { \
+        ::kj::_::Debug::logFailedCheck(::kj::LogSeverity::ERROR, \
+            KJ_DEBUG_SITE_AT(location, #cond, #__VA_ARGS__), _kjCondition, ##__VA_ARGS__); \
+      } \
+    }(::kj::_::MAGIC_ASSERT << cond); \
+  } while (false);
 #endif
+// KJ_EXPECT_AT and KJ_FAIL_EXPECT_AT are like KJ_EXPECT and KJ_FAIL_EXPECT, but report the
+// failure at `location`, a kj::SourceLocation, e.g. that of the caller of a test helper.
 
 // TODO(msvc): cast results to void like non-MSVC versions do
 #if _MSC_VER && !defined(__clang__)
