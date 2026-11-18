@@ -514,6 +514,56 @@ KJ_TEST("HttpHeaders serialization validation") {
       "HTTP/1.1 418 I'm a teapot\r\n\r\n");
 }
 
+KJ_TEST("HttpHeaders walks set headers in id order, in a table of any size") {
+  // More ids than the set-slot bits cover, so some headers are past them.
+  HttpHeaderTable::Builder builder;
+  kj::Vector<kj::String> names;  // The table refers to them.
+  kj::Vector<HttpHeaderId> ids;
+  for (auto i: kj::range(0, 300)) {
+    ids.add(builder.add(names.add(kj::str("X-H", i))));
+  }
+  auto table = builder.build();
+
+  HttpHeaders headers(*table);
+  headers.setPtr(ids[290], "d");
+  headers.setPtr(ids[3], "a");
+  headers.setPtr(ids[200], "c");
+  headers.addPtrPtr("x-h100", "b");
+  headers.setPtr(ids[250], "gone");
+  headers.unset(ids[250]);
+  headers.setPtr(ids[299], "gone");
+  headers.unset(ids[299]);
+  headers.setPtr(HttpHeaderId::HOST, "h");
+  headers.addPtrPtr("X-Other", "o");
+
+  auto expected =
+      "Host: h\r\nX-H3: a\r\nX-H100: b\r\nX-H200: c\r\nX-H290: d\r\nX-Other: o\r\n\r\n"_kj;
+  KJ_EXPECT(headers.toString() == expected, headers.toString());
+  KJ_EXPECT(headers.size() == 6);
+  KJ_EXPECT(headers.clone().toString() == expected);
+  KJ_EXPECT(headers.cloneShallow().toString() == expected);
+
+  kj::Vector<kj::String> seen;
+  headers.forEach(
+      [&](HttpHeaderId id, kj::StringPtr value) { seen.add(kj::str(id.toString(), "=", value)); },
+      [&](kj::StringPtr name, kj::StringPtr value) { seen.add(kj::str(name, "=", value)); });
+  KJ_EXPECT(kj::strArray(seen, " ") == "Host=h X-H3=a X-H100=b X-H200=c X-H290=d X-Other=o",
+      kj::strArray(seen, " "));
+
+  // The request line's connection headers stand in for the first ids.
+  kj::StringPtr connection[HttpHeaders::CONNECTION_HEADERS_COUNT];
+  connection[HttpHeaders::BuiltinIndices::CONTENT_LENGTH] = "0";
+  auto request = headers.serializeRequest(HttpMethod::GET, "/", connection);
+  KJ_EXPECT(request.startsWith("GET / HTTP/1.1\r\nContent-Length: 0\r\nHost: h\r\nX-H3: a\r\n"),
+      request);
+
+  headers.clear();
+  KJ_EXPECT(headers.size() == 0);
+  KJ_EXPECT(headers.toString() == "\r\n");
+  headers.setPtr(ids[290], "again");
+  KJ_EXPECT(headers.toString() == "X-H290: again\r\n\r\n");
+}
+
 KJ_TEST("HttpHeaders Set-Cookie handling") {
   HttpHeaderTable::Builder builder;
   auto hCookie = builder.add("Cookie");
