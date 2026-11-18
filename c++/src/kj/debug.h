@@ -637,11 +637,15 @@ using DebugParam = typename DebugParam_<T>::Type;
 
 #endif  // KJ_FAIL_BY_VALUE_
 
-template <typename T>
+template <typename T, typename = void>
 struct DebugIsComparison_ { static constexpr bool value = false; };
-// Whether a check's evaluated condition is a comparison (a DebugComparison, or what DebugParam
-// passes one as), whose operands are shown when the check fails. Specialized next to those types,
-// below.
+template <typename T>
+struct DebugIsComparison_<T, decltype(void(debugComparison(instance<T&>())))> {
+  static constexpr bool value = true;
+};
+// Whether a check's evaluated condition is a comparison, whose operands are shown when the check
+// fails: a DebugComparison, or the DebugComparisonOperands that DebugParam passes one as. Each has
+// a debugComparison() overload, below.
 
 class Debug {
 public:
@@ -714,6 +718,14 @@ public:
     static Arg of(char (&value)[s]) { return { value, &stringifyChars }; }
     // Char arrays, usually message literals, are stringified like `const char*` (up to the first
     // NUL) by `str()`, so they share one function, whatever their size.
+  };
+
+  struct Comparison {
+    // A failed comparison in a check, e.g. `a == b`: its operands, each stringified by the
+    // function shared by all operands of its type, and the operator between them.
+    Arg left;
+    StringPtr op;
+    Arg right;
   };
 
 #if KJ_FAIL_BY_VALUE_
@@ -843,7 +855,7 @@ private:
   // Builds the exception describing a failed check, stringifying `params`.
 
   static Exception makeFailure(const Site& site, Exception::Type type, ArrayPtr<const Arg> args,
-                               const Arg* comparison = nullptr);
+                               const Comparison* comparison = nullptr);
   static Exception makeFailure(const Site& site, int osErrorNumber, ArrayPtr<const Arg> args);
 #if _WIN32 || __CYGWIN__
   static Exception makeFailure(const Site& site, Win32Result osErrorNumber,
@@ -853,7 +865,7 @@ private:
   // check's condition, if it's a comparison (see ConditionFailed).
 
   static Exception makeFailure(PackedSite site, Exception::Type type, ArrayPtr<const Arg> args,
-                               const Arg* comparison = nullptr);
+                               const Comparison* comparison = nullptr);
   static Exception makeFailure(PackedSite site, int osErrorNumber, ArrayPtr<const Arg> args);
 #if _WIN32 || __CYGWIN__
   static Exception makeFailure(PackedSite site, Win32Result osErrorNumber,
@@ -898,9 +910,14 @@ template <typename S, typename Condition, typename... Params>
 Exception Debug::makeFailureWithParams(S site, ConditionFailed code, Condition&& condition,
                                        Params&&... params) {
   if constexpr (DebugIsComparison_<Decay<Condition>>::value) {
-    const Arg args[sizeof...(Params) + 1] = { Arg::of(condition), Arg::of(params)... };
-    return makeFailure(site, Exception::Type::FAILED, arrayPtr(args + 1, sizeof...(Params)),
-                       &args[0]);
+    const Comparison comparison = debugComparison(condition);
+    if constexpr (sizeof...(Params) == 0) {
+      return makeFailure(site, Exception::Type::FAILED, nullptr, &comparison);
+    } else {
+      const Arg args[sizeof...(Params)] = { Arg::of(params)... };
+      return makeFailure(site, Exception::Type::FAILED, arrayPtr(args, sizeof...(Params)),
+                         &comparison);
+    }
   } else {
     return makeFailureWithParams(site, Exception::Type::FAILED, params...);
   }
@@ -1052,19 +1069,16 @@ Debug::Arg debugOperand(T* value) { return { value, &stringifyDebugOperand<T> };
 // An operand of a comparison in a check, stringified by the function shared by all operands of
 // type `T`.
 
-String stringifyDebugComparison(const Debug::Arg& left, StringPtr op, const Debug::Arg& right);
-// Stringifies a comparison in a failed check, e.g. "1 == 2". Out of line, so that the code
-// stringifying a comparison is shared by all comparisons of the same types.
+String stringifyDebugComparison(const Debug::Comparison& comparison);
+// Stringifies a comparison in a failed check, e.g. "1 == 2".
 
-#define KJ_DEBUG_OPERATOR(NAME, OP) \
+#define KJ_DEBUG_COMPARISONS_(X) X(Eq, ==) X(Ne, !=) X(Le, <=) X(Ge, >=) X(Lt, <) X(Gt, >)
+// The comparison operators that DebugExpression captures, and the names of their DebugOp types.
+
+#define KJ_DEBUG_OPERATOR_(NAME, OP) \
   struct DebugOp##NAME { static StringPtr op() { return " " #OP " "_kj; } };
-KJ_DEBUG_OPERATOR(Eq, ==)
-KJ_DEBUG_OPERATOR(Ne, !=)
-KJ_DEBUG_OPERATOR(Le, <=)
-KJ_DEBUG_OPERATOR(Ge, >=)
-KJ_DEBUG_OPERATOR(Lt, <)
-KJ_DEBUG_OPERATOR(Gt, >)
-#undef KJ_DEBUG_OPERATOR
+KJ_DEBUG_COMPARISONS_(KJ_DEBUG_OPERATOR_)
+#undef KJ_DEBUG_OPERATOR_
 
 template <typename Left, typename Right, typename Op>
 struct DebugComparison {
@@ -1080,12 +1094,14 @@ struct DebugComparison {
 };
 
 template <typename Left, typename Right, typename Op>
-String KJ_STRINGIFY(DebugComparison<Left, Right, Op>& cmp) {
-  return stringifyDebugComparison(debugOperand(&cmp.left), Op::op(), debugOperand(&cmp.right));
+Debug::Comparison debugComparison(DebugComparison<Left, Right, Op>& cmp) {
+  return { debugOperand(&cmp.left), Op::op(), debugOperand(&cmp.right) };
 }
 
 template <typename Left, typename Right, typename Op>
-struct DebugIsComparison_<DebugComparison<Left, Right, Op>> { static constexpr bool value = true; };
+String KJ_STRINGIFY(DebugComparison<Left, Right, Op>& cmp) {
+  return stringifyDebugComparison(debugComparison(cmp));
+}
 
 #if KJ_FAIL_BY_VALUE_
 
@@ -1119,14 +1135,9 @@ struct DebugComparisonOperands {
 };
 
 template <typename Left, typename Right, typename Op>
-String KJ_STRINGIFY(DebugComparisonOperands<Left, Right, Op>& cmp) {
-  return stringifyDebugComparison(debugOperand(&cmp.left), Op::op(), debugOperand(&cmp.right));
+Debug::Comparison debugComparison(DebugComparisonOperands<Left, Right, Op>& cmp) {
+  return { debugOperand(&cmp.left), Op::op(), debugOperand(&cmp.right) };
 }
-
-template <typename Left, typename Right, typename Op>
-struct DebugIsComparison_<DebugComparisonOperands<Left, Right, Op>> {
-  static constexpr bool value = true;
-};
 
 template <typename Left, typename Right, typename Op>
 struct DebugParam_<DebugComparison<Left, Right, Op>&> {
@@ -1141,18 +1152,13 @@ struct DebugExpression {
   T value;
 
   // Handle comparison operations by constructing a DebugComparison value.
-#define DEFINE_OPERATOR(OP, NAME) \
+#define DEFINE_OPERATOR(NAME, OP) \
   template <typename U> \
   DebugComparison<T, U, DebugOp##NAME> operator OP(U&& other) { \
     bool result = value OP other; \
     return { kj::fwd<T>(value), kj::fwd<U>(other), result }; \
   }
-  DEFINE_OPERATOR(==, Eq);
-  DEFINE_OPERATOR(!=, Ne);
-  DEFINE_OPERATOR(<=, Le);
-  DEFINE_OPERATOR(>=, Ge);
-  DEFINE_OPERATOR(< , Lt);
-  DEFINE_OPERATOR(> , Gt);
+  KJ_DEBUG_COMPARISONS_(DEFINE_OPERATOR)
 #undef DEFINE_OPERATOR
 
   // Handle binary operators that have equal or lower precedence than comparisons by performing
@@ -1199,6 +1205,8 @@ struct DebugExpressionStart {
   }
 };
 static constexpr DebugExpressionStart MAGIC_ASSERT;
+
+#undef KJ_DEBUG_COMPARISONS_
 
 }  // namespace _ (private)
 }  // namespace kj

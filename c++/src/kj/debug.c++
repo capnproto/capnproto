@@ -205,7 +205,7 @@ constexpr size_t STACK_ARGS = 4;
 String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNumber,
                            const char* sysErrorString, const char* macroArgs,
                            ArrayPtr<const Debug::Arg> args,
-                           const Debug::Arg* comparison = nullptr) {
+                           const Debug::Comparison* comparison = nullptr) {
   // Stringifies `args` and describes them, labeled with their names parsed from `macroArgs`.
   // `comparison` is the condition of a failed ASSERTION if it's a comparison. It's shown in
   // brackets after the condition's text, e.g. "expected a == b [1 == 2]".
@@ -229,7 +229,7 @@ String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNu
     argValues[i] = stringify(args[i]);
   }
   String comparisonValue = style == ASSERTION && comparison != nullptr
-      ? stringify(*comparison) : String();
+      ? stringifyDebugComparison(*comparison) : String();
 
   KJ_STACK_ARRAY(ArrayPtr<const char>, argNames, argValues.size(), 8, 64);
 
@@ -404,7 +404,7 @@ void Debug::logInternal(const char* file, int line, LogSeverity severity, const 
 }
 
 Exception Debug::makeFailure(const Site& site, Exception::Type type, ArrayPtr<const Arg> args,
-                             const Arg* comparison) {
+                             const Comparison* comparison) {
   return Exception(type, site.file, site.line,
       makeDescriptionImpl(ASSERTION, site.condition, 0, nullptr, site.macroArgs, args,
                           comparison));
@@ -447,7 +447,7 @@ Exception Debug::makeFailure(const Site& site, Win32Result osErrorNumber,
 #endif
 
 Exception Debug::makeFailure(PackedSite site, Exception::Type type, ArrayPtr<const Arg> args,
-                             const Arg* comparison) {
+                             const Comparison* comparison) {
   return makeFailure(unpack(site), type, args, comparison);
 }
 
@@ -467,10 +467,10 @@ void Debug::logFailure(LogSeverity severity, const Exception& exception) {
       str("failed: ", exception.getDescription()));
 }
 
-String stringifyDebugComparison(const Debug::Arg& left, StringPtr op, const Debug::Arg& right) {
-  String leftValue = stringify(left);
-  String rightValue = stringify(right);
-  return str(leftValue, op, rightValue);
+String stringifyDebugComparison(const Debug::Comparison& comparison) {
+  String left = stringify(comparison.left);
+  String right = stringify(comparison.right);
+  return str(left, comparison.op, right);
 }
 
 String Debug::makeDescriptionInternal(const char* macroArgs, ArrayPtr<const Arg> args) {
