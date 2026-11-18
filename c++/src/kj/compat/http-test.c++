@@ -564,6 +564,60 @@ KJ_TEST("HttpHeaders walks set headers in id order, in a table of any size") {
   KJ_EXPECT(headers.toString() == "X-H290: again\r\n\r\n");
 }
 
+KJ_TEST("HttpHeaders keeps any number of indexed headers, in id order") {
+  // More than the headers keep inline, set out of order, so they move to the heap mid-way.
+  HttpHeaderTable::Builder builder;
+  kj::Vector<kj::String> names;  // The table refers to them.
+  kj::Vector<HttpHeaderId> ids;
+  for (auto i: kj::range(0, 40)) {
+    ids.add(builder.add(names.add(kj::str("X-H", i))));
+  }
+  auto table = builder.build();
+
+  HttpHeaders headers(*table);
+  for (auto i: kj::range(0, 40)) {
+    uint id = (i * 7) % 40;  // Every id once, not in order.
+    headers.setPtr(ids[id], names[id]);
+  }
+  KJ_EXPECT(headers.size() == 40);
+  kj::Vector<kj::String> expected;
+  for (auto i: kj::range(0, 40)) {
+    KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(ids[i])) == names[i]);
+    expected.add(kj::str(names[i], ": ", names[i], "\r\n"));
+  }
+  KJ_EXPECT(headers.toString() == kj::str(kj::strArray(expected, ""), "\r\n"));
+
+  // Unset, replace, add to and empty some of them.
+  headers.unset(ids[0]);
+  headers.unset(ids[20]);
+  headers.unset(ids[20]);
+  headers.setPtr(ids[39], "last");
+  headers.addPtrPtr("x-h10", "more");
+  headers.setPtr(ids[30], "");
+  KJ_EXPECT(headers.get(ids[0]) == kj::none);
+  KJ_EXPECT(headers.get(ids[20]) == kj::none);
+  KJ_EXPECT(headers.get(ids[30]) == kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(ids[39])) == "last");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(ids[10])) == "X-H10, more");
+  KJ_EXPECT(headers.size() == 37);
+  KJ_EXPECT(headers.clone().toString() == headers.toString());
+  KJ_EXPECT(headers.cloneShallow().toString() == headers.toString());
+
+  // Cleared, they start over inline.
+  headers.clear();
+  KJ_EXPECT(headers.size() == 0);
+  headers.setPtr(ids[5], "b");
+  headers.setPtr(ids[2], "a");
+  headers.addPtrPtr("X-H2", "c");
+  KJ_EXPECT(headers.toString() == "X-H2: a, c\r\nX-H5: b\r\n\r\n", headers.toString());
+
+  // An empty value reads as unset, as it always has.
+  headers.setPtr(ids[5], "");
+  KJ_EXPECT(headers.get(ids[5]) == kj::none);
+  headers.addPtrPtr("X-H5", "d");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(ids[5])) == "d");
+}
+
 KJ_TEST("HttpHeaders Set-Cookie handling") {
   HttpHeaderTable::Builder builder;
   auto hCookie = builder.add("Cookie");
