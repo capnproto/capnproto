@@ -109,9 +109,9 @@
 //   message will not necessarily be evaluated.
 // * For every macro `FOO` above except `LOG`, there is also a `FAIL_FOO` macro used to report
 //   failures that already happened.  For the macros that check a boolean condition, `FAIL_FOO`
-//   omits the first parameter and behaves like it was `false`.  `FAIL_SYSCALL` takes a string
-//   literal and an OS error number as the first two parameters.  The string should be the name of
-//   the failed system call.
+//   omits the first parameter and behaves like it was `false`.  `FAIL_SYSCALL` (and `FAIL_WIN32`
+//   on Windows) takes a string literal and an OS error number as the first two parameters.  The
+//   string should be the name of the failed system call.
 // * For every macro `FOO` above except `ASSUME`, there is a `DFOO` version which is only executed
 //   in debug mode, i.e. when KJ_DEBUG is defined.
 //   KJ_DEBUG is defined automatically by common.h when compiling without optimization (unless

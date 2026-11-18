@@ -162,6 +162,19 @@ TEST(Debug, Log) {
   EXPECT_LOG_EQ([&](){
     EXPECT_FATAL(KJ_FAIL_ASSERT("foo")); line = __LINE__;
   }, kj::str("exception: ", fileLine(__FILE__, line), ": failed: foo\n"));
+
+  // KJ_EXPECT describes its failure like KJ_ASSERT, but logs it. A condition that isn't a
+  // comparison isn't shown.
+  EXPECT_LOG_EQ([&](){
+    KJ_EXPECT(1 == 2, i); line = __LINE__;
+  }, kj::str("log message: ", fileLine(__FILE__, line), ":+0: error: "
+      "failed: expected 1 == 2 [1 == 2]; i = 123\n"));
+
+  EXPECT_LOG_EQ([&](){
+    bool flag = false;
+    KJ_EXPECT(flag && i == 123, "message"); line = __LINE__;
+  }, kj::str("log message: ", fileLine(__FILE__, line), ":+0: error: "
+      "failed: expected flag && i == 123; message\n"));
 }
 
 TEST(Debug, EmptyVariadicArgs) {
