@@ -377,29 +377,30 @@ kj::ArrayPtr<const char> KJ_STRINGIFY(const HttpMethod& method) {
   return method.name();
 }
 
-static kj::Maybe<HttpMethod> consumeKnownHttpMethod(char*& ptr) {
-  // Matches a method listed in KJ_HTTP_FOR_EACH_METHOD at the start of `ptr`, which must be
-  // NUL-terminated. Only checks that the text begins with the method name; the caller must check
-  // what follows.
+static kj::Maybe<HttpMethod> consumeKnownHttpMethod(const char*& ptr, const char* end) {
+  // Matches a method listed in KJ_HTTP_FOR_EACH_METHOD at the start of [ptr, end). Only checks
+  // that the text begins with the method name; the caller must check what follows.
 
-  char* p = ptr;
+  const char* p = ptr;
+  auto next = [&]() -> char { return p < end ? *p++ : '\0'; };
 
 #define EXPECT_REST(prefix, suffix) \
-  if (strncmp(p, #suffix, sizeof(#suffix)-1) == 0) { \
-    ptr = p + (sizeof(#suffix)-1); \
+  if (size_t(end - p) >= sizeof(#suffix) - 1 && \
+      memcmp(p, #suffix, sizeof(#suffix) - 1) == 0) { \
+    ptr = p + (sizeof(#suffix) - 1); \
     return HttpMethod::prefix##suffix; \
   } else { \
     return kj::none; \
   }
 
-  switch (*p++) {
+  switch (next()) {
     case 'A': EXPECT_REST(A,CL)
     case 'B': EXPECT_REST(B,AN)
     case 'C':
-      switch (*p++) {
+      switch (next()) {
         case 'H': EXPECT_REST(CH,ECKOUT)
         case 'O':
-          switch (*p++) {
+          switch (next()) {
             case 'P': EXPECT_REST(COP,Y)
             case 'N': EXPECT_REST(CON,NECT)
             default: return kj::none;
@@ -411,10 +412,10 @@ static kj::Maybe<HttpMethod> consumeKnownHttpMethod(char*& ptr) {
     case 'H': EXPECT_REST(H,EAD)
     case 'L': EXPECT_REST(L,OCK)
     case 'M':
-      switch (*p++) {
+      switch (next()) {
         case 'E': EXPECT_REST(ME,RGE)
         case 'K':
-          switch (*p++) {
+          switch (next()) {
             case 'A': EXPECT_REST(MKA,CTIVITY)
             case 'C': EXPECT_REST(MKC,OL)
             default: return kj::none;
@@ -426,18 +427,18 @@ static kj::Maybe<HttpMethod> consumeKnownHttpMethod(char*& ptr) {
     case 'N': EXPECT_REST(N,OTIFY)
     case 'O': EXPECT_REST(O,PTIONS)
     case 'P':
-      switch (*p++) {
+      switch (next()) {
         case 'A': EXPECT_REST(PA,TCH)
         case 'O': EXPECT_REST(PO,ST)
         case 'R':
-          if (*p++ != 'O' || *p++ != 'P') return kj::none;
-          switch (*p++) {
+          if (next() != 'O' || next() != 'P') return kj::none;
+          switch (next()) {
             case 'F': EXPECT_REST(PROPF,IND)
             case 'P': EXPECT_REST(PROPP,ATCH)
             default: return kj::none;
           }
         case 'U':
-          switch (*p++) {
+          switch (next()) {
             case 'R': EXPECT_REST(PUR,GE)
             case 'T': EXPECT_REST(PUT,)
             default: return kj::none;
@@ -447,15 +448,15 @@ static kj::Maybe<HttpMethod> consumeKnownHttpMethod(char*& ptr) {
     case 'Q': EXPECT_REST(Q,UERY)
     case 'R': EXPECT_REST(R,EPORT)
     case 'S':
-      switch (*p++) {
+      switch (next()) {
         case 'E': EXPECT_REST(SE,ARCH)
         case 'U': EXPECT_REST(SU,BSCRIBE)
         default: return kj::none;
       }
     case 'T': EXPECT_REST(T,RACE)
     case 'U':
-      if (*p++ != 'N') return kj::none;
-      switch (*p++) {
+      if (next() != 'N') return kj::none;
+      switch (next()) {
         case 'L': EXPECT_REST(UNL,OCK)
         case 'S': EXPECT_REST(UNS,UBSCRIBE)
         default: return kj::none;
@@ -488,24 +489,25 @@ HttpMethod HttpMethod::parse(kj::ArrayPtr<const char> name) {
   KJ_FAIL_REQUIRE("invalid HTTP method", kj::encodeCEscape(prefix.asBytes()));
 }
 
-static kj::Maybe<HttpMethod> consumeHttpMethod(char*& ptr, bool allowOtherMethods) {
-  // Consumes the method at the start of a request line. `ptr` must be NUL-terminated. On success,
-  // `ptr` is left pointing at the first character after the method name, which the caller must
-  // check.
+static kj::Maybe<HttpMethod> consumeHttpMethod(
+    char*& ptr, const char* end, bool allowOtherMethods) {
+  // Consumes the method at the start of a request line, which ends at `end`. On success, `ptr` is
+  // left pointing at the first character after the method name, which the caller must check.
 
-  char* p = ptr;
-  KJ_IF_SOME(known, consumeKnownHttpMethod(p)) {
-    if (!HTTP_METHOD_CHARS.contains(*p)) {  // Not a prefix of a longer name, such as "GETX".
-      ptr = p;
+  const char* p = ptr;
+  KJ_IF_SOME(known, consumeKnownHttpMethod(p, end)) {
+    // Not a prefix of a longer name, such as "GETX".
+    if (p == end || !HTTP_METHOD_CHARS.contains(*p)) {
+      ptr += p - ptr;
       return known;
     }
   }
 
   if (allowOtherMethods) {
-    char* end = ptr;
-    while (HTTP_METHOD_CHARS.contains(*end)) ++end;
-    KJ_IF_SOME(other, HttpMethod::tryParse(kj::arrayPtr(ptr, end))) {
-      ptr = end;
+    char* nameEnd = ptr;
+    while (nameEnd < end && HTTP_METHOD_CHARS.contains(*nameEnd)) ++nameEnd;
+    KJ_IF_SOME(other, HttpMethod::tryParse(kj::arrayPtr(ptr, nameEnd))) {
+      ptr = nameEnd;
       return other;
     }
   }
@@ -514,11 +516,9 @@ static kj::Maybe<HttpMethod> consumeHttpMethod(char*& ptr, bool allowOtherMethod
 }
 
 kj::Maybe<HttpMethod> tryParseHttpMethod(kj::StringPtr name) {
-  // const_cast OK because we don't actually access it. consumeKnownHttpMethod() is also called by
-  // some code later than explicitly needs to use a non-const pointer.
-  char* ptr = const_cast<char*>(name.begin());
-  auto result = consumeKnownHttpMethod(ptr);
-  if (*ptr == '\0') {
+  const char* ptr = name.begin();
+  auto result = consumeKnownHttpMethod(ptr, name.end());
+  if (ptr == name.end()) {
     return result;
   } else {
     return kj::none;
@@ -1114,7 +1114,7 @@ HttpHeaders::RequestConnectOrProtocolError HttpHeaders::tryParseRequestOrConnect
 
   HttpHeaders::RequestConnectOrProtocolError result;
 
-  KJ_IF_SOME(method, consumeHttpMethod(ptr, allowOtherMethods)) {
+  KJ_IF_SOME(method, consumeHttpMethod(ptr, end, allowOtherMethods)) {
     if (*ptr != ' ' && *ptr != '\t') {
       return ProtocolError { 501, "Not Implemented",
           "Unrecognized request method.", content };
