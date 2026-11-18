@@ -110,16 +110,50 @@ struct TupleElement {
 
   T value;
   TupleElement() = default;
-  constexpr inline TupleElement(const T& value): value(value) {}
-  constexpr inline TupleElement(T&& value): value(kj::mv(value)) {}
+  template <typename U>
+    requires (!isSameType<Decay<U>, TupleElement>() && PointerSafeConstructibleFrom<T, U>)
+  constexpr inline TupleElement(U&& value): value(pointerSafeSource<T>(kj::fwd<U>(value))) {}
 };
+
+#if __has_builtin(__reference_constructs_from_temporary)
+template <typename T, typename U>
+concept BindsTemporary = __reference_constructs_from_temporary(T, U&&);
+#else
+template <typename T, typename U>
+concept BindsTemporary = false;
+#endif
+// Concept: T is a reference that, initialized from U&&, would bind to a temporary. Compilers
+// without the builtin do not detect this case.
+
+template <typename T, typename U>
+concept TupleElementConstructibleFrom = PointerSafeConstructibleFrom<T, U> &&
+    !BindsTemporary<T, U>;
+// Concept: a TupleElement<index, T> can be constructed from U&&. This matches
+// PointerSafeConstructibleFrom, except that a reference element never binds to a temporary,
+// which would leave it dangling.
+
+template <typename T, typename U>
+constexpr T& bindTupleReference(U&& value) {
+  T& result(kj::fwd<U>(value));
+  return result;
+}
+// Direct-initializing a local reference supports explicit conversion operators even on compilers
+// that reject them in reference member initializers. static_cast<T&> could instead downcast the
+// source object itself when T derives from U, bypassing its conversion operator.
 
 template <uint index, typename T>
 struct TupleElement<index, T&> {
   // A tuple containing references can be constructed using refTuple().
 
   T& value;
-  constexpr inline TupleElement(T& value): value(value) {}
+  template <typename U>
+    requires (!isSameType<Decay<U>, TupleElement>() && ConstructibleFrom<T&, U>)
+#if defined(_MSC_VER) && !defined(__clang__)
+  // MSVC rejects explicit conversion operators in local reference initializers.
+  constexpr inline TupleElement(U&& value): value(kj::fwd<U>(value)) {}
+#else
+  constexpr inline TupleElement(U&& value): value(bindTupleReference<T>(kj::fwd<U>(value))) {}
+#endif
 };
 
 template <uint index, typename... T>
@@ -172,15 +206,39 @@ public:
   Tuple() = default;
 
   template <typename... U>
+    requires (sizeof...(T) == sizeof...(U) && (TupleElementConstructibleFrom<T, U> && ...))
+  explicit(!(ImplicitlyConstructibleFrom<T, U> && ...))
   constexpr inline Tuple(Tuple<U...>&& other): impl(kj::mv(other)) {}
   template <typename... U>
+    requires (sizeof...(T) == sizeof...(U) && (TupleElementConstructibleFrom<T, U&> && ...))
+  explicit(!(ImplicitlyConstructibleFrom<T, U&> && ...))
   constexpr inline Tuple(Tuple<U...>& other): impl(other) {}
   template <typename... U>
+    requires (sizeof...(T) == sizeof...(U) && (TupleElementConstructibleFrom<T, const U&> && ...))
+  explicit(!(ImplicitlyConstructibleFrom<T, const U&> && ...))
   constexpr inline Tuple(const Tuple<U...>& other): impl(other) {}
+  // Convert each element directly when both tuples have the same size and every corresponding
+  // element can be constructed. Implicit iff all element conversions are implicit.
+  // Lvalues preserve mutable/const access; rvalues move stored values but not reference elements.
+  // Borrowed results do not retain their owners.
+
+  template <typename... U>
+    requires (sizeof...(T) == sizeof...(U) && (BindsTemporary<T, U> || ...))
+  Tuple(Tuple<U...>&& other) = delete;
+  template <typename... U>
+    requires (sizeof...(T) == sizeof...(U) && (BindsTemporary<T, U&> || ...))
+  Tuple(Tuple<U...>& other) = delete;
+  template <typename... U>
+    requires (sizeof...(T) == sizeof...(U) && (BindsTemporary<T, const U&> || ...))
+  Tuple(const Tuple<U...>& other) = delete;
+  // A conversion that would bind a reference element to a temporary, such as a `const int&`
+  // element from a `long` element, would leave that element dangling. Deleting it, rather than
+  // only leaving it out of the constructors above, keeps overload resolution from falling back to
+  // the private constructor below.
 
 private:
   template <typename... Params>
-  constexpr Tuple(Params&&... params): impl(kj::fwd<Params>(params)...) {}
+  explicit constexpr Tuple(Params&&... params): impl(kj::fwd<Params>(params)...) {}
 
   TupleImpl<MakeIndexes<sizeof...(T)>, T...> impl;
 
@@ -357,6 +415,11 @@ template <typename... T> using Tuple = typename Tuple_<T...>::Type;
 //
 // Tuples are always flat -- that is, no element of a Tuple is ever itself a Tuple.  If you
 // construct a tuple from other tuples, the elements are flattened and concatenated.
+//
+// Tuples of equal size convert element-wise, implicitly iff all element conversions are implicit.
+// For example, an lvalue Tuple<String, Array<int>> can convert to Tuple<StringPtr, ArrayPtr<int>>
+// without copying the backing data. The destination only borrows from the original elements,
+// so their owners must remain alive.
 
 template <typename... Params>
 inline auto tuple(Params&&... params)

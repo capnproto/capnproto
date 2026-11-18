@@ -1244,6 +1244,7 @@ struct MaybeTraits {
   // convertible to T, define:
   //   static constexpr bool convertingConstructor = true;
   // The constructor will be implicit when U→T is implicit, explicit when U→T is explicit.
+  // The assignment operator only accepts U when U→T is implicit.
   // By default (when not defined), these do not exist.
   //
   // Understanding when this is needed:
@@ -1334,6 +1335,12 @@ concept ConstructibleFrom = __is_constructible(T, U);
 // Concept: T can be direct-initialized from U&&, i.e. `T t(kj::fwd<U>(u));` is well-formed.
 
 template <typename T, typename U>
+concept ImplicitlyConstructibleFrom = requires(U&& u) {
+  { CanConvert_<T>::sfinae(kj::fwd<U>(u)) } -> SameAs<int>;
+};
+// Concept: U&& implicitly converts to T, excluding explicit constructors and conversion operators.
+
+template <typename T, typename U>
 concept NoThrowConstructibleFrom = ConstructibleFrom<T, U> && requires(U&& u) {
   requires noexcept(new ((void*)nullptr, _::PlacementNew()) T(kj::fwd<U>(u)));
 };
@@ -1347,6 +1354,68 @@ constexpr bool isNoThrowMoveConstructible() {
   if constexpr (isReference<T>()) return true;
   else return _::NoThrowConstructibleFrom<T, U>;
 }
+
+namespace _ {  // private
+
+template <typename T>
+T implicitlyConvert(T value) noexcept;
+// Declared only. A call in an unevaluated operand performs exactly the implicit conversion of its
+// argument to T.
+
+template <typename T, typename U>
+concept ProjectsToPointer = ImplicitlyConstructibleFrom<T, U> ||
+    requires(U&& u) { { kj::fwd<U>(u).operator T() } -> SameAs<T>; };
+// Concept: U&& converts to the pointer type T either implicitly or through an explicit conversion
+// operator of U. Other direct-initializations may convert U to an intermediate temporary and
+// construct T from that, leaving T pointing at an object that dies with the conversion.
+
+template <typename T, typename U>
+constexpr bool isNoThrowProjectionToPointer() {
+  if constexpr (ImplicitlyConstructibleFrom<T, U>) {
+    return noexcept(implicitlyConvert<T>(instance<U&&>()));
+  } else {
+    return noexcept(instance<U&&>().operator T());
+  }
+}
+
+template <typename T, typename U>
+constexpr inline T projectToPointer(U&& u) noexcept(isNoThrowProjectionToPointer<T, U>()) {
+  // Performs exactly the conversion that ProjectsToPointer<T, U> accepted.
+  if constexpr (ImplicitlyConstructibleFrom<T, U>) {
+    return kj::fwd<U>(u);
+  } else {
+    return kj::fwd<U>(u).operator T();
+  }
+}
+
+template <typename T, typename U>
+concept PointerSafeConstructibleFrom = ConstructibleFrom<T, U> &&
+    (!isPointerType<T>() || ProjectsToPointer<RemoveConst<T>, U>);
+// Concept: like ConstructibleFrom, except that a pointer type T must satisfy ProjectsToPointer.
+
+template <typename T, typename U>
+constexpr inline decltype(auto) pointerSafeSource(U&& u) {
+  // The argument from which to direct-initialize a T that satisfies
+  // PointerSafeConstructibleFrom<T, U>: u itself, or the pointer that u projects to.
+  if constexpr (isPointerType<T>()) {
+    return projectToPointer<RemoveConst<T>>(kj::fwd<U>(u));
+  } else {
+    return kj::fwd<U>(u);
+  }
+}
+
+template <typename T, typename U>
+constexpr bool isNoThrowPointerSafeConstructible() {
+  // Whether constructing T from pointerSafeSource<T>(U&&) cannot throw.
+  if constexpr (isPointerType<T>()) {
+    return isNoThrowProjectionToPointer<RemoveConst<T>, U>() &&
+        isNoThrowMoveConstructible<T, RemoveConst<T>>();
+  } else {
+    return isNoThrowMoveConstructible<T, U>();
+  }
+}
+
+}  // namespace _ (private)
 
 template <typename T>
 concept Cloneable = requires(T& value) { value.clone(); };
@@ -1934,6 +2003,19 @@ inline Maybe<T> some(T&& t) { return Maybe<T>(kj::mv(t)); }
 template <typename T>
 class Maybe {
   // A T, or nullptr.
+  //
+  // Maybe<U> converts to Maybe<T> when U can construct T; the conversion is implicit iff U → T is.
+  // This applies to all types, not only pointer types. A pointer type T (see PointerTraits) must
+  // be produced implicitly or by an explicit conversion operator of U, since other constructions
+  // may build it from a temporary; see ProjectsToPointer. Lvalue sources convert
+  // from U& (or const U& for const sources); moving converts from U&& and clears the source.
+  // Constructing from a moved Maybe<U&> copies from the referent instead of moving it, then clears
+  // the reference. Assignment differs; see the assignment operator notes below.
+  // Empty sources produce empty results without invoking the conversion.
+  //
+  // These conversions do not extend the lifetime of borrowed data. For example, converting a
+  // Maybe<String> to Maybe<StringPtr> borrows from the original String; do not move the owner
+  // into such a conversion, since it would be destroyed and leave the pointer dangling.
 
 public:
   Maybe(): ptr(nullptr) {}
@@ -1945,30 +2027,45 @@ public:
   Maybe(Maybe& other): ptr(other.ptr) {}
 
   template <typename U>
-  Maybe(Maybe<U>&& other) noexcept(isNoThrowMoveConstructible<T, U>()) {
+    requires _::PointerSafeConstructibleFrom<T, U>
+  explicit(!_::ImplicitlyConstructibleFrom<T, U>)
+  Maybe(Maybe<U>&& other) noexcept(_::isNoThrowPointerSafeConstructible<T, U>()) {
     KJ_IF_SOME(val, kj::mv(other)) {
-      ptr.emplaceInit(kj::mv(val));
+      ptr.emplaceInit(_::pointerSafeSource<T>(kj::mv(val)));
     }
   }
   template <typename U>
+    requires _::PointerSafeConstructibleFrom<T, U&>
+  explicit(!_::ImplicitlyConstructibleFrom<T, U&>)
   Maybe(Maybe<U&>&& other) {
     KJ_IF_SOME(val, other) {
-      ptr.emplaceInit(val);
+      ptr.emplaceInit(_::pointerSafeSource<T>(val));
       other = kj::none;
     }
   }
   template <typename U>
+    requires _::PointerSafeConstructibleFrom<T, U&>
+  explicit(!_::ImplicitlyConstructibleFrom<T, U&>)
+  Maybe(Maybe<U>& other) {
+    KJ_IF_SOME(val, other) {
+      ptr.emplaceInit(_::pointerSafeSource<T>(val));
+    }
+  }
+  template <typename U>
+    requires _::PointerSafeConstructibleFrom<T, const U&>
+  explicit(!_::ImplicitlyConstructibleFrom<T, const U&>)
   Maybe(const Maybe<U>& other) {
     KJ_IF_SOME(val, other) {
-      ptr.emplaceInit(val);
+      ptr.emplaceInit(_::pointerSafeSource<T>(val));
     }
   }
 
   template <typename U>
     requires _::HasConvertingConstructorFlag<T> &&  // Only when MaybeTraits<T> opts in
-             _::ConstructibleFrom<T, U>
-  explicit(!canConvert<U&&, T>())  // Implicit when U→T is implicit, explicit otherwise
-  Maybe(U&& value) noexcept(isNoThrowMoveConstructible<T, U>()): ptr(kj::fwd<U>(value)) {}
+             _::PointerSafeConstructibleFrom<T, U>
+  explicit(!_::ImplicitlyConstructibleFrom<T, U>)  // Follow the underlying conversion's explicitness
+  Maybe(U&& value) noexcept(_::isNoThrowPointerSafeConstructible<T, U>())
+      : ptr(_::pointerSafeSource<T>(kj::fwd<U>(value))) {}
   // Converting constructor: allows constructing Maybe<T> from a U that is convertible to T.
   // Only exists when MaybeTraits<T>::convertingConstructor is true.
   // Implicit when U is implicitly convertible to T, explicit otherwise.
@@ -2039,10 +2136,14 @@ public:
   //
   // operator=(T&&/T&/const T&) delegates directly to NullableValue::operator=(U&&).
   //
-  // operator=(Maybe&&/const Maybe&/Maybe<U>&&/const Maybe<U>&) uses KJ_IF_SOME to extract
+  // operator=(Maybe&&/const Maybe&/Maybe<U>&&/Maybe<U>&/const Maybe<U>&) uses KJ_IF_SOME to extract
   // the source value, then delegates to NullableValue::operator=(U&&). For the move variants,
   // KJ_IF_SOME goes through NullableValue's move constructor, which clears the source to a
-  // well-defined empty state.
+  // well-defined empty state. Exception: assigning from a moved Maybe<U&> moves from the referent
+  // and leaves the source reference set, unlike construction from a moved Maybe<U&>.
+  //
+  // Converting assignments from Maybe<U> require U → T to be implicit, matching the implicit
+  // converting constructors. For explicit conversions, construct first: `m = Maybe<T>(other)`.
   //
   // emplace() and operator=(kj::none) are NOT safe against reentrant access from T's destructor.
   // If T's destructor may reentrantly access the enclosing Maybe, use a pattern that goes through
@@ -2082,6 +2183,8 @@ public:
   }
 
   template <typename U>
+    requires _::ImplicitlyConstructibleFrom<T, decltype(kj::mv(kj::instance<U&>()))>
+    // A moved Maybe<X&> moves from the referent, preserving its constness (see above).
   Maybe& operator=(Maybe<U>&& other) {
     KJ_IF_SOME(val, kj::mv(other)) {
       ptr = kj::mv(val);
@@ -2091,6 +2194,17 @@ public:
     return *this;
   }
   template <typename U>
+    requires _::ImplicitlyConstructibleFrom<T, U&>
+  Maybe& operator=(Maybe<U>& other) {
+    KJ_IF_SOME(val, other) {
+      ptr = val;
+    } else {
+      ptr = nullptr;
+    }
+    return *this;
+  }
+  template <typename U>
+    requires _::ImplicitlyConstructibleFrom<T, const U&>
   Maybe& operator=(const Maybe<U>& other) {
     KJ_IF_SOME(val, other) {
       ptr = val;
@@ -2102,14 +2216,16 @@ public:
 
   template <typename U>
     requires _::HasConvertingConstructorFlag<T> &&  // Only when MaybeTraits<T> opts in
-             _::ConstructibleFrom<T, U>
+             _::ImplicitlyConstructibleFrom<T, U>
   Maybe& operator=(U&& value) {
     // Delegate to NullableValue::operator=(U&&).
     ptr = kj::fwd<U>(value);
     return *this;
   }
-  // Converting assignment: allows assigning a U that is convertible to T.
+  // Converting assignment: allows assigning a U that is implicitly convertible to T.
   // Only exists when MaybeTraits<T>::convertingConstructor is true.
+  // Like the converting constructor, this follows the underlying conversion's explicitness;
+  // for explicit conversions, construct first: `m = T(value)`.
   //
   // Note: This converting assignment operator may be preferred over the copy assignment operator
   // for Maybe<T>-derived types. See the longer note on the converting constructor for a deeper
