@@ -629,34 +629,90 @@ bool HttpHeaders::isValidHeaderValue(kj::StringPtr value) {
 }
 
 HttpHeaders::HttpHeaders(const HttpHeaderTable& table)
-    : table(&table),
-      indexedHeaders(kj::heapArray<kj::StringPtr>(table.idCount())) {
+    : table(&table) {
   KJ_ASSERT(
       table.isReady(), "HttpHeaders object was constructed from "
       "HttpHeaderTable that wasn't fully built yet at the time of construction");
 }
 
+void HttpHeaders::setIndexed(uint id, kj::StringPtr value) {
+  if (value == nullptr) {
+    // As a slot per id held: an empty value is no value.
+    unsetIndexed(id);
+    return;
+  }
+  IndexedHeader header { id, value.begin(), value.size() };
+  if (id < SET_BITS) {
+    setBits[id / 64] |= uint64_t(1) << (id % 64);
+  }
+
+  if (!spilled) {
+    uint at = inlineCount;
+    while (at > 0 && inlineIndexed[at - 1].id >= id) --at;
+    if (at < inlineCount && inlineIndexed[at].id == id) {
+      inlineIndexed[at] = header;
+      return;
+    }
+    if (inlineCount < INLINE_INDEXED) {
+      memmove(inlineIndexed + at + 1, inlineIndexed + at,
+          (inlineCount - at) * sizeof(IndexedHeader));
+      inlineIndexed[at] = header;
+      ++inlineCount;
+      return;
+    }
+    // Too many for the inline room: all of them move to the vector, kept from now on.
+    spilledIndexed.addAll(inlineIndexed, inlineIndexed + inlineCount);
+    inlineCount = 0;
+    spilled = true;
+  }
+
+  size_t at = spilledIndexed.size();
+  while (at > 0 && spilledIndexed[at - 1].id >= id) --at;
+  if (at < spilledIndexed.size() && spilledIndexed[at].id == id) {
+    spilledIndexed[at] = header;
+    return;
+  }
+  spilledIndexed.add(header);
+  auto moved = spilledIndexed.begin() + at;
+  memmove(moved + 1, moved, (spilledIndexed.size() - 1 - at) * sizeof(IndexedHeader));
+  *moved = header;
+}
+
+void HttpHeaders::unsetIndexed(uint id) {
+  auto header = findIndexed(id);
+  if (header == nullptr) return;
+  if (id < SET_BITS) {
+    setBits[id / 64] &= ~(uint64_t(1) << (id % 64));
+  }
+  auto all = spilled ? spilledIndexed.asPtr() : kj::arrayPtr(inlineIndexed, inlineCount);
+  size_t at = header - all.begin();
+  memmove(all.begin() + at, all.begin() + at + 1, (all.size() - at - 1) * sizeof(IndexedHeader));
+  if (spilled) {
+    spilledIndexed.removeLast();
+  } else {
+    --inlineCount;
+  }
+}
+
 void HttpHeaders::clear() {
-  forEachSetIndex(0, [&](uint i) { indexedHeaders[i] = nullptr; });
-  memset(setSlots, 0, sizeof(setSlots));
-  setPastSlots = false;
+  inlineCount = 0;
+  spilled = false;
+  spilledIndexed.clear();
+  memset(setBits, 0, sizeof(setBits));
 
   unindexedHeaders.clear();
 }
 
 size_t HttpHeaders::size() const {
-  size_t result = unindexedHeaders.size();
-  forEachSetIndex(0, [&](uint) { ++result; });
-  return result;
+  return indexed().size() + unindexedHeaders.size();
 }
 
 HttpHeaders HttpHeaders::clone() const {
   HttpHeaders result(*table);
 
-  forEachSetIndex(0, [&](uint i) {
-    result.indexedHeaders[i] = result.cloneToOwn(indexedHeaders[i]);
-    result.markSet(i);
-  });
+  for (auto& header: indexed()) {
+    result.setIndexed(header.id, result.cloneToOwn(header.get()));
+  }
 
   result.unindexedHeaders.resize(unindexedHeaders.size());
   for (auto i: kj::indices(unindexedHeaders)) {
@@ -670,10 +726,9 @@ HttpHeaders HttpHeaders::clone() const {
 HttpHeaders HttpHeaders::cloneShallow() const {
   HttpHeaders result(*table);
 
-  forEachSetIndex(0, [&](uint i) {
-    result.indexedHeaders[i] = indexedHeaders[i];
-    result.markSet(i);
-  });
+  for (auto& header: indexed()) {
+    result.setIndexed(header.id, header.get());
+  }
 
   result.unindexedHeaders.resize(unindexedHeaders.size());
   for (auto i: kj::indices(unindexedHeaders)) {
@@ -712,8 +767,7 @@ void HttpHeaders::setPtr(HttpHeaderId id, kj::StringPtr value) {
   id.requireFrom(*table);
   requireValidHeaderValue(value, id);
 
-  indexedHeaders[id.id] = value;
-  markSet(id.id);
+  setIndexed(id.id, value);
 }
 
 void HttpHeaders::set(HttpHeaderId id, kj::String&& value) {
@@ -749,9 +803,9 @@ void HttpHeaders::add(kj::String&& name, kj::String&& value) {
 
 void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
   KJ_IF_SOME(id, table->stringToId(name)) {
-    if (indexedHeaders[id.id] == nullptr) {
-      indexedHeaders[id.id] = value;
-      markSet(id.id);
+    auto existing = findIndexed(id.id);
+    if (existing == nullptr) {
+      setIndexed(id.id, value);
     } else {
       // Duplicate HTTP headers are equivalent to the values being separated by a comma.
 
@@ -765,8 +819,8 @@ void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
         // TODO(cleanup): Maybe HttpHeaders should just special-case set-cookie in general?
         unindexedHeaders.add(Header {name, value});
       } else {
-        auto concat = kj::str(indexedHeaders[id.id], ", ", value);
-        indexedHeaders[id.id] = concat;
+        auto concat = kj::str(existing->get(), ", ", value);
+        setIndexed(id.id, concat);
         ownedStrings.add(concat.releaseArray());
       }
     }
@@ -1162,7 +1216,7 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
   if (word1 != nullptr) {
     size += word1.size() + word2.size() + word3.size() + 4;
   }
-  KJ_ASSERT(connectionHeaders.size() <= indexedHeaders.size());
+  KJ_ASSERT(connectionHeaders.size() <= table->idCount());
   // The connection headers stand in for the first ids' values; the set ones follow.
   auto forEachValue = [&](auto&& func) {
     for (auto i: kj::indices(connectionHeaders)) {
@@ -1170,8 +1224,11 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
         func(static_cast<uint>(i), connectionHeaders[i]);
       }
     }
-    forEachSetIndex(static_cast<uint>(connectionHeaders.size()),
-        [&](uint i) { func(i, indexedHeaders[i]); });
+    for (auto& header: indexed()) {
+      if (header.id >= connectionHeaders.size()) {
+        func(header.id, header.get());
+      }
+    }
   };
   forEachValue([&](uint i, kj::StringPtr value) {
     size += table->idToString(HttpHeaderId(table, i)).size() + value.size() + 4;
