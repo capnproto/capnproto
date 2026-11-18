@@ -41,6 +41,7 @@
 #include <kj/sticky-flag.h>
 #include <kj/async-io.h>
 #include <kj/debug.h>
+#include <bit>
 
 KJ_BEGIN_HEADER
 
@@ -487,6 +488,26 @@ private:
 
   kj::Array<kj::StringPtr> indexedHeaders;
   // Size is always table->idCount().
+
+  static constexpr uint SET_SLOT_BITS = 256;
+  uint64_t setSlots[SET_SLOT_BITS / 64] = {};
+  bool setPastSlots = false;
+  // Which indexed headers may be set, so that walking the set ones need not visit every id in
+  // the table, which may have hundreds. Bit `i` of the words covers id `i`, and `setPastSlots`
+  // every id from SET_SLOT_BITS up. A bit stays set when its header is unset, so walkers still
+  // check the value.
+
+  void markSet(uint id) {
+    if (id < SET_SLOT_BITS) {
+      setSlots[id / 64] |= uint64_t(1) << (id % 64);
+    } else {
+      setPastSlots = true;
+    }
+  }
+
+  template <typename Func>
+  void forEachSetIndex(uint from, Func&& func) const;
+  // Calls func(id) for every id from `from` up whose header is set, in order.
 
   struct Header {
     kj::StringPtr name;
@@ -1533,12 +1554,35 @@ inline void HttpHeaders::unset(HttpHeaderId id) {
 }
 
 template <typename Func>
-inline void HttpHeaders::forEach(Func&& func) const {
-  for (auto i: kj::indices(indexedHeaders)) {
-    if (indexedHeaders[i] != nullptr) {
-      func(table->idToString(HttpHeaderId(table, i)), indexedHeaders[i]);
+inline void HttpHeaders::forEachSetIndex(uint from, Func&& func) const {
+  uint end = static_cast<uint>(kj::min(indexedHeaders.size(), size_t(SET_SLOT_BITS)));
+  for (uint word = from / 64; word * 64 < end; word++) {
+    uint64_t bits = setSlots[word];
+    if (word == from / 64) {
+      bits &= ~uint64_t(0) << (from % 64);
+    }
+    while (bits != 0) {
+      uint i = word * 64 + std::countr_zero(bits);
+      bits &= bits - 1;
+      if (indexedHeaders[i] != nullptr) {
+        func(i);
+      }
     }
   }
+  if (setPastSlots) {
+    for (uint i = kj::max(from, SET_SLOT_BITS); i < indexedHeaders.size(); i++) {
+      if (indexedHeaders[i] != nullptr) {
+        func(i);
+      }
+    }
+  }
+}
+
+template <typename Func>
+inline void HttpHeaders::forEach(Func&& func) const {
+  forEachSetIndex(0, [&](uint i) {
+    func(table->idToString(HttpHeaderId(table, i)), indexedHeaders[i]);
+  });
 
   for (auto& header: unindexedHeaders) {
     func(header.name, header.value);
@@ -1547,11 +1591,9 @@ inline void HttpHeaders::forEach(Func&& func) const {
 
 template <typename Func1, typename Func2>
 inline void HttpHeaders::forEach(Func1&& func1, Func2&& func2) const {
-  for (auto i: kj::indices(indexedHeaders)) {
-    if (indexedHeaders[i] != nullptr) {
-      func1(HttpHeaderId(table, i), indexedHeaders[i]);
-    }
-  }
+  forEachSetIndex(0, [&](uint i) {
+    func1(HttpHeaderId(table, i), indexedHeaders[i]);
+  });
 
   for (auto& header: unindexedHeaders) {
     func2(header.name, header.value);

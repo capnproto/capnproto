@@ -637,31 +637,26 @@ HttpHeaders::HttpHeaders(const HttpHeaderTable& table)
 }
 
 void HttpHeaders::clear() {
-  for (auto& header: indexedHeaders) {
-    header = nullptr;
-  }
+  forEachSetIndex(0, [&](uint i) { indexedHeaders[i] = nullptr; });
+  memset(setSlots, 0, sizeof(setSlots));
+  setPastSlots = false;
 
   unindexedHeaders.clear();
 }
 
 size_t HttpHeaders::size() const {
   size_t result = unindexedHeaders.size();
-  for (auto i: kj::indices(indexedHeaders)) {
-    if (indexedHeaders[i] != nullptr) {
-      ++result;
-    }
-  }
+  forEachSetIndex(0, [&](uint) { ++result; });
   return result;
 }
 
 HttpHeaders HttpHeaders::clone() const {
   HttpHeaders result(*table);
 
-  for (auto i: kj::indices(indexedHeaders)) {
-    if (indexedHeaders[i] != nullptr) {
-      result.indexedHeaders[i] = result.cloneToOwn(indexedHeaders[i]);
-    }
-  }
+  forEachSetIndex(0, [&](uint i) {
+    result.indexedHeaders[i] = result.cloneToOwn(indexedHeaders[i]);
+    result.markSet(i);
+  });
 
   result.unindexedHeaders.resize(unindexedHeaders.size());
   for (auto i: kj::indices(unindexedHeaders)) {
@@ -675,11 +670,10 @@ HttpHeaders HttpHeaders::clone() const {
 HttpHeaders HttpHeaders::cloneShallow() const {
   HttpHeaders result(*table);
 
-  for (auto i: kj::indices(indexedHeaders)) {
-    if (indexedHeaders[i] != nullptr) {
-      result.indexedHeaders[i] = indexedHeaders[i];
-    }
-  }
+  forEachSetIndex(0, [&](uint i) {
+    result.indexedHeaders[i] = indexedHeaders[i];
+    result.markSet(i);
+  });
 
   result.unindexedHeaders.resize(unindexedHeaders.size());
   for (auto i: kj::indices(unindexedHeaders)) {
@@ -719,6 +713,7 @@ void HttpHeaders::setPtr(HttpHeaderId id, kj::StringPtr value) {
   requireValidHeaderValue(value, id);
 
   indexedHeaders[id.id] = value;
+  markSet(id.id);
 }
 
 void HttpHeaders::set(HttpHeaderId id, kj::String&& value) {
@@ -756,6 +751,7 @@ void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
   KJ_IF_SOME(id, table->stringToId(name)) {
     if (indexedHeaders[id.id] == nullptr) {
       indexedHeaders[id.id] = value;
+      markSet(id.id);
     } else {
       // Duplicate HTTP headers are equivalent to the values being separated by a comma.
 
@@ -1167,12 +1163,19 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
     size += word1.size() + word2.size() + word3.size() + 4;
   }
   KJ_ASSERT(connectionHeaders.size() <= indexedHeaders.size());
-  for (auto i: kj::indices(indexedHeaders)) {
-    kj::StringPtr value = i < connectionHeaders.size() ? connectionHeaders[i] : indexedHeaders[i];
-    if (value != nullptr) {
-      size += table->idToString(HttpHeaderId(table, i)).size() + value.size() + 4;
+  // The connection headers stand in for the first ids' values; the set ones follow.
+  auto forEachValue = [&](auto&& func) {
+    for (auto i: kj::indices(connectionHeaders)) {
+      if (connectionHeaders[i] != nullptr) {
+        func(static_cast<uint>(i), connectionHeaders[i]);
+      }
     }
-  }
+    forEachSetIndex(static_cast<uint>(connectionHeaders.size()),
+        [&](uint i) { func(i, indexedHeaders[i]); });
+  };
+  forEachValue([&](uint i, kj::StringPtr value) {
+    size += table->idToString(HttpHeaderId(table, i)).size() + value.size() + 4;
+  });
   for (auto& header: unindexedHeaders) {
     size += header.name.size() + header.value.size() + 4;
   }
@@ -1183,12 +1186,9 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
   if (word1 != nullptr) {
     ptr = kj::_::fill(ptr, word1, space, word2, space, word3, newline);
   }
-  for (auto i: kj::indices(indexedHeaders)) {
-    kj::StringPtr value = i < connectionHeaders.size() ? connectionHeaders[i] : indexedHeaders[i];
-    if (value != nullptr) {
-      ptr = kj::_::fill(ptr, table->idToString(HttpHeaderId(table, i)), colon, value, newline);
-    }
-  }
+  forEachValue([&](uint i, kj::StringPtr value) {
+    ptr = kj::_::fill(ptr, table->idToString(HttpHeaderId(table, i)), colon, value, newline);
+  });
   for (auto& header: unindexedHeaders) {
     ptr = kj::_::fill(ptr, header.name, colon, header.value, newline);
   }
