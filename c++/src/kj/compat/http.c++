@@ -333,8 +333,8 @@ void SHA1Final(
 // End SHA-1 implementation.
 // =======================================================================================
 
-static constexpr kj::StringPtr METHOD_NAMES[] = {
-#define METHOD_NAME(id) kj::StringPtr(#id, sizeof(#id) - 1),
+static constexpr kj::LiteralStringConst METHOD_NAMES[] = {
+#define METHOD_NAME(id) #id ""_kjc,
 KJ_HTTP_FOR_EACH_METHOD(METHOD_NAME)
 #undef METHOD_NAME
 };
