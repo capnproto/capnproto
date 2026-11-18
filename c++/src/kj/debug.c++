@@ -431,6 +431,12 @@ Exception Debug::makeFailure(
 }
 #endif
 
+String stringifyDebugComparison(const Debug::Comparison& comparison) {
+  String left = stringify(comparison.left);
+  String right = stringify(comparison.right);
+  return str(left, comparison.op, right);
+}
+
 String Debug::makeDescriptionInternal(const char* macroArgs, ArrayPtr<const Arg> args) {
   return makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, args);
 }

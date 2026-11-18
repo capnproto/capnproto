@@ -639,6 +639,14 @@ public:
     // NUL) by `str()`, so they share one function, whatever their size.
   };
 
+  struct Comparison {
+    // A failed comparison in a check, e.g. `a == b`: its operands, each stringified by the
+    // function shared by all operands of its type, and the operator between them.
+    Arg left;
+    StringPtr op;
+    Arg right;
+  };
+
   template <typename Code, typename... Params>
   static KJ_NOINLINE KJ_NORETURN(void fail(const char* file, int line, Code code,
       const char* condition, const char* macroArgs, Params&&... params));
@@ -889,11 +897,31 @@ inline auto tryToCharSequence(T* value) { return kj::toCharSequence(*value); }
 inline StringPtr tryToCharSequence(...) { return "(can't stringify)"_kj; }
 // SFINAE to stringify a value if and only if it can be stringified.
 
-template <typename Left, typename Right>
+template <typename T>
+KJ_FAIL_COLD_ String stringifyDebugOperand(const void* value) {
+  return _::concat(tryToCharSequence(const_cast<T*>(static_cast<const T*>(value))));
+}
+
+template <typename T>
+Debug::Arg debugOperand(T* value) { return { value, &stringifyDebugOperand<T> }; }
+// An operand of a comparison in a check, stringified by the function shared by all operands of
+// type `T`.
+
+String stringifyDebugComparison(const Debug::Comparison& comparison);
+// Stringifies a comparison in a failed check, e.g. "1 == 2".
+
+#define KJ_DEBUG_COMPARISONS_(X) X(Eq, ==) X(Ne, !=) X(Le, <=) X(Ge, >=) X(Lt, <) X(Gt, >)
+// The comparison operators that DebugExpression captures, and the names of their DebugOp types.
+
+#define KJ_DEBUG_OPERATOR_(NAME, OP) \
+  struct DebugOp##NAME { static StringPtr op() { return " " #OP " "_kj; } };
+KJ_DEBUG_COMPARISONS_(KJ_DEBUG_OPERATOR_)
+#undef KJ_DEBUG_OPERATOR_
+
+template <typename Left, typename Right, typename Op>
 struct DebugComparison {
   Left left;
   Right right;
-  StringPtr op;
   bool result;
 
   inline operator bool() const { return KJ_LIKELY(result); }
@@ -903,9 +931,14 @@ struct DebugComparison {
   template <typename T> inline void operator|(T&& other) = delete;
 };
 
-template <typename Left, typename Right>
-String KJ_STRINGIFY(DebugComparison<Left, Right>& cmp) {
-  return _::concat(tryToCharSequence(&cmp.left), cmp.op, tryToCharSequence(&cmp.right));
+template <typename Left, typename Right, typename Op>
+Debug::Comparison debugComparison(DebugComparison<Left, Right, Op>& cmp) {
+  return { debugOperand(&cmp.left), Op::op(), debugOperand(&cmp.right) };
+}
+
+template <typename Left, typename Right, typename Op>
+String KJ_STRINGIFY(DebugComparison<Left, Right, Op>& cmp) {
+  return stringifyDebugComparison(debugComparison(cmp));
 }
 
 template <typename T>
@@ -914,18 +947,13 @@ struct DebugExpression {
   T value;
 
   // Handle comparison operations by constructing a DebugComparison value.
-#define DEFINE_OPERATOR(OP) \
+#define DEFINE_OPERATOR(NAME, OP) \
   template <typename U> \
-  DebugComparison<T, U> operator OP(U&& other) { \
+  DebugComparison<T, U, DebugOp##NAME> operator OP(U&& other) { \
     bool result = value OP other; \
-    return { kj::fwd<T>(value), kj::fwd<U>(other), " " #OP " "_kj, result }; \
+    return { kj::fwd<T>(value), kj::fwd<U>(other), result }; \
   }
-  DEFINE_OPERATOR(==);
-  DEFINE_OPERATOR(!=);
-  DEFINE_OPERATOR(<=);
-  DEFINE_OPERATOR(>=);
-  DEFINE_OPERATOR(< );
-  DEFINE_OPERATOR(> );
+  KJ_DEBUG_COMPARISONS_(DEFINE_OPERATOR)
 #undef DEFINE_OPERATOR
 
   // Handle binary operators that have equal or lower precedence than comparisons by performing
@@ -964,6 +992,8 @@ struct DebugExpressionStart {
   }
 };
 static constexpr DebugExpressionStart MAGIC_ASSERT;
+
+#undef KJ_DEBUG_COMPARISONS_
 
 }  // namespace _ (private)
 }  // namespace kj
