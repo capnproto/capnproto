@@ -681,8 +681,11 @@ public:
   // TODO(someday):  Expose publicly.
 
   template <typename... Params>
-  static void log(const char* file, int line, LogSeverity severity, const char* macroArgs,
-                  Params&&... params);
+  static KJ_FAIL_INLINE_ void log(const char* file, int line, LogSeverity severity,
+                                  const char* macroArgs, Params&&... params);
+  // Logs a message. Used by KJ_LOG, which only calls it if `shouldLog(severity)`. Forwards to the
+  // out-of-line logImpl(), passing cheap arguments by value (see `DebugParam`), so that like a
+  // check, a KJ_LOG costs no stack in the function containing it.
 
   struct ConditionFailed {};
   // The code that the check macros pass to fail() when their condition is false. The exception's
@@ -860,6 +863,9 @@ public:
 private:
   static LogSeverity minSeverity;
 
+  template <typename... Params>
+  static KJ_NOINLINE KJ_FAIL_COLD_ void logImpl(const char* file, int line, LogSeverity severity,
+                                                const char* macroArgs, Params... params);
   static void logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
                           ArrayPtr<const Arg> args);
   static void logFailedCheckInternal(LogSeverity severity, const Exception& failure);
@@ -900,15 +906,20 @@ private:
 };
 
 template <typename... Params>
-void Debug::log(const char* file, int line, LogSeverity severity, const char* macroArgs,
-                Params&&... params) {
-  const Arg args[sizeof...(Params)] = { Arg::of(params)... };
-  logInternal(file, line, severity, macroArgs, arrayPtr(args, sizeof...(Params)));
+inline void Debug::log(const char* file, int line, LogSeverity severity, const char* macroArgs,
+                       Params&&... params) {
+  if constexpr (sizeof...(Params) == 0) {
+    logInternal(file, line, severity, macroArgs, nullptr);
+  } else {
+    logImpl<DebugParam<Params>...>(file, line, severity, macroArgs, kj::fwd<Params>(params)...);
+  }
 }
 
-template <>
-inline void Debug::log<>(const char* file, int line, LogSeverity severity, const char* macroArgs) {
-  logInternal(file, line, severity, macroArgs, nullptr);
+template <typename... Params>
+void Debug::logImpl(const char* file, int line, LogSeverity severity, const char* macroArgs,
+                    Params... params) {
+  const Arg args[sizeof...(Params)] = { Arg::of(params)... };
+  logInternal(file, line, severity, macroArgs, arrayPtr(args, sizeof...(Params)));
 }
 
 template <typename S, typename... Params>
