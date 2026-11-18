@@ -395,13 +395,6 @@ Debug::Site unpack(PackedSite site) {
   return { file, static_cast<int>(line), condition, macroArgs };
 }
 
-Exception makeAssertionFailure(const Debug::Site& site, Exception::Type type,
-                               const Debug::Arg* comparison, ArrayPtr<const Debug::Arg> args) {
-  return Exception(type, site.file, site.line,
-      makeDescriptionImpl(ASSERTION, site.condition, 0, nullptr, site.macroArgs, args,
-                          comparison));
-}
-
 }  // namespace
 
 void Debug::logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
@@ -410,23 +403,11 @@ void Debug::logInternal(const char* file, int line, LogSeverity severity, const 
       makeDescriptionInternal(macroArgs, args));
 }
 
-Exception Debug::makeFailure(const Site& site, Exception::Type type, ArrayPtr<const Arg> args) {
-  return makeAssertionFailure(site, type, nullptr, args);
-}
-
-Exception Debug::makeFailure(const Site& site, Exception::Type type, const Arg& comparison,
-                             ArrayPtr<const Arg> args) {
-  return makeAssertionFailure(site, type, &comparison, args);
-}
-
-Exception Debug::makeFailure(PackedSite site, Exception::Type type, const Arg& comparison,
-                             ArrayPtr<const Arg> args) {
-  return makeFailure(unpack(site), type, comparison, args);
-}
-
-void Debug::logFailure(LogSeverity severity, const Exception& exception) {
-  getExceptionCallback().logMessage(severity, exception.getFile(), exception.getLine(), 0,
-      str("failed: ", exception.getDescription()));
+Exception Debug::makeFailure(const Site& site, Exception::Type type, ArrayPtr<const Arg> args,
+                             const Arg* comparison) {
+  return Exception(type, site.file, site.line,
+      makeDescriptionImpl(ASSERTION, site.condition, 0, nullptr, site.macroArgs, args,
+                          comparison));
 }
 
 Exception Debug::makeFailure(const Site& site, int osErrorNumber, ArrayPtr<const Arg> args) {
@@ -434,22 +415,9 @@ Exception Debug::makeFailure(const Site& site, int osErrorNumber, ArrayPtr<const
       makeDescriptionImpl(SYSCALL, site.condition, osErrorNumber, nullptr, site.macroArgs, args));
 }
 
-Exception Debug::makeFailure(PackedSite site, Exception::Type type, ArrayPtr<const Arg> args) {
-  return makeFailure(unpack(site), type, args);
-}
-
-Exception Debug::makeFailure(PackedSite site, int osErrorNumber, ArrayPtr<const Arg> args) {
-  return makeFailure(unpack(site), osErrorNumber, args);
-}
-
 #if _WIN32 || __CYGWIN__
-Exception Debug::makeFailure(PackedSite site, Win32Result osErrorNumber,
-    ArrayPtr<const Arg> args) {
-  return makeFailure(unpack(site), osErrorNumber, args);
-}
-
-Exception Debug::makeFailure(
-    const Site& site, Win32Result osErrorNumber, ArrayPtr<const Arg> args) {
+Exception Debug::makeFailure(const Site& site, Win32Result osErrorNumber,
+                             ArrayPtr<const Arg> args) {
   LPVOID ptr;
   // TODO(someday): Why doesn't this work for winsock errors?
   DWORD result = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER |
@@ -477,6 +445,27 @@ Exception Debug::makeFailure(
                           site.macroArgs, args));
 }
 #endif
+
+Exception Debug::makeFailure(PackedSite site, Exception::Type type, ArrayPtr<const Arg> args,
+                             const Arg* comparison) {
+  return makeFailure(unpack(site), type, args, comparison);
+}
+
+Exception Debug::makeFailure(PackedSite site, int osErrorNumber, ArrayPtr<const Arg> args) {
+  return makeFailure(unpack(site), osErrorNumber, args);
+}
+
+#if _WIN32 || __CYGWIN__
+Exception Debug::makeFailure(PackedSite site, Win32Result osErrorNumber,
+                             ArrayPtr<const Arg> args) {
+  return makeFailure(unpack(site), osErrorNumber, args);
+}
+#endif
+
+void Debug::logFailure(LogSeverity severity, const Exception& exception) {
+  getExceptionCallback().logMessage(severity, exception.getFile(), exception.getLine(), 0,
+      str("failed: ", exception.getDescription()));
+}
 
 String stringifyDebugComparison(const Debug::Arg& left, StringPtr op, const Debug::Arg& right) {
   String leftValue = stringify(left);

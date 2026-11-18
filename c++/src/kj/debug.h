@@ -842,23 +842,27 @@ private:
                                          Params&&... params);
   // Builds the exception describing a failed check, stringifying `params`.
 
-  static void logFailure(LogSeverity severity, const Exception& exception);
-
-  static Exception makeFailure(const Site& site, Exception::Type type, ArrayPtr<const Arg> args);
-  static Exception makeFailure(const Site& site, Exception::Type type, const Arg& comparison,
-                               ArrayPtr<const Arg> args);
-  static Exception makeFailure(PackedSite site, Exception::Type type, const Arg& comparison,
-                               ArrayPtr<const Arg> args);
+  static Exception makeFailure(const Site& site, Exception::Type type, ArrayPtr<const Arg> args,
+                               const Arg* comparison = nullptr);
   static Exception makeFailure(const Site& site, int osErrorNumber, ArrayPtr<const Arg> args);
-  static Exception makeFailure(PackedSite site, Exception::Type type, ArrayPtr<const Arg> args);
-  static Exception makeFailure(PackedSite site, int osErrorNumber, ArrayPtr<const Arg> args);
 #if _WIN32 || __CYGWIN__
   static Exception makeFailure(const Site& site, Win32Result osErrorNumber,
-      ArrayPtr<const Arg> args);
-  static Exception makeFailure(PackedSite site, Win32Result osErrorNumber,
-      ArrayPtr<const Arg> args);
+                               ArrayPtr<const Arg> args);
 #endif
-  // Stringifies `args` and builds the exception describing a failed check.
+  // Stringifies `args` and builds the exception describing a failed check. `comparison` is the
+  // check's condition, if it's a comparison (see ConditionFailed).
+
+  static Exception makeFailure(PackedSite site, Exception::Type type, ArrayPtr<const Arg> args,
+                               const Arg* comparison = nullptr);
+  static Exception makeFailure(PackedSite site, int osErrorNumber, ArrayPtr<const Arg> args);
+#if _WIN32 || __CYGWIN__
+  static Exception makeFailure(PackedSite site, Win32Result osErrorNumber,
+                               ArrayPtr<const Arg> args);
+#endif
+  // Unpack the site and call the overloads above. Converting the PackedSite to a Site in the
+  // templates instead would double the code of the failImpl() instantiations.
+
+  static void logFailure(LogSeverity severity, const Exception& exception);
 };
 
 template <typename... Params>
@@ -895,8 +899,8 @@ Exception Debug::makeFailureWithParams(S site, ConditionFailed code, Condition&&
                                        Params&&... params) {
   if constexpr (DebugIsComparison_<Decay<Condition>>::value) {
     const Arg args[sizeof...(Params) + 1] = { Arg::of(condition), Arg::of(params)... };
-    return makeFailure(site, Exception::Type::FAILED, args[0],
-                       arrayPtr(args + 1, sizeof...(Params)));
+    return makeFailure(site, Exception::Type::FAILED, arrayPtr(args + 1, sizeof...(Params)),
+                       &args[0]);
   } else {
     return makeFailureWithParams(site, Exception::Type::FAILED, params...);
   }
