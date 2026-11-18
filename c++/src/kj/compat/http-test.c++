@@ -130,7 +130,13 @@ KJ_TEST("HttpMethod::tryParse") {
 
   // The name need not be NUL-terminated.
   KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("GETX"_kj.first(3))) == HttpMethod::GET);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("PUTS"_kj.first(3))) == HttpMethod::PUT);
   KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("BLOCKED"_kj.first(5))).name() == "BLOCK"_kj);
+
+  // A name that ends partway through a known one is a method of its own.
+  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("PROPFIND"_kj.first(3))).name() == "PRO"_kj);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(HttpMethod::tryParse("MKACTIVITY"_kj.first(5))).name() ==
+      "MKACT"_kj);
 
   // Length limit.
   auto longest = kj::str(kj::repeat('X', HttpMethod::MAX_NAME_SIZE));

@@ -339,7 +339,7 @@ KJ_HTTP_FOR_EACH_METHOD(METHOD_NAME)
 #undef METHOD_NAME
 };
 
-// Every listed name must fit, since tryParse() checks the length first.
+// Listed names fit too, so no method's name() is longer than MAX_NAME_SIZE.
 #define CHECK_NAME_SIZE(id) static_assert(sizeof(#id) - 1 <= HttpMethod::MAX_NAME_SIZE);
 KJ_HTTP_FOR_EACH_METHOD(CHECK_NAME_SIZE)
 #undef CHECK_NAME_SIZE
@@ -467,17 +467,33 @@ static kj::Maybe<HttpMethod> consumeKnownHttpMethod(const char*& ptr, const char
 #undef EXPECT_REST
 }
 
+kj::Maybe<HttpMethod> HttpMethod::consumeOther(const char*& ptr, const char* end) {
+  // Like consumeKnownHttpMethod(), the caller must check what follows the name.
+
+  const char* p = ptr;
+  while (p < end && HTTP_METHOD_CHARS.contains(*p)) {
+    if (p - ptr == MAX_NAME_SIZE) return kj::none;  // Too long; don't scan the rest.
+    ++p;
+  }
+  if (p == ptr) return kj::none;
+
+  HttpMethod result(kj::arrayPtr(ptr, p));
+  ptr = p;
+  return result;
+}
+
 kj::Maybe<HttpMethod> HttpMethod::tryParse(kj::ArrayPtr<const char> name) {
-  if (name.size() == 0 || name.size() > MAX_NAME_SIZE) return kj::none;
-  for (char c: name) {
-    if (!HTTP_METHOD_CHARS.contains(c)) return kj::none;
+  const char* p = name.begin();
+  KJ_IF_SOME(known, consumeKnownHttpMethod(p, name.end())) {
+    if (p == name.end()) return known;
   }
 
-  for (auto i: kj::indices(METHOD_NAMES)) {
-    if (name == METHOD_NAMES[i]) return HttpMethod(static_cast<Known>(i));
+  p = name.begin();
+  KJ_IF_SOME(other, consumeOther(p, name.end())) {
+    if (p == name.end()) return other;
   }
 
-  return HttpMethod(name);
+  return kj::none;
 }
 
 HttpMethod HttpMethod::parse(kj::ArrayPtr<const char> name) {
@@ -489,8 +505,7 @@ HttpMethod HttpMethod::parse(kj::ArrayPtr<const char> name) {
   KJ_FAIL_REQUIRE("invalid HTTP method", kj::encodeCEscape(prefix.asBytes()));
 }
 
-static kj::Maybe<HttpMethod> consumeHttpMethod(
-    char*& ptr, const char* end, bool allowOtherMethods) {
+kj::Maybe<HttpMethod> consumeHttpMethod(char*& ptr, const char* end, bool allowOtherMethods) {
   // Consumes the method at the start of a request line, which ends at `end`. On success, `ptr` is
   // left pointing at the first character after the method name, which the caller must check.
 
@@ -504,10 +519,9 @@ static kj::Maybe<HttpMethod> consumeHttpMethod(
   }
 
   if (allowOtherMethods) {
-    char* nameEnd = ptr;
-    while (nameEnd < end && HTTP_METHOD_CHARS.contains(*nameEnd)) ++nameEnd;
-    KJ_IF_SOME(other, HttpMethod::tryParse(kj::arrayPtr(ptr, nameEnd))) {
-      ptr = nameEnd;
+    p = ptr;
+    KJ_IF_SOME(other, HttpMethod::consumeOther(p, end)) {
+      ptr += p - ptr;
       return other;
     }
   }

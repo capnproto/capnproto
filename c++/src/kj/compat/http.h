@@ -155,6 +155,14 @@ private:
 
   explicit HttpMethod(kj::ArrayPtr<const char> otherName);
 
+  static kj::Maybe<HttpMethod> consumeOther(const char*& ptr, const char* end);
+  // Consumes a method name at the start of [ptr, end) as an OTHER method, for a name the method
+  // switch didn't match. Private because on "GET" it would make an OTHER method that isn't
+  // HttpMethod::GET.
+
+  friend kj::Maybe<HttpMethod> consumeHttpMethod(
+      char*& ptr, const char* end, bool allowOtherMethods);
+
   [[noreturn]] static void throwInvalidKnown();
 };
 
