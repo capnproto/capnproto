@@ -349,7 +349,7 @@ typedef unsigned char byte;
 namespace _ {  // private
 
 struct PackedSite {
-  // Where a check is, packed into one string literal by KJ_DEBUG_SITE: the file, line, condition
+  // Where a check is, packed into one string literal by KJ_PACKED_SITE_: the file, line, condition
   // (empty if none) and the names of the macro's arguments, each followed by a NUL. The failure
   // path passes one pointer rather than four arguments, and since the literal contains no
   // pointers, it doesn't need to be relocated when the program is loaded, unlike a struct of
@@ -368,14 +368,14 @@ KJ_NORETURN(void unreachable());
 
 }  // namespace _ (private)
 
-#define KJ_DEBUG_SITE(condition, macroArgs) \
+#define KJ_PACKED_SITE_(condition, macroArgs) \
   (::kj::_::PackedSite { \
-    __FILE__ "\0" KJ_DEBUG_STRINGIFY(__LINE__) "\0" condition "\0" macroArgs })
+    __FILE__ "\0" KJ_STRINGIZE_(__LINE__) "\0" condition "\0" macroArgs })
 // The location of a check as a kj::_::PackedSite. `condition` must be a string literal, empty if
 // there is none.
 
-#define KJ_DEBUG_STRINGIFY(x) KJ_DEBUG_STRINGIFY_(x)
-#define KJ_DEBUG_STRINGIFY_(x) #x
+#define KJ_STRINGIZE_(x) KJ_STRINGIZE_IMPL_(x)
+#define KJ_STRINGIZE_IMPL_(x) #x
 
 #if _MSC_VER && !defined(__clang__) && (!defined(_MSVC_TRADITIONAL) || _MSVC_TRADITIONAL)
 #define KJ_MSVC_TRADITIONAL_CPP 1
@@ -395,11 +395,11 @@ KJ_NORETURN(void unreachable());
 #if KJ_MSVC_TRADITIONAL_CPP
 #define KJ_IREQUIRE(condition, ...) \
     if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \
-        KJ_DEBUG_SITE(#condition, "" #__VA_ARGS__), __VA_ARGS__)
+        KJ_PACKED_SITE_(#condition, "" #__VA_ARGS__), __VA_ARGS__)
 #else
 #define KJ_IREQUIRE(condition, ...) \
     if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \
-        KJ_DEBUG_SITE(#condition, #__VA_ARGS__), ##__VA_ARGS__)
+        KJ_PACKED_SITE_(#condition, #__VA_ARGS__), ##__VA_ARGS__)
 #endif
 // Version of KJ_REQUIRE() which is safe to use in headers that are #included by users.  Used to
 // check preconditions inside inline methods.  Unlike KJ_REQUIRE(), it does not require including

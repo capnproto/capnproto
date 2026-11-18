@@ -380,7 +380,7 @@ String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNu
 }
 
 Debug::Site unpack(PackedSite site) {
-  // Splits a KJ_DEBUG_SITE literal into its fields.
+  // Splits a KJ_PACKED_SITE_ literal into its fields.
   auto next = [](const char* field) { return field + strlen(field) + 1; };
   const char* file = site.text;
   const char* lineText = next(file);

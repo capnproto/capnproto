@@ -91,7 +91,7 @@ private:
     [&](auto&& _kjCondition) { \
       if (!_kjCondition) { \
         ::kj::_::Debug::logFailedCheck(::kj::LogSeverity::ERROR, \
-            KJ_DEBUG_SITE(#cond, "" #__VA_ARGS__), _kjCondition, __VA_ARGS__); \
+            KJ_PACKED_SITE_(#cond, "" #__VA_ARGS__), _kjCondition, __VA_ARGS__); \
       } \
     }(::kj::_::MAGIC_ASSERT << cond); \
   } while (false);
@@ -102,7 +102,7 @@ private:
     [&](auto&& _kjCondition) { \
       if (!_kjCondition) { \
         ::kj::_::Debug::logFailedCheck(::kj::LogSeverity::ERROR, \
-            KJ_DEBUG_SITE_AT(location, #cond, "" #__VA_ARGS__), _kjCondition, __VA_ARGS__); \
+            KJ_SITE_AT_(location, #cond, "" #__VA_ARGS__), _kjCondition, __VA_ARGS__); \
       } \
     }(::kj::_::MAGIC_ASSERT << cond); \
   } while (false);
@@ -114,7 +114,7 @@ private:
     [&](auto&& _kjCondition) { \
       if (!_kjCondition) { \
         ::kj::_::Debug::logFailedCheck(::kj::LogSeverity::ERROR, \
-            KJ_DEBUG_SITE(#cond, #__VA_ARGS__), _kjCondition, ##__VA_ARGS__); \
+            KJ_PACKED_SITE_(#cond, #__VA_ARGS__), _kjCondition, ##__VA_ARGS__); \
       } \
     }(::kj::_::MAGIC_ASSERT << cond); \
   } while (false);
@@ -125,7 +125,7 @@ private:
     [&](auto&& _kjCondition) { \
       if (!_kjCondition) { \
         ::kj::_::Debug::logFailedCheck(::kj::LogSeverity::ERROR, \
-            KJ_DEBUG_SITE_AT(location, #cond, #__VA_ARGS__), _kjCondition, ##__VA_ARGS__); \
+            KJ_SITE_AT_(location, #cond, #__VA_ARGS__), _kjCondition, ##__VA_ARGS__); \
       } \
     }(::kj::_::MAGIC_ASSERT << cond); \
   } while (false);
