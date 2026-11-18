@@ -1192,6 +1192,13 @@ KJ_NOINLINE void assertTwice() {
   KJ_FRAME_PROBE();
 }
 
+KJ_NOINLINE void logCheapArgs() {
+  size_t a = opaque(size_t(1));
+  size_t b = opaque(size_t(2));
+  KJ_LOG(INFO, "out of range", a, b);
+  KJ_FRAME_PROBE();
+}
+
 ptrdiff_t frameOverhead(void (*check)()) {
   return measureFrame(check) - measureFrame(baseline);
 }
@@ -1224,6 +1231,7 @@ KJ_TEST("stack frame overhead of assertion macros") {
   KJ_EXPECT_FRAME(assertNonNull, 0);
   KJ_EXPECT_FRAME(assertNonNullMessage, 0);
   KJ_EXPECT_FRAME(assertTwice, 0);
+  KJ_EXPECT_FRAME(logCheapArgs, 0);
 
   #undef KJ_EXPECT_FRAME
 }
