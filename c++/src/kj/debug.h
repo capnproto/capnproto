@@ -180,7 +180,7 @@ namespace kj {
 #define KJ_DBG(...) KJ_EXPAND(KJ_LOG(DBG, __VA_ARGS__))
 
 // TODO(cleanup): It may be possible to reduce code duplication between the macros and their _AT
-// variants, which only differ in how they build the Debug::Site.
+// variants, which only differ in their site: KJ_PACKED_SITE_ vs. KJ_SITE_AT_.
 
 #define KJ_REQUIRE(cond, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \

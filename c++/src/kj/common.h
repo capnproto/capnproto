@@ -354,6 +354,10 @@ struct PackedSite {
   // path passes one pointer rather than four arguments, and since the literal contains no
   // pointers, it doesn't need to be relocated when the program is loaded, unlike a struct of
   // pointers in static storage. All checks but the _AT macros of kj/debug.h use one.
+  //
+  // KJ_LOG, KJ_EXCEPTION and KJ_CONTEXT pass the file and line separately instead: they have no
+  // static struct to replace, and the literal would have its own copy of the file name (as it
+  // contains NULs, it isn't merged with `__FILE__`), costing more .rodata than it saves .text.
   const char* text;
 };
 
