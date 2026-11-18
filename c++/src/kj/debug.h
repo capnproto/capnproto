@@ -617,23 +617,28 @@ template <typename T> struct DebugByValue_<T[]> { static constexpr bool value = 
 // class (see DebugIsSmallClass_).
 
 template <typename T, bool = DebugByValue_<T>::value>
-struct DebugParamDefault_ { typedef T&& Type; };
+struct DebugParam_ { typedef T&& Type; };
 template <typename T>
-struct DebugParamDefault_<T, true> { typedef Decay<T> Type; };
-template <typename T>
-struct DebugParam_: DebugParamDefault_<T> {};
+struct DebugParam_<T, true> { typedef Decay<T> Type; };
 template <typename T>
 using DebugParam = typename DebugParam_<T>::Type;
 // The type in which Debug::fail() passes an argument of type `T&&` to the out-of-line code that
 // stringifies it. Scalars (numbers, enums, pointers) and small trivially copyable classes are
 // copied, everything else is passed by reference. Copying is cheap on the failure path, and means
 // that the function containing the check doesn't take the argument's address: a local variable
-// can stay in registers, rather than being written to the stack every time the check passes. The
-// magic assert types are specialized below, so that `_kjCondition` doesn't need to be in memory
-// either.
+// can stay in registers, rather than being written to the stack every time the check passes.
 //
 // Copies don't change the description: everything is stringified before the call returns, while
 // any temporaries in the macro's arguments are still alive.
+
+template <typename T>
+struct DebugConditionParam_ { typedef DebugParam<T> Type; };
+template <typename T>
+using DebugConditionParam = typename DebugConditionParam_<T>::Type;
+// The type in which Debug::fail() passes a check's condition that is a comparison. It's
+// specialized below to pass a DebugComparison as DebugComparisonOperands, so that a comparison as
+// `_kjCondition` doesn't need to be in memory either. Only the condition is passed that way: a
+// DebugComparison that is an ordinary argument is stringified like any other.
 
 #endif  // KJ_FAIL_BY_VALUE_
 
@@ -644,8 +649,8 @@ struct DebugIsComparison_<T, decltype(void(debugComparison(instance<T&>())))> {
   static constexpr bool value = true;
 };
 // Whether a check's evaluated condition is a comparison, whose operands are shown when the check
-// fails: a DebugComparison, or the DebugComparisonOperands that DebugParam passes one as. Each has
-// a debugComparison() overload, below.
+// fails: a DebugComparison, or the DebugComparisonOperands that DebugConditionParam passes one as.
+// Each has a debugComparison() overload, below.
 
 class Debug {
 public:
@@ -731,10 +736,19 @@ public:
 #if KJ_FAIL_BY_VALUE_
   template <typename S, typename Code, typename... Params>
   static KJ_FAIL_INLINE_ KJ_NORETURN(void fail(S site, Code code, Params&&... params));
+  template <typename S, typename Condition, typename... Params>
+  static KJ_FAIL_INLINE_ KJ_NORETURN(void fail(S site, ConditionFailed code,
+      Condition&& condition, Params&&... params));
   template <typename S, typename Code, typename... Params>
   static KJ_FAIL_INLINE_ void failUnlessUnwinding(S site, Code code, Params&&... params);
+  template <typename S, typename Condition, typename... Params>
+  static KJ_FAIL_INLINE_ void failUnlessUnwinding(S site, ConditionFailed code,
+      Condition&& condition, Params&&... params);
   // Forward to failImpl() / failUnlessUnwindingImpl(), passing cheap arguments by value (see
-  // `DebugParam`). Always inlined, even in debug builds, so that they don't add a frame to the
+  // `DebugParam`), and a condition that is a comparison as its operands (see
+  // `DebugConditionParam`). A condition that isn't shown, as it isn't a comparison, isn't passed
+  // at all: the failure is described like that of a check without a condition, and shares its
+  // instantiation. Always inlined, even in debug builds, so that they don't add a frame to the
   // stack trace.
 
   template <typename S, typename Code, typename... Params>
@@ -930,9 +944,31 @@ inline void Debug::fail(S site, Code code, Params&&... params) {
   failImpl<S, Code, DebugParam<Params>...>(site, code, kj::fwd<Params>(params)...);
 }
 
+template <typename S, typename Condition, typename... Params>
+inline void Debug::fail(S site, ConditionFailed code, Condition&& condition, Params&&... params) {
+  if constexpr (DebugIsComparison_<Decay<Condition>>::value) {
+    failImpl<S, ConditionFailed, DebugConditionParam<Condition>, DebugParam<Params>...>(
+        site, code, kj::fwd<Condition>(condition), kj::fwd<Params>(params)...);
+  } else {
+    fail(site, Exception::Type::FAILED, kj::fwd<Params>(params)...);
+  }
+}
+
 template <typename S, typename Code, typename... Params>
 inline void Debug::failUnlessUnwinding(S site, Code code, Params&&... params) {
   failUnlessUnwindingImpl<S, Code, DebugParam<Params>...>(site, code, kj::fwd<Params>(params)...);
+}
+
+template <typename S, typename Condition, typename... Params>
+inline void Debug::failUnlessUnwinding(S site, ConditionFailed code, Condition&& condition,
+                                       Params&&... params) {
+  if constexpr (DebugIsComparison_<Decay<Condition>>::value) {
+    failUnlessUnwindingImpl<S, ConditionFailed, DebugConditionParam<Condition>,
+                            DebugParam<Params>...>(
+        site, code, kj::fwd<Condition>(condition), kj::fwd<Params>(params)...);
+  } else {
+    failUnlessUnwinding(site, Exception::Type::FAILED, kj::fwd<Params>(params)...);
+  }
 }
 
 template <typename S, typename Code, typename... Params>
@@ -1100,6 +1136,8 @@ Debug::Comparison debugComparison(DebugComparison<Left, Right, Op>& cmp) {
 
 template <typename Left, typename Right, typename Op>
 String KJ_STRINGIFY(DebugComparison<Left, Right, Op>& cmp) {
+  // For a comparison that is an ordinary argument rather than a check's condition, e.g. one that
+  // a macro defined outside of KJ passes to KJ_LOG.
   return stringifyDebugComparison(debugComparison(cmp));
 }
 
@@ -1140,7 +1178,7 @@ Debug::Comparison debugComparison(DebugComparisonOperands<Left, Right, Op>& cmp)
 }
 
 template <typename Left, typename Right, typename Op>
-struct DebugParam_<DebugComparison<Left, Right, Op>&> {
+struct DebugConditionParam_<DebugComparison<Left, Right, Op>&> {
   typedef DebugComparisonOperands<DebugOperand<Left>, DebugOperand<Right>, Op> Type;
 };
 
@@ -1182,21 +1220,6 @@ struct DebugExpression {
     return value;
   }
 };
-
-#if KJ_FAIL_BY_VALUE_
-
-struct DebugFalse {
-  // A failed DebugExpression, as passed to Debug::failImpl(). Its value isn't shown, so it's
-  // empty and takes no register or stack space.
-
-  template <typename T>
-  DebugFalse(const DebugExpression<T>&) {}
-};
-
-template <typename T>
-struct DebugParam_<DebugExpression<T>&> { typedef DebugFalse Type; };
-
-#endif  // KJ_FAIL_BY_VALUE_
 
 struct DebugExpressionStart {
   template <typename T>
