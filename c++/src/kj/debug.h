@@ -856,6 +856,10 @@ private:
 
   static void logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
                           ArrayPtr<const Arg> args);
+  static void logFailedCheckInternal(LogSeverity severity, const Exception& failure);
+  // Logs `failure`, built by makeFailureWithParams() like the exception that fail() would throw,
+  // so that KJ_EXPECT describes a failure exactly like KJ_ASSERT. Not on a hot path: it only runs
+  // when a test fails.
   static String makeDescriptionInternal(const char* macroArgs, ArrayPtr<const Arg> args);
 
   static int getOsErrorNumber(bool nonblocking);
@@ -887,8 +891,6 @@ private:
 #endif
   // Unpack the site and call the overloads above. Converting the PackedSite to a Site in the
   // templates instead would double the code of the failImpl() instantiations.
-
-  static void logFailure(LogSeverity severity, const Exception& exception);
 };
 
 template <typename... Params>
@@ -906,7 +908,7 @@ inline void Debug::log<>(const char* file, int line, LogSeverity severity, const
 template <typename S, typename... Params>
 void Debug::logFailedCheck(LogSeverity severity, S site, Params&&... params) {
   if (shouldLog(severity)) {
-    logFailure(severity, makeFailureWithParams(site, ConditionFailed(), params...));
+    logFailedCheckInternal(severity, makeFailureWithParams(site, ConditionFailed(), params...));
   }
 }
 

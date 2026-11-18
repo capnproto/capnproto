@@ -403,6 +403,11 @@ void Debug::logInternal(const char* file, int line, LogSeverity severity, const 
       makeDescriptionInternal(macroArgs, args));
 }
 
+void Debug::logFailedCheckInternal(LogSeverity severity, const Exception& failure) {
+  getExceptionCallback().logMessage(severity, failure.getFile(), failure.getLine(), 0,
+      str("failed: ", failure.getDescription()));
+}
+
 Exception Debug::makeFailure(const Site& site, Exception::Type type, ArrayPtr<const Arg> args,
                              const Comparison* comparison) {
   return Exception(type, site.file, site.line,
@@ -461,11 +466,6 @@ Exception Debug::makeFailure(PackedSite site, Win32Result osErrorNumber,
   return makeFailure(unpack(site), osErrorNumber, args);
 }
 #endif
-
-void Debug::logFailure(LogSeverity severity, const Exception& exception) {
-  getExceptionCallback().logMessage(severity, exception.getFile(), exception.getLine(), 0,
-      str("failed: ", exception.getDescription()));
-}
 
 String stringifyDebugComparison(const Debug::Comparison& comparison) {
   String left = stringify(comparison.left);
