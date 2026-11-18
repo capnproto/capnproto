@@ -1004,6 +1004,9 @@ void Debug::failUnlessUnwindingImpl(S site, Code code, Params... params) {
 
 #else  // KJ_FAIL_BY_VALUE_
 
+// The same as failImpl() and failUnlessUnwindingImpl(), but called by the macros directly, taking
+// the arguments by reference: on MSVC, a wrapper would add a frame to the stack trace.
+
 template <typename S, typename Code, typename... Params>
 void Debug::fail(S site, Code code, Params&&... params) {
   // ignoreCount = 1 to skip this frame, so the trace starts at the failed check.

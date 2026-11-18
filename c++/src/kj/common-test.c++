@@ -1306,7 +1306,8 @@ KJ_TEST("KJ_IREQUIRE failure") {
   auto check = [](auto&& func, int line, kj::StringPtr description) {
     KJ_IF_SOME(e, kj::runCatchingExceptions(func)) {
       KJ_EXPECT(e.getType() == kj::Exception::Type::FAILED);
-      KJ_EXPECT(kj::StringPtr(e.getFile()).endsWith("kj/common-test.c++"), e.getFile());
+      // Not "kj/common-test.c++": MSVC's __FILE__ uses backslashes.
+      KJ_EXPECT(kj::StringPtr(e.getFile()).endsWith("common-test.c++"), e.getFile());
       KJ_EXPECT(e.getLine() == line, e.getLine(), line);
       KJ_EXPECT(e.getDescription() == description, e.getDescription(), description);
     } else {
