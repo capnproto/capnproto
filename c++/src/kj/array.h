@@ -720,7 +720,9 @@ class CappedArray {
 
 public:
   inline KJ_CONSTEXPR() CappedArray(): currentSize(fixedSize) {}
-  inline explicit constexpr CappedArray(size_t s): currentSize(s) {}
+  inline explicit constexpr CappedArray(size_t s): currentSize(s), content{} {}
+  // Constructing with a size value-initializes every element, so the array can be part of a
+  // constexpr variable. The default constructor leaves trivial elements uninitialized.
 
   inline size_t size() const { return currentSize; }
   inline void setSize(size_t s) { KJ_IREQUIRE(s <= fixedSize); currentSize = s; }

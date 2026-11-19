@@ -976,6 +976,17 @@ KJ_TEST("CappedArray::fill") {
   }
 }
 
+KJ_TEST("CappedArray constructed with a size is value-initialized") {
+  // A constexpr variable must have every element initialized.
+  static constexpr CappedArray<char, 4> EMPTY(0);
+  KJ_EXPECT(EMPTY.size() == 0);
+
+  CappedArray<int64_t, 10> arr(10);
+  for (int64_t x : arr) {
+    KJ_EXPECT(x == 0);
+  }
+}
+
 KJ_TEST("FixedArray and CappedArray of size zero") {
   // With a zero-length array member, compilers that accept one make this zero-sized.
   static_assert(sizeof(FixedArray<int64_t, 0>) > 0);
