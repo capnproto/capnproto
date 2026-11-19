@@ -215,7 +215,12 @@ private:
 
 class TestPipelineImpl final: public test::TestPipeline::Server {
 public:
-  TestPipelineImpl(int& callCount);
+  enum class SetPipelineMode {
+    RVALUE,  // getCapPipelineOnly() calls context.setPipeline(pipelineBuilder.build())
+    LVALUE   // getCapPipelineOnly() calls context.setPipeline(pipeline) on a local variable
+  };
+
+  TestPipelineImpl(int& callCount, SetPipelineMode setPipelineMode = SetPipelineMode::RVALUE);
 
   kj::Promise<void> getCap(GetCapContext context) override;
   kj::Promise<void> getAnyCap(GetAnyCapContext context) override;
@@ -223,6 +228,7 @@ public:
 
 private:
   int& callCount;
+  SetPipelineMode setPipelineMode;
 };
 
 class TestCallOrderImpl final: public test::TestCallOrder::Server {
