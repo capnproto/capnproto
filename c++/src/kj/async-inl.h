@@ -306,8 +306,7 @@ public:
       //   code bloat and these constructors probably don't throw. Instead this function is
       //   noexcept, so if a constructor does throw, it'll crash rather than leak memory.
       auto* arena = new PromiseArena;
-      ptr = reinterpret_cast<T*>(arena + 1) - 1;
-      ctor(*ptr, kj::fwd<Params>(params)...);
+      ptr = ctorAt<T>(reinterpret_cast<byte*>(arena + 1) - sizeof(T), kj::fwd<Params>(params)...);
       ptr->arena = arena;
       KJ_IREQUIRE(reinterpret_cast<void*>(ptr) ==
                   reinterpret_cast<void*>(static_cast<PromiseArenaMember*>(ptr)),
@@ -343,9 +342,9 @@ public:
       //   constructors throw, so we just mark the whole method noexcept in order to avoid the
       //   code bloat to handle this case.
       next->arena = nullptr;
-      T* ptr = reinterpret_cast<T*>(next.get()) - 1;
+      void* space = reinterpret_cast<byte*>(next.get()) - sizeof(T);
       // NOLINTNEXTLINE(clang-analyzer-security.ArrayBound)
-      ctor(*ptr, kj::mv(next), kj::fwd<Params>(params)...);
+      T* ptr = ctorAt<T>(space, kj::mv(next), kj::fwd<Params>(params)...);
       ptr->arena = arena;
       KJ_IREQUIRE(reinterpret_cast<void*>(ptr) ==
                   reinterpret_cast<void*>(static_cast<PromiseArenaMember*>(ptr)),

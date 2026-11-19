@@ -323,6 +323,12 @@ typedef unsigned char byte;
 #endif
 
 #if __clang__
+#define KJ_DISABLE_CFI_UNRELATED_CAST __attribute__((no_sanitize("cfi-unrelated-cast")))
+#else
+#define KJ_DISABLE_CFI_UNRELATED_CAST
+#endif
+
+#if __clang__
 #define KJ_DEPRECATED(reason) \
     __attribute__((deprecated(reason)))
 #define KJ_UNAVAILABLE(reason) \
@@ -1144,6 +1150,12 @@ namespace kj {
 template <typename T, typename... Params>
 inline void ctor(T& location, Params&&... params) {
   new (&location, _::PlacementNew()) T(kj::fwd<Params>(params)...);
+}
+
+template <typename T, typename... Params>
+inline T* ctorAt(void* location, Params&&... params) {
+  // Like ctor(), but takes raw storage: Clang CFI rejects casting it to a polymorphic `T&` first.
+  return new (location, _::PlacementNew()) T(kj::fwd<Params>(params)...);
 }
 
 template <typename T>

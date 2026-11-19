@@ -133,11 +133,10 @@ private:
 
 template <typename T, typename... Params>
 T& Arena::allocate(Params&&... params) {
-  T& result = *reinterpret_cast<T*>(allocateBytes(
-      sizeof(T), alignof(T), !KJ_HAS_TRIVIAL_DESTRUCTOR(T)));
-  if (!KJ_HAS_TRIVIAL_CONSTRUCTOR(T) || sizeof...(Params) > 0) {
-    ctor(result, kj::fwd<Params>(params)...);
-  }
+  void* space = allocateBytes(sizeof(T), alignof(T), !KJ_HAS_TRIVIAL_DESTRUCTOR(T));
+  T& result = (!KJ_HAS_TRIVIAL_CONSTRUCTOR(T) || sizeof...(Params) > 0)
+      ? *ctorAt<T>(space, kj::fwd<Params>(params)...)
+      : *reinterpret_cast<T*>(space);
   if (!KJ_HAS_TRIVIAL_DESTRUCTOR(T)) {
     setDestructor(&result, &destroyObject<T>);
   }
@@ -147,22 +146,19 @@ T& Arena::allocate(Params&&... params) {
 template <typename T>
 ArrayPtr<T> Arena::allocateArray(size_t size) {
   if (KJ_HAS_TRIVIAL_DESTRUCTOR(T)) {
-    ArrayPtr<T> result =
-        arrayPtr(reinterpret_cast<T*>(allocateBytes(
-            sizeof(T) * size, alignof(T), false)), size);
+    byte* space = reinterpret_cast<byte*>(allocateBytes(sizeof(T) * size, alignof(T), false));
     if (!KJ_HAS_TRIVIAL_CONSTRUCTOR(T)) {
       for (size_t i = 0; i < size; i++) {
-        ctor(result[i]);
+        ctorAt<T>(space + i * sizeof(T));
       }
     }
-    return result;
+    return arrayPtr(reinterpret_cast<T*>(space), size);
   } else {
     // Allocate with a 64-bit prefix in which we store the array size.
     constexpr size_t prefixSize = kj::max(alignof(T), sizeof(size_t));
     void* base = allocateBytes(sizeof(T) * size + prefixSize, alignof(T), true);
     size_t& tag = *reinterpret_cast<size_t*>(base);
-    ArrayPtr<T> result =
-        arrayPtr(reinterpret_cast<T*>(reinterpret_cast<byte*>(base) + prefixSize), size);
+    byte* space = reinterpret_cast<byte*>(base) + prefixSize;
     setDestructor(base, &destroyArray<T>);
 
     if (KJ_HAS_TRIVIAL_CONSTRUCTOR(T)) {
@@ -172,20 +168,20 @@ ArrayPtr<T> Arena::allocateArray(size_t size) {
       // that were successfully constructed, so that they'll be properly destroyed.
       tag = 0;
       for (size_t i = 0; i < size; i++) {
-        ctor(result[i]);
+        ctorAt<T>(space + i * sizeof(T));
         tag = i + 1;
       }
     }
-    return result;
+    return arrayPtr(reinterpret_cast<T*>(space), size);
   }
 }
 
 template <typename T, typename... Params>
 Own<T> Arena::allocateOwn(Params&&... params) {
-  T& result = *reinterpret_cast<T*>(allocateBytes(sizeof(T), alignof(T), false));
-  if (!KJ_HAS_TRIVIAL_CONSTRUCTOR(T) || sizeof...(Params) > 0) {
-    ctor(result, kj::fwd<Params>(params)...);
-  }
+  void* space = allocateBytes(sizeof(T), alignof(T), false);
+  T& result = (!KJ_HAS_TRIVIAL_CONSTRUCTOR(T) || sizeof...(Params) > 0)
+      ? *ctorAt<T>(space, kj::fwd<Params>(params)...)
+      : *reinterpret_cast<T*>(space);
   return Own<T>(&result, DestructorOnlyDisposer<T>::instance);
 }
 
