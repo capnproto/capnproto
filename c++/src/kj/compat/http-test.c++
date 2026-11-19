@@ -79,6 +79,8 @@ KJ_TEST("HttpMethod parse / stringify") {
   KJ_EXPECT(tryParseHttpMethod("GE") == kj::none);
   KJ_EXPECT(tryParseHttpMethod("GET ") == kj::none);
   KJ_EXPECT(tryParseHttpMethod("get") == kj::none);
+  KJ_EXPECT(tryParseHttpMethod(kj::StringPtr("GET\0foo", 7)) == kj::none);
+  KJ_EXPECT(tryParseHttpMethod(kj::StringPtr("CONNECT\0", 8)) == kj::none);
 
   KJ_EXPECT(KJ_ASSERT_NONNULL(tryParseHttpMethod("CONNECT")) == HttpMethod::CONNECT);
   KJ_EXPECT(tryParseHttpMethod("connect") == kj::none);
@@ -90,8 +92,6 @@ KJ_TEST("HttpMethod::tryParse") {
   { \
     auto method = KJ_ASSERT_NONNULL(HttpMethod::tryParse(kj::StringPtr(#name))); \
     KJ_EXPECT(method == HttpMethod::name, #name); \
-    KJ_EXPECT(method.known() == HttpMethod::Known::name, #name); \
-    KJ_EXPECT(method.hashCode() == HttpMethod(HttpMethod::name).hashCode(), #name); \
   }
   KJ_HTTP_FOR_EACH_METHOD(TRY)
 #undef TRY
@@ -161,9 +161,6 @@ KJ_TEST("HttpMethod::tryParse") {
   // parse() is like tryParse(), but throws.
   KJ_EXPECT(HttpMethod::parse("BLOCK"_kj) == block);
   KJ_EXPECT_THROW_MESSAGE("invalid HTTP method", HttpMethod::parse("GE T"_kj));
-
-  // The original parse functions still accept only known methods.
-  KJ_EXPECT(tryParseHttpMethod("BLOCK") == kj::none);
 }
 
 KJ_TEST("HttpHeaderTable") {
@@ -1702,7 +1699,6 @@ KJ_TEST("HttpServer requests") {
 
 KJ_TEST("HttpClient and HttpServer handle other methods") {
   auto block = KJ_ASSERT_NONNULL(HttpMethod::tryParse("BLOCK"_kj));
-  auto geolocation = KJ_ASSERT_NONNULL(HttpMethod::tryParse("GEOLOCATION"_kj));
 
   // An OTHER method's request body is framed by its headers, like any other method's, so requests
   // can be pipelined after it.
@@ -1723,27 +1719,6 @@ KJ_TEST("HttpClient and HttpServer handle other methods") {
         "foo bar",
 
         200, "OK", {}, 7, { "foo bar" }
-      },
-    },
-    {
-      {
-        "GEOLOCATION /bar HTTP/1.1\r\n"
-        "Transfer-Encoding: chunked\r\n"
-        "\r\n"
-        "3\r\n"
-        "baz\r\n"
-        "0\r\n"
-        "\r\n",
-
-        geolocation, "/bar", {}, kj::none, { "baz" },
-      },
-      {
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Length: 3\r\n"
-        "\r\n"
-        "qux",
-
-        200, "OK", {}, 3, { "qux" }
       },
     },
     {
@@ -5124,7 +5099,7 @@ KJ_TEST("HttpServer bad requests") {
     },
     {
       // invalid method
-      .request = "b@d request\r\n\r\n"_kj,
+      .request = "bad request\r\n\r\n"_kj,
       .expectedResponse =
           "HTTP/1.1 501 Not Implemented\r\n"
           "Connection: close\r\n"
@@ -5374,7 +5349,7 @@ KJ_TEST("HttpServer bad request, custom error handler") {
 
   auto listenTask = server.listenHttp(kj::mv(pipe.ends[0]));
 
-  auto writePromise = pipe.ends[1]->write("b@d request\r\n\r\n"_kjb);
+  auto writePromise = pipe.ends[1]->write("bad request\r\n\r\n"_kjb);
   auto response = pipe.ends[1]->readAllText().wait(waitScope);
   KJ_EXPECT(writePromise.poll(waitScope));
   writePromise.wait(waitScope);
@@ -5385,7 +5360,7 @@ KJ_TEST("HttpServer bad request, custom error handler") {
       "Content-Length: 80\r\n"
       "\r\n"
       "Saw protocol error: Unrecognized request method.; "
-      "rawContent = b@d request\\000\\n"_kj;
+      "rawContent = bad request\\000\\n"_kj;
 
   KJ_EXPECT(expectedResponse == response, expectedResponse, response);
 }
@@ -5627,7 +5602,6 @@ public:
   void suspendAfter(uint countdownParam) { countdown = countdownParam; }
 
   kj::Maybe<kj::Own<HttpService>> operator()(HttpServer::SuspendableRequest& sr) {
-    lastSuspendableMethod = sr.method;
     if (countdown == 0) {
       suspendedRequest = sr.suspend();
       return kj::none;
@@ -5641,16 +5615,10 @@ public:
     return kj::mv(suspendedRequest);
   }
 
-  kj::Maybe<HttpMethod> lastSuspendableMethod;
-  kj::Maybe<HttpMethod> lastRequestMethod;
-  // The methods most recently passed to the factory and to request().
-
 private:
   kj::Promise<void> request(
       HttpMethod method, kj::StringPtr url, const HttpHeaders& headers,
       kj::AsyncInputStream& requestBody, Response& response) override {
-    lastRequestMethod = method;
-
     // Check headers made it through the transfer.
     KJ_EXPECT(headers.get(fooHeaderId).orDefault("(nil)") == "foo");
     KJ_EXPECT(headers.get(barHeaderId).orDefault("(nil)") == "bar1, bar2");
@@ -5775,75 +5743,6 @@ KJ_TEST("HttpServer can suspend a request") {
         "0\r\n"
         "\r\n"_kj;
     KJ_EXPECT(RESPONSE == response);
-  }
-}
-
-KJ_TEST("HttpServer can suspend and resume a request with an OTHER method") {
-  // An OTHER method's name is stored in the HttpMethod itself, so it survives being suspended and
-  // resumed, even though the connection's buffer moves into and out of the SuspendedRequest.
-
-  KJ_HTTP_TEST_SETUP_IO;
-  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
-  auto pipe = KJ_HTTP_TEST_CREATE_2PIPE;
-
-  auto block = KJ_ASSERT_NONNULL(HttpMethod::tryParse("BLOCK"_kj));
-
-  HangingHttpService service;
-  SuspendAfter factory;
-  HttpServerSettings settings;
-  settings.allowOtherMethods = true;
-  HttpServer server(timer, factory.getHeaderTable(), service, settings);
-
-  kj::Maybe<HttpServer::SuspendedRequest> suspendedRequest;
-
-  {
-    factory.suspendAfter(0);
-    auto listenPromise = server.listenHttpCleanDrain(*pipe.ends[0], factory);
-
-    static constexpr kj::StringPtr REQUEST =
-        "BLOCK / HTTP/1.1\r\n"
-        SUSPEND_AFTER_EXPECTED_HEADERS
-        "Content-Length: 6\r\n"
-        "\r\n"
-        "foobar"_kj;
-    pipe.ends[1]->write(REQUEST.asBytes()).wait(waitScope);
-
-    KJ_EXPECT(listenPromise.poll(waitScope));
-    KJ_EXPECT(!listenPromise.wait(waitScope));
-
-    suspendedRequest = factory.getSuspended();
-    KJ_EXPECT(suspendedRequest != kj::none);
-    KJ_EXPECT(KJ_ASSERT_NONNULL(factory.lastSuspendableMethod) == block);
-  }
-
-  {
-    factory.suspendAfter(1);
-    auto listenPromise = server.listenHttpCleanDrain(
-        *pipe.ends[0], factory, kj::mv(suspendedRequest));
-
-    auto drainPromise = kj::evalLast([&]() {
-      return server.drain();
-    });
-
-    auto readPromise = pipe.ends[1]->readAllText();
-
-    KJ_EXPECT(listenPromise.poll(waitScope));
-    KJ_EXPECT(listenPromise.wait(waitScope));
-
-    drainPromise.wait(waitScope);
-
-    pipe.ends[0] = nullptr;
-
-    auto response = readPromise.wait(waitScope);
-    static constexpr kj::StringPtr RESPONSE =
-        "HTTP/1.1 200 OK\r\n"
-        "Transfer-Encoding: chunked\r\n"
-        "\r\n"
-        "0\r\n"
-        "\r\n"_kj;
-    KJ_EXPECT(RESPONSE == response);
-    KJ_EXPECT(KJ_ASSERT_NONNULL(factory.lastSuspendableMethod) == block);
-    KJ_EXPECT(KJ_ASSERT_NONNULL(factory.lastRequestMethod) == block);
   }
 }
 

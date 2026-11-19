@@ -173,8 +173,7 @@ struct HttpResponse {
 enum HttpMethod {
   # Each enumerant except `other` stands for the kj::HttpMethod of the same name. A method added
   # to KJ_HTTP_FOR_EACH_REQUEST_METHOD needs an enumerant here too, after `other`. CONNECT has
-  # none: CONNECT requests use `HttpService.connect()`. A method kj doesn't list is sent as
-  # `other`, with its name in `HttpRequest.methodName`.
+  # none: CONNECT requests use `HttpService.connect()`.
 
   get @0;
   head @1;

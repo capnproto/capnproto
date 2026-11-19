@@ -108,20 +108,19 @@ public:
 #undef DECLARE_METHOD
 
     OTHER
-    // A method not listed in KJ_HTTP_FOR_EACH_METHOD. Use `name()` to find out which one.
+    // Use `name()` to find out which method this is.
   };
 
 #define DECLARE_METHOD(id) static const HttpMethod id;
   KJ_HTTP_FOR_EACH_METHOD(DECLARE_METHOD)
 #undef DECLARE_METHOD
-  // A constant for each known method, e.g. HttpMethod::GET.
 
   explicit constexpr HttpMethod(Known id): id(id) {
     if (id >= Known::OTHER) throwInvalidKnown();
   }
   // `id` must be one of the methods listed in KJ_HTTP_FOR_EACH_METHOD, not `OTHER` or an
-  // out-of-range value; an OTHER method can only be created by `tryParse()`. Explicit so that
-  // `method == Known::OTHER` doesn't compile, rather than throwing; compare `method.known()`.
+  // out-of-range value. Explicit so that `method == Known::OTHER` doesn't compile, rather than
+  // throwing; compare `method.known()`.
 
   static constexpr size_t MAX_NAME_SIZE = 32;
   // The longest method name `tryParse()` accepts. An OTHER method's name is stored inline, so this
@@ -133,8 +132,7 @@ public:
   // HttpMethod::GET.
 
   static HttpMethod parse(kj::ArrayPtr<const char> name);
-  // Like tryParse(), but throws if the name is not accepted. The exception names at most
-  // MAX_NAME_SIZE + 1 bytes of it, with bytes outside printable ASCII escaped.
+  // Like tryParse(), but throws if the name is not accepted.
 
   constexpr Known known() const { return id; }
   // Which known method this is, or OTHER. Use this to switch over methods.
@@ -156,9 +154,8 @@ private:
   explicit HttpMethod(kj::ArrayPtr<const char> otherName);
 
   static kj::Maybe<HttpMethod> consumeOther(const char*& ptr, const char* end);
-  // Consumes a method name at the start of [ptr, end) as an OTHER method, for a name the method
-  // switch didn't match. Private because on "GET" it would make an OTHER method that isn't
-  // HttpMethod::GET.
+  // Consumes a method name at the start of [ptr, end) as an OTHER method. The name must not be a
+  // listed method: on "GET" this would make an OTHER method that isn't HttpMethod::GET.
 
   friend kj::Maybe<HttpMethod> consumeHttpMethod(
       char*& ptr, const char* end, bool allowOtherMethods);
@@ -172,8 +169,8 @@ KJ_HTTP_FOR_EACH_METHOD(DEFINE_METHOD)
 
 kj::ArrayPtr<const char> KJ_STRINGIFY(const HttpMethod& method);
 kj::Maybe<HttpMethod> tryParseHttpMethod(kj::StringPtr name);
-// Parses only the methods listed in KJ_HTTP_FOR_EACH_METHOD, never an OTHER method. See
-// HttpMethod::tryParse() to accept any method.
+// Parses only the methods listed in KJ_HTTP_FOR_EACH_METHOD. See HttpMethod::tryParse() to accept
+// any method.
 
 class HttpHeaderTable;
 

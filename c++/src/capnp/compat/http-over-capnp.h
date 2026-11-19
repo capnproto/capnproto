@@ -118,8 +118,6 @@ kj::HttpMethod httpMethodFromCapnp(capnp::HttpMethod method, capnp::Text::Reader
 
 void setHttpMethod(capnp::HttpRequest::Builder request, const kj::HttpMethod& method);
 kj::HttpMethod getHttpMethod(capnp::HttpRequest::Reader request);
-// Convenience wrappers around the above, for the `method` and `methodName` fields of
-// `HttpRequest`.
 
 }  // namespace capnp
 

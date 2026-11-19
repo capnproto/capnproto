@@ -339,7 +339,7 @@ KJ_HTTP_FOR_EACH_METHOD(METHOD_NAME)
 #undef METHOD_NAME
 };
 
-// Listed names fit too, so no method's name() is longer than MAX_NAME_SIZE.
+// Listed names are within the limit, so no method's name() is longer than MAX_NAME_SIZE.
 #define CHECK_NAME_SIZE(id) static_assert(sizeof(#id) - 1 <= HttpMethod::MAX_NAME_SIZE);
 KJ_HTTP_FOR_EACH_METHOD(CHECK_NAME_SIZE)
 #undef CHECK_NAME_SIZE
@@ -1562,7 +1562,6 @@ public:
   }
 
   void setAllowOtherMethods(bool allow) {
-    // See HttpServerSettings::allowOtherMethods.
     allowOtherMethods = allow;
   }
 
