@@ -198,7 +198,7 @@ kj::Promise<void> JsonRpc::readLoop() {
       case json::RpcMessage::PARAMS: {
         // a call
         KJ_IF_SOME(method, methodMap.find(rpcMessage.getMethod())) {
-          auto req = interface.newRequest(method);
+          auto req = interface.newRequest(*method);
           KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
             codec.decode(rpcMessage.getParams(), req);
           })) {
@@ -273,12 +273,12 @@ kj::Promise<void> JsonRpc::readLoop() {
           KJ_LOG(ERROR, "JSON-RPC response has invalid ID");
         } else KJ_IF_SOME(awaited, awaitedResponses.find((uint)id.getNumber())) {
           KJ_IF_SOME(exception, kj::runCatchingExceptions([&]() {
-            codec.decode(rpcMessage.getResult(), awaited.context.getResults());
-            awaited.fulfiller->fulfill();
+            codec.decode(rpcMessage.getResult(), awaited->context.getResults());
+            awaited->fulfiller->fulfill();
           })) {
             // Errors always propagate from callee to caller, so we don't want to throw this error
             // back to the server.
-            awaited.fulfiller->reject(kj::mv(exception));
+            awaited->fulfiller->reject(kj::mv(exception));
           }
         } else {
           // Probably, this is the response to a call that was canceled.
@@ -300,7 +300,7 @@ kj::Promise<void> JsonRpc::readLoop() {
           kj::Exception::Type type =
               code == -32601 ? kj::Exception::Type::UNIMPLEMENTED
                              : kj::Exception::Type::FAILED;
-          awaited.fulfiller->reject(kj::Exception(
+          awaited->fulfiller->reject(kj::Exception(
               type, __FILE__, __LINE__, kj::str(error.getMessage())));
         } else {
           // Probably, this is the response to a call that was canceled.
