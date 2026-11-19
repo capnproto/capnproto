@@ -433,7 +433,7 @@ KJ_TEST("HttpHeaders parse requests with other methods") {
   for (auto text: {"BL/OCK /foo HTTP/1.1\r\n\r\n"_kj,
                    "BL\x80OCK /foo HTTP/1.1\r\n\r\n"_kj,
                    " /foo HTTP/1.1\r\n\r\n"_kj,
-                   "ABCDEFGHIJABCDEFGHIJABCDEFGHIJK /foo HTTP/1.1\r\n\r\n"_kj}) {
+                   "ABCDEFGHIJABCDEFGHIJABCDEFGHIJABC /foo HTTP/1.1\r\n\r\n"_kj}) {
     KJ_CONTEXT(text);
     HttpHeaders headers(*table);
     auto input = kj::heapString(text);

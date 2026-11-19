@@ -123,7 +123,7 @@ public:
   // out-of-range value; an OTHER method can only be created by `tryParse()`. Explicit so that
   // `method == Known::OTHER` doesn't compile, rather than throwing; compare `method.known()`.
 
-  static constexpr size_t MAX_NAME_SIZE = 22;
+  static constexpr size_t MAX_NAME_SIZE = 32;
   // The longest method name `tryParse()` accepts.
 
   static kj::Maybe<HttpMethod> tryParse(kj::ArrayPtr<const char> name);
@@ -142,17 +142,15 @@ public:
   // The method's name as it appears on the wire, e.g. "GET".
 
   inline bool operator==(const HttpMethod& other) const {
-    return id == other.id && (id != Known::OTHER ||
-        kj::arrayPtr(nameText, nameSize) == kj::arrayPtr(other.nameText, other.nameSize));
+    return id == other.id && (id != Known::OTHER || nameText.asPtr() == other.nameText.asPtr());
   }
 
   uint hashCode() const;
 
 private:
   Known id;
-  uint8_t nameSize = 0;
-  char nameText[MAX_NAME_SIZE] = {};
-  // The name of an OTHER method, `nameSize` bytes long. Empty for known methods.
+  kj::CappedArray<char, MAX_NAME_SIZE> nameText{0};
+  // The name of an OTHER method. Empty for known methods.
 
   explicit HttpMethod(kj::ArrayPtr<const char> otherName);
 

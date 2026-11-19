@@ -349,7 +349,7 @@ constexpr auto HTTP_METHOD_CHARS = kj::parse::alphaNumeric.orAny("!#$%&'*+-.^_`|
 
 kj::ArrayPtr<const char> HttpMethod::name() const {
   if (id == Known::OTHER) {
-    return kj::arrayPtr(nameText, nameSize);
+    return nameText.asPtr();
   }
   return METHOD_NAMES[static_cast<uint>(id)].asArray();
 }
@@ -362,9 +362,10 @@ uint HttpMethod::hashCode() const {
 }
 
 HttpMethod::HttpMethod(kj::ArrayPtr<const char> otherName)
-    : id(Known::OTHER), nameSize(otherName.size()) {
+    : id(Known::OTHER) {
   KJ_ASSERT(otherName.size() <= MAX_NAME_SIZE);
-  kj::arrayPtr(nameText, nameSize).copyFrom(otherName);
+  nameText.setSize(otherName.size());
+  nameText.asPtr().copyFrom(otherName);
 }
 
 void HttpMethod::throwInvalidKnown() {
