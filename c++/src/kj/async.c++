@@ -900,16 +900,16 @@ void XThreadEvent::ensureDoneOrCanceled() {
   if (kj::atomicLoad(&state, kj::AtomicMemoryOrder::ACQUIRE) != DONE) {
     auto lock = targetExecutor->impl->state.lockExclusive();
 
-    const EventLoop* loop;
-    KJ_IF_SOME(l, lock->loop) {
-      loop = &l;
-    } else {
+    Maybe<const EventLoop&> loop = lock->loop;
+    if (loop == kj::none) {
       // Target event loop is already dead, so we know it's already working on transitioning all
       // events to the DONE state. We can just wait.
       lock.wait([&](auto&) {
         return kj::atomicLoad(&state, kj::AtomicMemoryOrder::ACQUIRE) == DONE;
       });
-      return;
+
+      // Don't return yet: disconnect() may have queued a reply to us, which must be removed from
+      // our reply list below. The switch below hits the DONE case and does nothing.
     }
 
     switch (state) {
@@ -926,7 +926,8 @@ void XThreadEvent::ensureDoneOrCanceled() {
         lock->executing.remove(*this);
         lock->cancel.add(*this);
         kj::atomicStore(&state, CANCELING, kj::AtomicMemoryOrder::RELAXED);
-        if (!wakePending) loop->wake();
+        // The loop can't be null here: if it were, we'd have waited above for the DONE state.
+        if (!wakePending) KJ_ASSERT_NONNULL(loop).wake();
 
         Maybe<Executor&> maybeSelfExecutor = kj::none;
         if (threadLocalEventLoop != nullptr) {
