@@ -124,7 +124,8 @@ public:
   // `method == Known::OTHER` doesn't compile, rather than throwing; compare `method.known()`.
 
   static constexpr size_t MAX_NAME_SIZE = 32;
-  // The longest method name `tryParse()` accepts.
+  // The longest method name `tryParse()` accepts. An OTHER method's name is stored inline, so this
+  // bounds the size of every HttpMethod. Every method in IANA's HTTP Method Registry is shorter.
 
   static kj::Maybe<HttpMethod> tryParse(kj::ArrayPtr<const char> name);
   // Parses any method name that is a valid token per RFC 9110 and is at most MAX_NAME_SIZE
