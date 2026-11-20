@@ -32,7 +32,8 @@
 //   string literals, with lookups being array-index-based, not map-based. To make this possible,
 //   the application announces what headers it cares about in advance, in order to assign numeric
 //   values to them.
-// - Methods are identified by an enum.
+// - Common methods are identified by ID rather than by string (see HttpMethod), though any method
+//   can be represented.
 
 #include <kj/string.h>
 #include <kj/vector.h>
@@ -93,19 +94,83 @@ namespace kj {
 // CONNECT is dispatched to connect(), never request(). It's listed last to keep the values of the
 // other methods stable.
 
-enum class HttpMethod {
-  // Enum of known HTTP methods.
+class HttpMethod {
+  // An HTTP request method.
   //
-  // We use an enum rather than a string to allow for faster parsing and switching and to reduce
-  // ambiguity.
+  // The methods listed in KJ_HTTP_FOR_EACH_METHOD are "known": each has a constant, such as
+  // `HttpMethod::GET`, and known methods are compared by ID. `tryParse()` can also produce a
+  // method that isn't listed; its `known()` is `Known::OTHER`, and its name is stored inline.
 
+public:
+  enum class Known: uint8_t {
 #define DECLARE_METHOD(id) id,
-KJ_HTTP_FOR_EACH_METHOD(DECLARE_METHOD)
+    KJ_HTTP_FOR_EACH_METHOD(DECLARE_METHOD)
 #undef DECLARE_METHOD
+
+    OTHER
+    // Use `name()` to find out which method this is.
+  };
+
+#define DECLARE_METHOD(id) static const HttpMethod id;
+  KJ_HTTP_FOR_EACH_METHOD(DECLARE_METHOD)
+#undef DECLARE_METHOD
+
+  explicit constexpr HttpMethod(Known id): id(id) {
+    if (id >= Known::OTHER) throwInvalidKnown();
+  }
+  // `id` must be one of the methods listed in KJ_HTTP_FOR_EACH_METHOD, not `OTHER` or an
+  // out-of-range value. Explicit so that `method == Known::OTHER` doesn't compile, rather than
+  // throwing; compare `method.known()`.
+
+  static constexpr size_t MAX_NAME_SIZE = 32;
+  // The longest method name `tryParse()` accepts. An OTHER method's name is stored inline, so this
+  // bounds the size of every HttpMethod. Every method in IANA's HTTP Method Registry is shorter.
+
+  static kj::Maybe<HttpMethod> tryParse(kj::ArrayPtr<const char> name);
+  // Parses any method name that is a valid token per RFC 9110 and is at most MAX_NAME_SIZE
+  // characters. Method names are case-sensitive, so "get" is an OTHER method, not
+  // HttpMethod::GET.
+
+  static HttpMethod parse(kj::ArrayPtr<const char> name);
+  // Like tryParse(), but throws if the name is not accepted.
+
+  constexpr Known known() const { return id; }
+  // Which known method this is, or OTHER. Use this to switch over methods.
+
+  kj::ArrayPtr<const char> name() const KJ_LIFETIMEBOUND;
+  // The method's name as it appears on the wire, e.g. "GET".
+
+  inline bool operator==(const HttpMethod& other) const {
+    return id == other.id && (id != Known::OTHER || nameText.asPtr() == other.nameText.asPtr());
+  }
+
+  uint hashCode() const;
+
+private:
+  Known id;
+  kj::CappedArray<char, MAX_NAME_SIZE> nameText{0};
+  // The name of an OTHER method. Empty for known methods.
+
+  explicit HttpMethod(kj::ArrayPtr<const char> otherName);
+
+  static kj::Maybe<HttpMethod> consumeOther(const char*& ptr, const char* end);
+  // Consumes a method name at the start of [ptr, end) as an OTHER method. The name must not be a
+  // listed method: on "GET" this would make an OTHER method that isn't HttpMethod::GET.
+
+  friend kj::Maybe<HttpMethod> consumeHttpMethod(
+      char*& ptr, const char* end, bool allowOtherMethods);
+
+  [[noreturn]] static void throwInvalidKnown();
 };
 
-kj::StringPtr KJ_STRINGIFY(HttpMethod method);
+#define DEFINE_METHOD(id) inline constexpr HttpMethod HttpMethod::id{HttpMethod::Known::id};
+KJ_HTTP_FOR_EACH_METHOD(DEFINE_METHOD)
+#undef DEFINE_METHOD
+
+kj::ArrayPtr<const char> KJ_STRINGIFY(const HttpMethod& method);
 kj::Maybe<HttpMethod> tryParseHttpMethod(kj::StringPtr name);
+// Parses only the methods listed in KJ_HTTP_FOR_EACH_METHOD. See HttpMethod::tryParse() to accept
+// any method.
 
 class HttpHeaderTable;
 
@@ -427,8 +492,10 @@ public:
   using ResponseOrProtocolError = kj::OneOf<Response, ProtocolError>;
   using RequestConnectOrProtocolError = kj::OneOf<Request, ConnectRequest, ProtocolError>;
 
-  RequestOrProtocolError tryParseRequest(kj::ArrayPtr<char> content);
-  RequestConnectOrProtocolError tryParseRequestOrConnect(kj::ArrayPtr<char> content);
+  RequestOrProtocolError tryParseRequest(kj::ArrayPtr<char> content,
+                                         bool allowOtherMethods = false);
+  RequestConnectOrProtocolError tryParseRequestOrConnect(kj::ArrayPtr<char> content,
+                                                         bool allowOtherMethods = false);
   ResponseOrProtocolError tryParseResponse(kj::ArrayPtr<char> content);
 
   // Parse an HTTP header blob and add all the headers to this object.
@@ -439,6 +506,8 @@ public:
   // The parse is performed with zero copies: The callee clobbers `content` with '\0' characters
   // to split it into a bunch of shorter strings. The caller must keep `content` valid until the
   // `HttpHeaders` is destroyed, or pass it to `takeOwnership()`.
+  //
+  // `allowOtherMethods` has the same meaning as HttpServerSettings::allowOtherMethods.
 
   bool tryParse(kj::ArrayPtr<char> content);
   // Like tryParseRequest()/tryParseResponse(), but don't expect any request/response line.
@@ -1281,6 +1350,10 @@ struct HttpServerSettings {
     AUTOMATIC_COMPRESSION, // Will perform compression parameter negotiation if client requests it.
   };
   WebSocketCompressionMode webSocketCompressionMode = NO_COMPRESSION;
+
+  bool allowOtherMethods = false;
+  // If true, a method not listed in KJ_HTTP_FOR_EACH_METHOD that HttpMethod::tryParse() accepts is
+  // passed to the HttpService. Otherwise, such requests get 501 Not Implemented.
 };
 
 class HttpServerErrorHandler {
