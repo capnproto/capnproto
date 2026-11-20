@@ -96,13 +96,13 @@ private:
     }(::kj::_::MAGIC_ASSERT << cond); \
   } while (false);
 #define KJ_FAIL_EXPECT_AT(location, ...) \
-  KJ_INDIRECT_EXPAND(KJ_LOG_AT, (ERROR , location, __VA_ARGS__));
+  KJ_INDIRECT_EXPAND(KJ_LOG_AT, (ERROR , (location), __VA_ARGS__));
 #define KJ_EXPECT_AT(cond, location, ...) \
   do { \
     [&](auto&& _kjCondition) { \
       if (!_kjCondition) { \
         ::kj::_::Debug::logFailedCheck(::kj::LogSeverity::ERROR, \
-            KJ_SITE_AT_(location, #cond, "" #__VA_ARGS__), _kjCondition, __VA_ARGS__); \
+            KJ_SITE_AT_((location), #cond, "" #__VA_ARGS__), _kjCondition, __VA_ARGS__); \
       } \
     }(::kj::_::MAGIC_ASSERT << cond); \
   } while (false);
@@ -119,13 +119,13 @@ private:
     }(::kj::_::MAGIC_ASSERT << cond); \
   } while (false);
 #define KJ_FAIL_EXPECT_AT(location, ...) \
-  KJ_LOG_AT(ERROR, location __VA_OPT__(,) __VA_ARGS__);
+  KJ_LOG_AT(ERROR, (location) __VA_OPT__(,) __VA_ARGS__);
 #define KJ_EXPECT_AT(cond, location, ...) \
   do { \
     [&](auto&& _kjCondition) { \
       if (!_kjCondition) { \
         ::kj::_::Debug::logFailedCheck(::kj::LogSeverity::ERROR, \
-            KJ_SITE_AT_(location, #cond, #__VA_ARGS__), _kjCondition, ##__VA_ARGS__); \
+            KJ_SITE_AT_((location), #cond, #__VA_ARGS__), _kjCondition, ##__VA_ARGS__); \
       } \
     }(::kj::_::MAGIC_ASSERT << cond); \
   } while (false);

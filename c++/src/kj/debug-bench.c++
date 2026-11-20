@@ -122,7 +122,11 @@ void bm_Assert_MemberNe(benchmark::State& state) {
   Armed armed;
   for (auto _: state) {
     armed.event = nullptr;
+    // Hide the reset from the optimizer, and use the result: otherwise, since nothing reads
+    // `armed`, GCC removes the whole loop.
+    benchmark::DoNotOptimize(armed.event);
     armed.arm();
+    benchmark::DoNotOptimize(armed.event);
   }
 }
 

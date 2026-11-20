@@ -1008,6 +1008,177 @@ KJ_TEST("KJ_DTOR_* failure logged while unwinding includes KJ_CONTEXT once") {
 }
 
 // =======================================================================================
+// Arguments and operands that the failure path must not copy, take the address of, or
+// stringify in the wrong order
+
+struct ForwardingDiagnostic {
+  // Trivially copyable and small, but a constructor template is a better match than the copy
+  // constructor for a non-const lvalue or an rvalue, and doesn't copy the value.
+  int value;
+
+  explicit ForwardingDiagnostic(int value): value(value) {}
+  ForwardingDiagnostic(const ForwardingDiagnostic&) = default;
+  template <typename T, typename = EnableIf<isSameType<Decay<T>, ForwardingDiagnostic>()>>
+  ForwardingDiagnostic(T&&): value(99) {}
+
+  bool operator==(const ForwardingDiagnostic& other) const { return value == other.value; }
+};
+static_assert(__is_trivially_copyable(ForwardingDiagnostic));
+
+kj::String KJ_STRINGIFY(const ForwardingDiagnostic& value) {
+  return kj::str(value.value);
+}
+
+KJ_TEST("assertion diagnostics don't copy arguments through a constructor template") {
+  ForwardingDiagnostic first(1);
+  ForwardingDiagnostic second(2);
+  const ForwardingDiagnostic& constFirst = first;
+
+  {
+    auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_REQUIRE(first == second, first);
+    }));
+    KJ_EXPECT(e.getDescription() == "expected first == second [1 == 2]; first = 1",
+              e.getDescription());
+  }
+
+  {
+    auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_REQUIRE(constFirst == second, constFirst);
+    }));
+    KJ_EXPECT(e.getDescription() == "expected constFirst == second [1 == 2]; constFirst = 1",
+              e.getDescription());
+  }
+
+  {
+    auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(kj::mv(second));
+    }));
+    KJ_EXPECT(e.getDescription() == "kj::mv(second) = 2", e.getDescription());
+  }
+}
+
+struct AddressOfDiagnostic {
+  // Its address operator returns the address of another object.
+  int value;
+
+  const AddressOfDiagnostic* operator&() const;
+  bool operator==(const AddressOfDiagnostic& other) const { return value == other.value; }
+};
+
+const AddressOfDiagnostic addressOfDecoy { 22 };
+
+const AddressOfDiagnostic* AddressOfDiagnostic::operator&() const {
+  return __builtin_addressof(addressOfDecoy);
+}
+
+kj::String KJ_STRINGIFY(const AddressOfDiagnostic& value) {
+  return kj::str(value.value);
+}
+
+KJ_TEST("assertion diagnostics don't call an argument's address operator") {
+  AddressOfDiagnostic actual { 11 };
+  AddressOfDiagnostic other { 33 };
+
+  KJ_EXPECT(KJ_EXCEPTION(FAILED, actual).getDescription() == "actual = 11");
+
+  {
+    auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(actual);
+    }));
+    KJ_EXPECT(e.getDescription() == "actual = 11", e.getDescription());
+  }
+
+  {
+    auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_REQUIRE(actual == other);
+    }));
+    KJ_EXPECT(e.getDescription() == "expected actual == other [11 == 33]", e.getDescription());
+  }
+
+  {
+    kj::Vector<kj::String> messages;
+    {
+      LogCapture capture;
+      KJ_EXPECT(actual == other, actual);
+      messages = kj::mv(capture.messages);
+    }
+    KJ_ASSERT(messages.size() == 1, messages);
+    KJ_EXPECT(messages[0] == "error: failed: expected actual == other [11 == 33]; actual = 11",
+              messages[0]);
+  }
+}
+
+struct IncrementOnStringify {
+  // Stringifying it increments `target`.
+  int& target;
+};
+
+kj::StringPtr KJ_STRINGIFY(const IncrementOnStringify& value) {
+  ++value.target;
+  return "incremented";
+}
+
+KJ_TEST("failed comparison is stringified before the other arguments") {
+  // KJ_EXPECT refers to the operands of the comparison, rather than copying them.
+  int left = 1;
+  int right = 2;
+  IncrementOnStringify extra { left };
+  kj::Vector<kj::String> messages;
+  {
+    LogCapture capture;
+    KJ_EXPECT(left == right, extra);
+    messages = kj::mv(capture.messages);
+  }
+  KJ_EXPECT(left == 2);
+
+  KJ_ASSERT(messages.size() == 1, messages);
+  KJ_EXPECT(messages[0] == "error: failed: expected left == right [1 == 2]; extra = incremented",
+            messages[0]);
+}
+
+template <typename A, typename B>
+kj::SourceLocation locationOf(kj::SourceLocation location) { return location; }
+#define KJ_TEST_COMMA_LOCATION locationOf<int, bool>(location)
+// A location expression with a comma outside of parentheses.
+
+KJ_TEST("_AT macros accept a location containing a comma") {
+  kj::SourceLocation location;
+
+  auto expectFailure = [&](auto&& func, kj::StringPtr description) {
+    auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions(func));
+    KJ_EXPECT(e.getLine() == location.lineNumber, e.getLine(), location.lineNumber);
+    KJ_EXPECT(e.getDescription() == description, e.getDescription());
+  };
+
+  expectFailure([&]() {
+    KJ_REQUIRE_AT(false, KJ_TEST_COMMA_LOCATION, "a_message");
+  }, "expected false; a_message");
+  expectFailure([&]() {
+    KJ_FAIL_REQUIRE_AT(KJ_TEST_COMMA_LOCATION, "a_message");
+  }, "a_message");
+  expectFailure([&]() {
+    kj::Maybe<int> maybe;
+    (void)KJ_REQUIRE_NONNULL_AT(maybe, KJ_TEST_COMMA_LOCATION, "a_message");
+  }, "expected maybe != nullptr; a_message");
+
+  kj::Vector<kj::String> messages;
+  {
+    LogCapture capture;
+    KJ_LOG_AT(WARNING, KJ_TEST_COMMA_LOCATION, "a_message");
+    KJ_EXPECT_AT(false, KJ_TEST_COMMA_LOCATION, "a_message");
+    KJ_FAIL_EXPECT_AT(KJ_TEST_COMMA_LOCATION, "a_message");
+    messages = kj::mv(capture.messages);
+  }
+  KJ_ASSERT(messages.size() == 3, messages);
+  KJ_EXPECT(messages[0] == "warning: a_message", messages[0]);
+  KJ_EXPECT(messages[1] == "error: failed: expected false; a_message", messages[1]);
+  KJ_EXPECT(messages[2] == "error: a_message", messages[2]);
+}
+
+#undef KJ_TEST_COMMA_LOCATION
+
+// =======================================================================================
 // Stack frame overhead of assertion macros
 //
 // Measures the exact number of stack bytes that kj/debug.h assertion macros add to the frame of
@@ -1049,10 +1220,10 @@ inline void use(T value) {
   asm volatile("" :: "r"(value));
 }
 
-const char* probeFrame = nullptr;
+uintptr_t probeFrame = 0;
 
 KJ_NOINLINE void probe() {
-  probeFrame = static_cast<const char*>(__builtin_frame_address(0));
+  probeFrame = reinterpret_cast<uintptr_t>(__builtin_frame_address(0));
 }
 
 #define KJ_FRAME_PROBE() \
@@ -1062,13 +1233,15 @@ KJ_NOINLINE void probe() {
 // which would pop the check's frame before probe() runs.
 
 KJ_NOINLINE ptrdiff_t measureFrame(void (*check)()) {
-  const char* top = static_cast<const char*>(__builtin_frame_address(0));
+  // The frames' addresses are compared as integers: subtracting pointers into different objects
+  // would be undefined behavior.
+  uintptr_t top = reinterpret_cast<uintptr_t>(__builtin_frame_address(0));
   check = opaque(check);  // Don't let the compiler specialize this function for each check.
-  probeFrame = nullptr;
+  probeFrame = 0;
   check();
   asm volatile("" ::: "memory");
-  KJ_ASSERT(probeFrame != nullptr);
-  return top - probeFrame;
+  KJ_ASSERT(probeFrame != 0);
+  return static_cast<ptrdiff_t>(top - probeFrame);
 }
 
 int value = 1;

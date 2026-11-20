@@ -152,6 +152,8 @@ namespace kj {
                           condition, macroArgs })
 // The Debug::Site of a check in an _AT macro. The location is only known at runtime, so the Site
 // is a temporary. Like KJ_PACKED_SITE_, `condition` is empty if there is none.
+// The _AT macros pass their `location` in parentheses, as it may contain commas, e.g.
+// `callerLocation<A, B>()` from a macro.
 
 #if KJ_MSVC_TRADITIONAL_CPP
 // MSVC does __VA_ARGS__ differently from GCC:
@@ -174,7 +176,7 @@ namespace kj {
 
 #define KJ_LOG_AT(severity, location, ...) \
   if (!::kj::_::Debug::shouldLog(::kj::LogSeverity::severity)) {} else \
-    ::kj::_::Debug::log(location.fileName, location.lineNumber, ::kj::LogSeverity::severity, \
+    ::kj::_::Debug::log((location).fileName, (location).lineNumber, ::kj::LogSeverity::severity, \
                         "" #__VA_ARGS__, __VA_ARGS__)
 
 #define KJ_DBG(...) KJ_EXPAND(KJ_LOG(DBG, __VA_ARGS__))
@@ -189,7 +191,7 @@ namespace kj {
 
 #define KJ_REQUIRE_AT(cond, location, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
-    ::kj::_::Debug::fail(KJ_SITE_AT_(location, #cond, "" #__VA_ARGS__), \
+    ::kj::_::Debug::fail(KJ_SITE_AT_((location), #cond, "" #__VA_ARGS__), \
         ::kj::_::Debug::ConditionFailed(), _kjCondition, __VA_ARGS__)
 
 #define KJ_FAIL_REQUIRE(...) \
@@ -197,7 +199,7 @@ namespace kj {
       ::kj::Exception::Type::FAILED, __VA_ARGS__)
 
 #define KJ_FAIL_REQUIRE_AT(location, ...) \
-  KJ_FAIL_NORETURN_ ::kj::_::Debug::fail(KJ_SITE_AT_(location, "", "" #__VA_ARGS__), \
+  KJ_FAIL_NORETURN_ ::kj::_::Debug::fail(KJ_SITE_AT_((location), "", "" #__VA_ARGS__), \
       ::kj::Exception::Type::FAILED, __VA_ARGS__)
 
 #define KJ_SYSCALL(call, ...) \
@@ -297,7 +299,7 @@ namespace kj {
   (*[&] { \
     auto _kj_result = ::kj::_::readMaybe(value); \
     if (KJ_UNLIKELY(!_kj_result)) { \
-      ::kj::_::Debug::fail(KJ_SITE_AT_(location, #value " != nullptr", "" #__VA_ARGS__), \
+      ::kj::_::Debug::fail(KJ_SITE_AT_((location), #value " != nullptr", "" #__VA_ARGS__), \
           ::kj::Exception::Type::FAILED, __VA_ARGS__); \
     } \
     return _kj_result; \
@@ -316,7 +318,7 @@ namespace kj {
 
 #define KJ_LOG_AT(severity, location, ...) \
   if (!::kj::_::Debug::shouldLog(::kj::LogSeverity::severity)) {} else \
-    ::kj::_::Debug::log(location.fileName, location.lineNumber, ::kj::LogSeverity::severity, \
+    ::kj::_::Debug::log((location).fileName, (location).lineNumber, ::kj::LogSeverity::severity, \
                         #__VA_ARGS__, ##__VA_ARGS__)
 
 #define KJ_DBG(...) KJ_LOG(DBG __VA_OPT__(,) __VA_ARGS__)
@@ -328,7 +330,7 @@ namespace kj {
 
 #define KJ_REQUIRE_AT(cond, location, ...) \
   if (auto _kjCondition = ::kj::_::MAGIC_ASSERT << cond) {} else \
-    ::kj::_::Debug::fail(KJ_SITE_AT_(location, #cond, #__VA_ARGS__), \
+    ::kj::_::Debug::fail(KJ_SITE_AT_((location), #cond, #__VA_ARGS__), \
         ::kj::_::Debug::ConditionFailed(), _kjCondition, ##__VA_ARGS__)
 
 #define KJ_FAIL_REQUIRE(...) \
@@ -336,7 +338,7 @@ namespace kj {
       ::kj::Exception::Type::FAILED __VA_OPT__(,) __VA_ARGS__)
 
 #define KJ_FAIL_REQUIRE_AT(location, ...) \
-  KJ_FAIL_NORETURN_ ::kj::_::Debug::fail(KJ_SITE_AT_(location, "", #__VA_ARGS__), \
+  KJ_FAIL_NORETURN_ ::kj::_::Debug::fail(KJ_SITE_AT_((location), "", #__VA_ARGS__), \
       ::kj::Exception::Type::FAILED, ##__VA_ARGS__)
 
 #define KJ_SYSCALL(call, ...) \
@@ -443,7 +445,7 @@ namespace kj {
   (*([&] { \
     auto _kj_result = ::kj::_::readMaybe(value); \
     if (KJ_UNLIKELY(!_kj_result)) { \
-      ::kj::_::Debug::fail(KJ_SITE_AT_(location, #value " != nullptr", #__VA_ARGS__), \
+      ::kj::_::Debug::fail(KJ_SITE_AT_((location), #value " != nullptr", #__VA_ARGS__), \
           ::kj::Exception::Type::FAILED, ##__VA_ARGS__); \
     } \
     return _kj_result; \
@@ -465,7 +467,7 @@ namespace kj {
   (*({ \
     auto _kj_result = ::kj::_::readMaybe(value); \
     if (KJ_UNLIKELY(!_kj_result)) { \
-      ::kj::_::Debug::fail(KJ_SITE_AT_(location, #value " != nullptr", #__VA_ARGS__), \
+      ::kj::_::Debug::fail(KJ_SITE_AT_((location), #value " != nullptr", #__VA_ARGS__), \
           ::kj::Exception::Type::FAILED, ##__VA_ARGS__); \
     } \
     kj::mv(_kj_result); \
@@ -596,28 +598,35 @@ namespace _ {  // private
 
 #if KJ_FAIL_BY_VALUE_
 
-template <typename T, typename = void>
+template <typename T, typename From, typename = void>
 struct DebugIsSmallClass_ { static constexpr bool value = false; };
-template <typename T>
-struct DebugIsSmallClass_<T, decltype(void(sizeof(T)))> {
+template <typename T, typename From>
+struct DebugIsSmallClass_<T, From, decltype(void(sizeof(T)))> {
   static constexpr bool value = __is_trivially_copyable(T) &&
-      __is_trivially_constructible(T, const T&) && sizeof(T) <= 2 * sizeof(void*);
+      __is_trivially_constructible(T, From) && sizeof(T) <= 2 * sizeof(void*);
 };
 // Whether `T` is a complete class that can be copied as cheaply as two pointers, e.g. a StringPtr
-// or an iterator.
+// or an iterator, from a `From`, the reference to the value that is copied. Being trivially
+// copyable isn't enough: for a non-const lvalue, a constructor template taking `U&&` is a better
+// match than the copy constructor, and could make a copy that is stringified differently.
 
-template <typename T, bool = __is_class(T) || __is_union(T)>
+template <typename T, typename From, bool = __is_class(T) || __is_union(T)>
 struct DebugByValue_ { static constexpr bool value = __is_trivially_copyable(T); };
-template <typename T> struct DebugByValue_<T, true>: DebugIsSmallClass_<T> {};
-template <typename T> struct DebugByValue_<T&>: DebugByValue_<T> {};
-template <typename T> struct DebugByValue_<T&&>: DebugByValue_<T> {};
-template <typename T, size_t s> struct DebugByValue_<T[s]> { static constexpr bool value = false; };
-template <typename T> struct DebugByValue_<T[]> { static constexpr bool value = false; };
-// Whether `T`, ignoring references, is cheap to copy: a scalar type (a number, enum or pointer;
-// non-class, non-array types are trivially copyable if and only if they are scalars), or a small
-// class (see DebugIsSmallClass_).
+template <typename T, typename From>
+struct DebugByValue_<T, From, true>: DebugIsSmallClass_<T, From> {};
+template <typename T, typename From>
+struct DebugByValue_<T&, From, false>: DebugByValue_<T, From> {};
+template <typename T, typename From>
+struct DebugByValue_<T&&, From, false>: DebugByValue_<T, From> {};
+template <typename T, size_t s, typename From>
+struct DebugByValue_<T[s], From, false> { static constexpr bool value = false; };
+template <typename T, typename From>
+struct DebugByValue_<T[], From, false> { static constexpr bool value = false; };
+// Whether `T`, ignoring references, is cheap to copy from a `From`: a scalar type (a number, enum
+// or pointer; non-class, non-array types are trivially copyable if and only if they are scalars),
+// or a small class (see DebugIsSmallClass_).
 
-template <typename T, bool = DebugByValue_<T>::value>
+template <typename T, bool = DebugByValue_<T, T&&>::value>
 struct DebugParam_ { typedef T&& Type; };
 template <typename T>
 struct DebugParam_<T, true> { typedef Decay<T> Type; };
@@ -725,7 +734,8 @@ public:
     }
 
     template <typename T>
-    static Arg of(T& value) { return { &value, &stringifyValue<T> }; }
+    static Arg of(T& value) { return { __builtin_addressof(value), &stringifyValue<T> }; }
+    // (`__builtin_addressof` rather than `&`, which the argument's type may overload.)
     template <size_t s>
     static Arg of(const char (&value)[s]) { return { value, &stringifyChars }; }
     template <size_t s>
@@ -1153,7 +1163,8 @@ struct DebugComparison {
 
 template <typename Left, typename Right, typename Op>
 Debug::Comparison debugComparison(DebugComparison<Left, Right, Op>& cmp) {
-  return { debugOperand(&cmp.left), Op::op(), debugOperand(&cmp.right) };
+  return { debugOperand(__builtin_addressof(cmp.left)), Op::op(),
+           debugOperand(__builtin_addressof(cmp.right)) };
 }
 
 template <typename Left, typename Right, typename Op>
@@ -1165,7 +1176,7 @@ String KJ_STRINGIFY(DebugComparison<Left, Right, Op>& cmp) {
 
 #if KJ_FAIL_BY_VALUE_
 
-template <typename T, bool = DebugByValue_<T>::value>
+template <typename T, bool = DebugByValue_<T, T&>::value>
 struct DebugOperandByValue_ { static constexpr bool value = false; };
 template <typename T>
 struct DebugOperandByValue_<T, true> {
@@ -1177,10 +1188,11 @@ template <typename T>
 struct DebugOperand_<T, true> { typedef Decay<T> Type; };
 template <typename T>
 using DebugOperand = typename DebugOperand_<T>::Type;
-// How DebugComparisonOperands holds an operand of type `T`: cheap ones (see DebugByValue_) that
-// fit in a register by value, everything else by reference to the operand in the
-// DebugComparison. So DebugComparisonOperands always fits in two registers: a bigger one would
-// be passed on the stack, which costs stack space in the function containing the check.
+// How DebugComparisonOperands holds an operand of type `T`: cheap ones (see DebugByValue_; they
+// are copied from the DebugComparison's member, a `T&`) that fit in a register by value,
+// everything else by reference to the operand in the DebugComparison. So
+// DebugComparisonOperands always fits in two registers: a bigger one would be passed on the
+// stack, which costs stack space in the function containing the check.
 
 template <typename Left, typename Right, typename Op>
 struct DebugComparisonOperands {
@@ -1196,7 +1208,8 @@ struct DebugComparisonOperands {
 
 template <typename Left, typename Right, typename Op>
 Debug::Comparison debugComparison(DebugComparisonOperands<Left, Right, Op>& cmp) {
-  return { debugOperand(&cmp.left), Op::op(), debugOperand(&cmp.right) };
+  return { debugOperand(__builtin_addressof(cmp.left)), Op::op(),
+           debugOperand(__builtin_addressof(cmp.right)) };
 }
 
 template <typename Left, typename Right, typename Op>

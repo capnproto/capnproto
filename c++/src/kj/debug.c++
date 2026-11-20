@@ -224,12 +224,15 @@ String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNu
     }
   }
 
+  // Stringify the comparison before the arguments: its operands may refer to variables that
+  // stringifying an argument changes, and it should show the values that were compared.
+  String comparisonValue = style == ASSERTION && comparison != nullptr
+      ? stringifyDebugComparison(*comparison) : String();
+
   KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
   for (auto i: kj::indices(args)) {
     argValues[i] = stringify(args[i]);
   }
-  String comparisonValue = style == ASSERTION && comparison != nullptr
-      ? stringifyDebugComparison(*comparison) : String();
 
   KJ_STACK_ARRAY(ArrayPtr<const char>, argNames, argValues.size(), 8, 64);
 
