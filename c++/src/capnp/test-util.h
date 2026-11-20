@@ -323,13 +323,22 @@ private:
 class TestFdCap final: public test::TestInterface::Server {
   // Implementation of TestInterface that wraps a file descriptor.
 
-public:
-  TestFdCap(kj::OwnFd fd): fd(kj::mv(fd)) {}
+  class FdState final: public kj::Refcounted {
+  public:
+    FdState(kj::OwnFd fd): fd(kj::mv(fd)) {}
 
-  kj::Maybe<int> getFd() override { return fd.get(); }
+    kj::OwnFd fd;
+  };
+
+public:
+  TestFdCap(kj::OwnFd fd): state(kj::refcounted<FdState>(kj::mv(fd))) {}
+
+  kj::Maybe<FdRef> getFd() override {
+    return FdRef(state->fd.get(), kj::addRef(*state));
+  }
 
 private:
-  kj::OwnFd fd;
+  kj::Own<FdState> state;
 };
 
 class TestStreamingImpl final: public test::TestStreaming::Server {

@@ -90,6 +90,19 @@ struct Capability {
   // A capability without type-safe methods.  Typed capability clients wrap `Client` and typed
   // capability servers subclass `Server` to dispatch to the regular, typed methods.
 
+  class FdRef {
+    // A file descriptor together with a reference that keeps that exact descriptor open and
+    // prevents its number from being reused. Keep the FdRef alive while using the descriptor.
+
+  public:
+    FdRef(int fd, kj::Own<void> keepAlive) : fd(fd), keepAlive(kj::mv(keepAlive)) {}
+    int get() const { return fd; }
+
+  private:
+    int fd;
+    kj::Own<void> keepAlive;
+  };
+
   class Client;
   class Server;
 
@@ -207,6 +220,7 @@ class Capability::Client {
 public:
   typedef Capability Reads;
   typedef Capability Calls;
+  using FdRef = Capability::FdRef;
 
   Client(decltype(nullptr));
   // If you need to declare a Client before you have anything to assign to it (perhaps because
@@ -286,18 +300,17 @@ public:
   // Make a request without knowing the types of the params or results. You specify the type ID
   // and method number manually.
 
-  kj::Promise<kj::Maybe<int>> getFd();
+  kj::Promise<kj::Maybe<FdRef>> getFd();
   // If the capability's server implemented Capability::Server::getFd() returning non-null, and all
-  // RPC links between the client and server support FD passing, returns a file descriptor pointing
-  // to the same underlying file description as the server did. Returns null if the server provided
-  // no FD or if FD passing was unavailable at some intervening link.
+  // RPC links between the client and server support FD passing, returns a reference to a file
+  // descriptor pointing to the same underlying file description as the server did. Returns null
+  // if the server provided no FD or if FD passing was unavailable at some intervening link.
   //
   // This returns a Promise to handle the case of an unresolved promise capability, e.g. a
   // pipelined capability. The promise resolves no later than when the capability settles, i.e.
   // the same time `whenResolved()` would complete.
   //
-  // The file descriptor will remain open at least as long as the Capability::Client remains alive.
-  // If you need it to last longer, you will need to `dup()` it.
+  // The reference keeps the file descriptor open even if the capability is revoked or destroyed.
 
   kj::String debugInfo();
   // For debugging purposes, return what kind of capability this is, including layers of wrapping
@@ -505,6 +518,7 @@ class Capability::Server {
 
 public:
   typedef Capability Serves;
+  using FdRef = Capability::FdRef;
 
   struct DispatchCallResult {
     kj::Promise<void> promise;
@@ -529,15 +543,14 @@ public:
   // is no longer needed.  `context` may be used to allocate the output struct and other call
   // logistics.
 
-  virtual kj::Maybe<int> getFd() { return kj::none; }
+  virtual kj::Maybe<FdRef> getFd() { return kj::none; }
   // If this capability is backed by a file descriptor that is safe to directly expose to clients,
-  // returns that FD. When FD passing has been enabled in the RPC layer, this FD may be sent to
-  // other processes along with the capability.
+  // returns that FD together with a reference that keeps it open. When FD passing has been enabled
+  // in the RPC layer, this FD may be sent to other processes along with the capability.
   //
-  // The descriptor must stay open for at least as long as the capability itself. The RPC layer may
-  // hold a reference to the capability in order to keep the descriptor valid until it has finished
-  // sending it, so a server which closes its descriptor early can cause the peer to receive a
-  // descriptor that has been closed, or that now refers to some unrelated file.
+  // The reference must keep the descriptor open and prevent its number from being reused until the
+  // reference is dropped. It must not depend on the lifetime of the Server, which can end before
+  // the RPC layer has finished sending the descriptor.
 
   virtual kj::Maybe<kj::Promise<Capability::Client>> shortenPath();
   // If this returns non-null, then it is a promise which, when resolved, points to a new
@@ -817,6 +830,8 @@ class ClientHook {
 public:
   ClientHook(const void* brand = nullptr);
 
+  using FdRef = Capability::FdRef;
+
   using CallHints = Capability::Client::CallHints;
 
   virtual Request<AnyPointer, AnyPointer> newCall(
@@ -887,7 +902,7 @@ public:
   inline bool isError() { return isBrand(&BROKEN_CAPABILITY_BRAND); }
   // Returns true if the capability was created by newBrokenCap().
 
-  virtual kj::Maybe<int> getFd() = 0;
+  virtual kj::Maybe<FdRef> getFd() = 0;
   // Implements Capability::Client::getFd(). If this returns null but whenMoreResolved() returns
   // non-null, then Capability::Client::getFd() waits for resolution and tries again.
 

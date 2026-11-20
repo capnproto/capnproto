@@ -72,16 +72,15 @@ Capability::Client::Client(decltype(nullptr))
 Capability::Client::Client(kj::Exception&& exception)
     : hook(newBrokenCap(kj::mv(exception))) {}
 
-kj::Promise<kj::Maybe<int>> Capability::Client::getFd() {
-  auto fd = hook->getFd();
-  if (fd != kj::none) {
-    return fd;
+kj::Promise<kj::Maybe<Capability::FdRef>> Capability::Client::getFd() {
+  KJ_IF_SOME(fd, hook->getFd()) {
+    return kj::Maybe<Capability::FdRef>(kj::mv(fd));
   } else KJ_IF_SOME(promise, hook->whenMoreResolved()) {
     return promise.attach(hook->addRef()).then([](kj::Own<ClientHook> newHook) {
       return Client(kj::mv(newHook)).getFd();
     });
   } else {
-    return kj::Maybe<int>(kj::none);
+    return kj::Maybe<Capability::FdRef>(kj::none);
   }
 }
 
@@ -465,7 +464,7 @@ public:
     return kj::addRef(*this);
   }
 
-  kj::Maybe<int> getFd() override {
+  kj::Maybe<FdRef> getFd() override {
     KJ_IF_SOME(r, redirect) {
       return r->getFd();
     } else {
@@ -747,12 +746,15 @@ public:
     }
   }
 
-  kj::Maybe<int> getFd() override {
+  kj::Maybe<FdRef> getFd() override {
     KJ_IF_SOME(s, server) {
-      return s->getFd();
-    } else {
-      return kj::none;
+      auto fd = s->getFd();
+      // Server::getFd() may reentrantly revoke this client.
+      if (server != kj::none) {
+        return kj::mv(fd);
+      }
     }
+    return kj::none;
   }
 
   void debugInfo(kj::Vector<kj::ConstString>& chain) override {
@@ -1095,7 +1097,7 @@ public:
     return kj::addRef(*this);
   }
 
-  kj::Maybe<int> getFd() override {
+  kj::Maybe<FdRef> getFd() override {
     return kj::none;
   }
 
