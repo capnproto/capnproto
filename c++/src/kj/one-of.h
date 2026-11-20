@@ -23,6 +23,7 @@
 
 #include "common.h"
 #include "string.h"
+#include "tuple.h"
 
 KJ_BEGIN_HEADER
 
@@ -356,10 +357,59 @@ class OneOf {
     return _::TypeIndex_<1, _::OneOfFailZero_, Key, Variants...>::value;
   }
 
+  template <bool... matches>
+  static constexpr uint uniqueMatchIndex() {
+    // Return the one-based index of the single match, or zero otherwise.
+    if constexpr ((0u + ... + uint(matches)) == 1) {
+      uint index = 0;
+      return ((++index, matches) || ...) ? index : 0;
+    } else {
+      return 0;
+    }
+  }
+
+  template <typename From>
+  static constexpr uint conversionIndex() {
+    // Prefer an exact variant. Otherwise require a unique implicit match, or if there are no
+    // implicit matches, a unique explicit match. Return zero if the conversion is not available.
+    constexpr uint exact = typeIndexOrZero<Decay<From>>();
+    if constexpr (exact != 0) {
+      return _::ConstructibleFrom<Decay<From>, From> ? exact : 0;
+    } else if constexpr ((_::ImplicitlyConstructibleFrom<Variants, From> || ...)) {
+      return uniqueMatchIndex<_::ImplicitlyConstructibleFrom<Variants, From>...>();
+    } else {
+      return uniqueMatchIndex<_::PointerSafeConstructibleFrom<Variants, From>...>();
+    }
+  }
+
+  template <typename From>
+  static constexpr bool isImplicitConversion() {
+    if constexpr (conversionIndex<From>() == 0) {
+      return false;
+    } else {
+      using To = _::TypeByIndex<conversionIndex<From>() - 1, Variants...>;
+      return _::ImplicitlyConstructibleFrom<To, From>;
+    }
+  }
+
+  template <typename From>
+  static constexpr bool isNoThrowConversion() {
+    if constexpr (conversionIndex<From>() == 0) {
+      return false;
+    } else {
+      using To = _::TypeByIndex<conversionIndex<From>() - 1, Variants...>;
+      if constexpr (isSameType<To, Decay<From>>()) {
+        return kj::isNoThrowMoveConstructible<To, From>();
+      } else {
+        return _::isNoThrowPointerSafeConstructible<To, From>();
+      }
+    }
+  }
+
   template <uint i, typename... OtherVariants>
   struct HasAll;
   // Has a member type called "Success" if and only if all of `OtherVariants` are types that
-  // appear in `Variants`. Used with SFINAE to enable subset constructors.
+  // appear in `Variants`. Used with SFINAE to enable the exact-value constructor.
 
 public:
   inline OneOf(): tag(0) {}
@@ -371,16 +421,40 @@ public:
   }
   // Copy/move from same OneOf type.
 
-  template <typename... OtherVariants, typename = typename HasAll<1, OtherVariants...>::Success>
-  OneOf(const OneOf<OtherVariants...>& other) { copyFromSubset(other); }
-  template <typename... OtherVariants, typename = typename HasAll<1, OtherVariants...>::Success>
-  OneOf(OneOf<OtherVariants...>& other) { copyFromSubset(other); }
-  template <typename... OtherVariants, typename = typename HasAll<1, OtherVariants...>::Success>
-  OneOf(OneOf<OtherVariants...>&& other)
-      noexcept((kj::isNoThrowMoveConstructible<OtherVariants>() && ...)) {
-    moveFromSubset(other);
+  template <typename... OtherVariants>
+    requires (typeIndexOrZero<OneOf<OtherVariants...>>() == 0 &&
+        ((conversionIndex<const OtherVariants&>() != 0) && ...))
+  explicit(!(isImplicitConversion<const OtherVariants&>() && ...))
+  OneOf(const OneOf<OtherVariants...>& other): tag(0) {
+    (convertVariantFrom<OtherVariants>(other), ...);
   }
-  // Copy/move from OneOf that contains a subset of the types we do.
+  template <typename... OtherVariants>
+    requires (typeIndexOrZero<OneOf<OtherVariants...>>() == 0 &&
+        ((conversionIndex<OtherVariants&>() != 0) && ...))
+  explicit(!(isImplicitConversion<OtherVariants&>() && ...))
+  OneOf(OneOf<OtherVariants...>& other): tag(0) {
+    (convertVariantFrom<OtherVariants>(other), ...);
+  }
+  template <typename... OtherVariants>
+    requires (typeIndexOrZero<OneOf<OtherVariants...>>() == 0 &&
+        ((conversionIndex<OtherVariants&&>() != 0) && ...))
+  explicit(!(isImplicitConversion<OtherVariants&&>() && ...))
+  OneOf(OneOf<OtherVariants...>&& other)
+      noexcept((isNoThrowConversion<OtherVariants&&>() && ...)): tag(0) {
+    (convertVariantFrom<OtherVariants>(kj::mv(other)), ...);
+  }
+  // Convert each source variant, preferring an exact match, then a unique implicit conversion,
+  // then a unique explicit conversion. Implicit iff all selected conversions are implicit.
+  // Order need not match, and multiple source variants can convert to the same destination.
+  // If the source OneOf itself is a destination variant, wrap it instead of converting its
+  // alternatives. Uninitialized sources produce uninitialized results.
+  //
+  // Lvalue sources convert from mutable or const references; rvalues convert from rvalue
+  // references. As with same-type moves, a moved source retains its tag and moved-from value.
+  // A conversion to a different type registered with PointerTraits must be implicit or use the
+  // source's conversion operator to that type. Converting to borrowed pointer types does not
+  // retain the owner. For example, converting an lvalue OneOf<String, Array<int>> to
+  // OneOf<StringPtr, ArrayPtr<int>> borrows from the original OneOf.
 
   template <typename T, typename = typename HasAll<0, Decay<T>>::Success>
   OneOf(T&& other) noexcept(kj::isNoThrowMoveConstructible<Decay<T>>()):
@@ -598,45 +672,18 @@ private:
     doAll(moveVariantFrom<Variants>(other)...);
   }
 
-  template <typename T, typename... OtherVariants>
-  inline bool copySubsetVariantFrom(const OneOf<OtherVariants...>& other) {
+  template <typename T, typename Other>
+  void convertVariantFrom(Other&& other) {
     if (other.template is<T>()) {
-      tag = typeIndex<Decay<T>>();
-      ctor(*reinterpret_cast<T*>(space), other.template get<T>());
+      auto&& value = kj::fwd<Other>(other).template get<T>();
+      using From = decltype(value);
+      using To = _::TypeByIndex<conversionIndex<From>() - 1, Variants...>;
+      if constexpr (isSameType<To, Decay<From>>()) {
+        init<To>(kj::fwd<From>(value));
+      } else {
+        init<To>(_::pointerSafeSource<To>(kj::fwd<From>(value)));
+      }
     }
-    return false;
-  }
-  template <typename... OtherVariants>
-  void copyFromSubset(const OneOf<OtherVariants...>& other) {
-    doAll(copySubsetVariantFrom<OtherVariants>(other)...);
-  }
-
-  template <typename T, typename... OtherVariants>
-  inline bool copySubsetVariantFrom(OneOf<OtherVariants...>& other) {
-    if (other.template is<T>()) {
-      tag = typeIndex<Decay<T>>();
-      ctor(*reinterpret_cast<T*>(space), other.template get<T>());
-    }
-    return false;
-  }
-  template <typename... OtherVariants>
-  void copyFromSubset(OneOf<OtherVariants...>& other) {
-    doAll(copySubsetVariantFrom<OtherVariants>(other)...);
-  }
-
-  template <typename T, typename... OtherVariants>
-  inline bool moveSubsetVariantFrom(OneOf<OtherVariants...>& other)
-      noexcept(kj::isNoThrowMoveConstructible<T>()) {
-    if (other.template is<T>()) {
-      tag = typeIndex<Decay<T>>();
-      ctor(*reinterpret_cast<T*>(space), kj::mv(other.template get<T>()));
-    }
-    return false;
-  }
-  template <typename... OtherVariants>
-  void moveFromSubset(OneOf<OtherVariants...>& other)
-      noexcept((kj::isNoThrowMoveConstructible<OtherVariants>() && ...)) {
-    doAll(moveSubsetVariantFrom<OtherVariants>(other)...);
   }
 };
 

@@ -20,11 +20,14 @@
 // THE SOFTWARE.
 
 #include "tuple.h"
+#include "array.h"
 #include "memory.h"
+#include "refcount.h"
 #include "string.h"
 #include <kj/compat/gtest.h>
 
 namespace kj {
+namespace {
 
 struct Foo { uint foo; Foo(uint i): foo(i) {} };
 struct Bar { uint bar; Bar(uint i): bar(i) {} };
@@ -90,6 +93,201 @@ TEST(Tuple, Tuple) {
   EXPECT_EQ(0, (indexOfType<int, int>()));
 }
 
+struct TupleQualifiedConversion {
+  int value = 123;
+  operator int() & { return value + 1; }
+  operator int() const & { return value + 2; }
+  operator int() && { int result = value + 3; value = 0; return result; }
+};
+
+struct TupleExplicitConversion {
+  explicit operator int() & { return 123; }
+  explicit operator int() const & { return 456; }
+  explicit operator int() && { return 789; }
+};
+
+struct TupleExplicitConstructor {
+  explicit TupleExplicitConstructor(int value): value(value) {}
+  int value;
+};
+
+struct TupleMutableCopy {
+  explicit TupleMutableCopy(int value): value(value) {}
+  TupleMutableCopy(TupleMutableCopy&) = default;
+  TupleMutableCopy(TupleMutableCopy&&) = default;
+  int value;
+};
+
+struct TupleImmovableConversion {
+  TupleImmovableConversion() = default;
+  KJ_DISALLOW_COPY_AND_MOVE(TupleImmovableConversion);
+  operator int() && { return value; }
+  int value = 123;
+};
+
+struct TupleImmovableConstructor {
+  TupleImmovableConstructor(int value): value(value) {}
+  KJ_DISALLOW_COPY_AND_MOVE(TupleImmovableConstructor);
+  int value;
+};
+
+struct TupleCopyingStringOwner {
+  operator String() const;
+};
+struct TupleExplicitViewOwner {
+  explicit operator ArrayPtr<const int>() const { return kj::arrayPtr(value); }
+  int value = 42;
+};
+
+// Direct-initializing a StringPtr from TupleCopyingStringOwner constructs it from a temporary
+// String, so the element would point at a destroyed object. Explicit conversion operators that
+// return the pointer type remain available.
+static_assert(!_::ConstructibleFrom<Tuple<StringPtr, int>, Tuple<TupleCopyingStringOwner, int>&>);
+static_assert(!_::ConstructibleFrom<Tuple<StringPtr, int>, Tuple<TupleCopyingStringOwner, int>>);
+static_assert(_::ConstructibleFrom<Tuple<ArrayPtr<const int>, int>,
+                                   Tuple<TupleExplicitViewOwner, int>&>);
+static_assert(!canConvert<Tuple<TupleExplicitViewOwner, int>&, Tuple<ArrayPtr<const int>, int>>());
+
+static_assert(canConvert<Tuple<String, Array<int>>&, Tuple<StringPtr, ArrayPtr<int>>>());
+static_assert(canConvert<const Tuple<String, Array<int>>&,
+                        Tuple<StringPtr, ArrayPtr<const int>>>());
+static_assert(!canConvert<const Tuple<String, Array<int>>&, Tuple<StringPtr, ArrayPtr<int>>>());
+static_assert(!canConvert<Tuple<String, int>&, Tuple<int, long>>());
+static_assert(!canConvert<Tuple<int, int, int>, Tuple<long, long>>());
+static_assert(!canConvert<Tuple<int, int>, Tuple<long, long, long>>());
+static_assert(!canConvert<Tuple<TupleExplicitConversion, int>, Tuple<int, long>>());
+static_assert(!canConvert<Tuple<int, int>, Tuple<TupleExplicitConstructor, long>>());
+static_assert(canConvert<Tuple<TupleMutableCopy, int>&, Tuple<TupleMutableCopy, long>>());
+static_assert(!canConvert<const Tuple<TupleMutableCopy, int>&, Tuple<TupleMutableCopy, long>>());
+static_assert(canConvert<Tuple<TupleImmovableConversion, int>, Tuple<int, long>>());
+static_assert(canConvert<Tuple<int, int>, Tuple<TupleImmovableConstructor, long>>());
+static_assert(!canConvert<Tuple<String&, String&>, Tuple<String, String>>());
+
+KJ_TEST("Tuple conversions preserve explicitness") {
+  auto check = []<typename To, typename From>() {
+    static_assert(_::ConstructibleFrom<To, From&>);
+    static_assert(_::ConstructibleFrom<To, const From&>);
+    static_assert(_::ConstructibleFrom<To, From>);
+    static_assert(!canConvert<From&, To>());
+    static_assert(!canConvert<const From&, To>());
+    static_assert(!canConvert<From, To>());
+  };
+  check.template operator()<Tuple<TupleExplicitConstructor, long>, Tuple<int, int>>();
+  check.template operator()<Tuple<int, long>, Tuple<TupleExplicitConversion, int>>();
+  check.template operator()<Tuple<int, long>, Tuple<TupleExplicitConversion&, int&>>();
+
+  auto source = kj::tuple(42, 43);
+  const auto& constSource = source;
+  using Constructed = Tuple<TupleExplicitConstructor, long>;
+  KJ_EXPECT(get<0>(Constructed(source)).value == 42);
+  KJ_EXPECT(get<0>(Constructed(constSource)).value == 42);
+  KJ_EXPECT(get<0>(Constructed(kj::mv(source))).value == 42);
+
+  auto qualified = kj::tuple(TupleExplicitConversion{}, 42);
+  const auto& constQualified = qualified;
+  using Converted = Tuple<int, long>;
+  KJ_EXPECT(get<0>(Converted(qualified)) == 123);
+  KJ_EXPECT(get<0>(Converted(constQualified)) == 456);
+  KJ_EXPECT(get<0>(Converted(kj::mv(qualified))) == 789);
+  auto references = kj::refTuple(get<0>(qualified), get<1>(qualified));
+  KJ_EXPECT(get<0>(Converted(kj::mv(references))) == 123);
+
+  struct ExplicitReference {
+    explicit operator int&() & { return value; }
+    int value = 42;
+  };
+  auto referents = kj::tuple(ExplicitReference{}, ExplicitReference{});
+  using Refs = Tuple<int&, int&>;
+  static_assert(_::ConstructibleFrom<Refs, decltype(referents)&>);
+  static_assert(!canConvert<decltype(referents)&, Refs>());
+  Refs convertedRefs(referents);
+  KJ_EXPECT(&get<0>(convertedRefs) == &get<0>(referents).value);
+  KJ_EXPECT(&get<1>(convertedRefs) == &get<1>(referents).value);
+}
+
+KJ_TEST("Tuple converts owning elements directly to borrowed pointer elements") {
+  auto owner = kj::tuple(kj::str("hello"), kj::heapArray<int>({12, 34}));
+  Tuple<StringPtr, ArrayPtr<int>> view = owner;
+  KJ_EXPECT(get<0>(view).cStr() == get<0>(owner).cStr());
+  KJ_EXPECT(get<1>(view).begin() == get<1>(owner).begin());
+  get<1>(view)[0] = 56;
+  KJ_EXPECT(get<1>(owner)[0] == 56);
+
+  const auto& constOwner = owner;
+  Tuple<StringPtr, ArrayPtr<const int>> readonly = constOwner;
+  KJ_EXPECT(get<0>(readonly) == "hello");
+  KJ_EXPECT(get<1>(readonly)[1] == 34);
+}
+
+KJ_TEST("Tuple conversions respect source reference qualification") {
+  auto source = kj::tuple(TupleQualifiedConversion{}, short(456));
+  Tuple<int, long> mutableValue = source;
+  KJ_EXPECT(get<0>(mutableValue) == 124);
+  KJ_EXPECT(get<1>(mutableValue) == 456);
+  const auto& constSource = source;
+  Tuple<int, long> constValue = constSource;
+  KJ_EXPECT(get<0>(constValue) == 125);
+  Tuple<int, long> movedValue = kj::mv(source);
+  KJ_EXPECT(get<0>(movedValue) == 126);
+  KJ_EXPECT(get<0>(source).value == 0);
+
+  auto references = kj::refTuple(get<0>(source), get<1>(source));
+  Tuple<int, long> copiedReferents = kj::mv(references);
+  KJ_EXPECT(get<0>(copiedReferents) == 1);
+  KJ_EXPECT(get<0>(source).value == 0);
+}
+
+KJ_TEST("Tuple element construction supports mutable copying and immovable values") {
+  auto source = kj::tuple(TupleMutableCopy(123), 456);
+  Tuple<TupleMutableCopy, long> copy = source;
+  KJ_EXPECT(get<0>(copy).value == 123);
+  KJ_EXPECT(get<1>(copy) == 456);
+  auto sameTypeCopy = source;
+  KJ_EXPECT(get<0>(sameTypeCopy).value == 123);
+
+  // Conversion does not move the source into an intermediate value.
+  Tuple<TupleImmovableConversion, int> immovableSource;
+  get<1>(immovableSource) = 456;
+  Tuple<int, long> converted = kj::mv(immovableSource);
+  KJ_EXPECT(get<0>(converted) == 123);
+  KJ_EXPECT(get<1>(converted) == 456);
+
+  // Nor does it create a temporary destination element that would need to be moved.
+  Tuple<TupleImmovableConstructor, long> immovableDestination = kj::tuple(123, 456);
+  KJ_EXPECT(get<0>(immovableDestination).value == 123);
+  KJ_EXPECT(get<1>(immovableDestination) == 456);
+}
+
+KJ_TEST("Tuple propagates owning-to-pointer Rc and Arc conversions") {
+  auto source = kj::tuple(kj::rc<String>(kj::str("hello")),
+      kj::arc<Array<int>>(kj::heapArray<int>({12, 34})));
+  Tuple<Rc<StringPtr>, Arc<ArrayPtr<const int>>> converted = kj::mv(source);
+  KJ_EXPECT(get<0>(source) == nullptr);
+  KJ_EXPECT(get<1>(source) == nullptr);
+  KJ_EXPECT(*get<0>(converted) == "hello");
+  KJ_EXPECT((*get<1>(converted))[1] == 34);
+}
+
+KJ_TEST("Tuple conversion destroys completed elements if a later conversion throws") {
+  struct Owner {
+    Owner(bool& destroyed): destroyed(destroyed) {}
+    ~Owner() noexcept(false) { destroyed = true; }
+    bool& destroyed;
+  };
+  struct ThrowingConversion {
+    operator int() const { KJ_FAIL_REQUIRE("tuple conversion failed"); }
+  };
+
+  bool destroyed = false;
+  auto source = kj::tuple(kj::heap<Owner>(destroyed), ThrowingConversion{});
+  using Converted = Tuple<Own<Owner>, int>;
+  KJ_EXPECT_THROW_MESSAGE("tuple conversion failed", {
+    Converted converted = kj::mv(source);
+  });
+  KJ_EXPECT(get<0>(source).get() == nullptr);
+  KJ_EXPECT(destroyed);
+}
+
 TEST(Tuple, RefTuple) {
   uint i = 123;
   StringPtr s = "foo";
@@ -109,4 +307,123 @@ TEST(Tuple, RefTuple) {
   EXPECT_EQ(get<3>(t), "bar");
 }
 
+struct TupleConvertingDerived;
+struct TupleConvertingBase {
+  TupleConvertingDerived* referent;
+  operator TupleConvertingDerived&() const { return *referent; }
+};
+struct TupleConvertingDerived: TupleConvertingBase {
+  int value = 123;
+};
+
+struct TupleExplicitDerived;
+struct TupleExplicitBase {
+  TupleExplicitDerived* referent;
+  explicit operator TupleExplicitDerived&() const { return *referent; }
+};
+struct TupleExplicitDerived: TupleExplicitBase {};
+
+struct TupleOpaque;
+struct TupleOpaqueSource {
+  TupleOpaque& referent;
+  operator TupleOpaque&() const { return referent; }
+};
+struct TupleExplicitOpaqueSource {
+  TupleOpaque& referent;
+  explicit operator TupleOpaque&() const { return referent; }
+};
+
+void checkOpaqueTupleReferences(TupleOpaque& target) {
+  // These conversions must compile while TupleOpaque is still incomplete.
+  int number = 1;
+  TupleOpaqueSource source{target};
+  auto refs = refTuple(source, number);
+  Tuple<TupleOpaque&, int&> borrowed = refs;
+  Tuple<const TupleOpaque&, const int&> constBorrowed = refs;
+  KJ_EXPECT(&get<0>(borrowed) == &target);
+  KJ_EXPECT(&get<0>(constBorrowed) == &target);
+
+  TupleExplicitOpaqueSource explicitSource{target};
+  auto explicitRefs = refTuple(explicitSource, number);
+  Tuple<TupleOpaque&, int&> explicitBorrowed(explicitRefs);
+  Tuple<const TupleOpaque&, const int&> explicitConstBorrowed(explicitRefs);
+  KJ_EXPECT(&get<0>(explicitBorrowed) == &target);
+  KJ_EXPECT(&get<0>(explicitConstBorrowed) == &target);
+}
+
+struct TupleOpaque {};
+
+KJ_TEST("Tuple reference conversions do not need complete referent types") {
+  TupleOpaque target;
+  checkOpaqueTupleReferences(target);
+}
+
+KJ_TEST("Tuple reference conversion to a derived type uses the conversion operator") {
+  // The source is not itself a TupleConvertingDerived, so treating it as one would be invalid.
+  TupleConvertingDerived target{};
+  TupleConvertingBase source{&target};
+  int number = 1;
+
+  auto refs = kj::refTuple(source, number);
+  const auto& constRefs = refs;
+  Tuple<TupleConvertingDerived&, int&> fromRefs = refs;
+  Tuple<const TupleConvertingDerived&, const int&> fromConstRefs = constRefs;
+  KJ_EXPECT(&get<0>(fromRefs) == &target);
+  KJ_EXPECT(&get<0>(fromConstRefs) == &target);
+
+  auto values = kj::tuple(TupleConvertingBase{&target}, 1);
+  Tuple<TupleConvertingDerived&, int> fromValues = values;
+  KJ_EXPECT(&get<0>(fromValues) == &target);
+
+  TupleExplicitDerived explicitTarget{};
+  TupleExplicitBase explicitSource{&explicitTarget};
+  auto explicitRefs = kj::refTuple(explicitSource, number);
+  Tuple<TupleExplicitDerived&, int&> fromExplicitRefs(explicitRefs);
+  Tuple<const TupleExplicitDerived&, const int&> constFromExplicitRefs(explicitRefs);
+  KJ_EXPECT(&get<0>(fromExplicitRefs) == &explicitTarget);
+  KJ_EXPECT(&get<0>(constFromExplicitRefs) == &explicitTarget);
+}
+
+#ifdef __has_builtin
+#if __has_builtin(__reference_constructs_from_temporary)
+KJ_TEST("Tuple conversions do not bind reference elements to temporaries") {
+  // Converting a long to an int creates a temporary, which would die at the end of the
+  // conversion and leave the const reference element dangling.
+  static_assert(!_::ConstructibleFrom<Tuple<const int&, int&>, Tuple<long&, int&>&>);
+  static_assert(!_::ConstructibleFrom<Tuple<const int&, int&>, const Tuple<long&, int&>&>);
+  static_assert(!_::ConstructibleFrom<Tuple<const int&, int>, Tuple<long, int>&&>);
+
+  struct Converts {
+    operator StringPtr() const { return "foo"; }
+  };
+  static_assert(!_::ConstructibleFrom<Tuple<const StringPtr&, int>, Tuple<Converts, int>&>);
+
+  // A by-value conversion to a derived type also creates a temporary, rather than a downcast.
+  struct Derived;
+  struct Base {
+    operator Derived() const;
+  };
+  struct Derived: Base {};
+  static_assert(!_::ConstructibleFrom<Tuple<const Derived&, int>, Tuple<Base, int>&>);
+}
+#endif
+#endif
+
+KJ_TEST("Tuple reference conversions borrow existing elements") {
+  // Reference elements that bind to the source's own elements remain convertible.
+  int i = 123;
+  int j = 456;
+  auto refs = refTuple(i, j);
+  Tuple<const int&, int&> constRefs = refs;
+  KJ_EXPECT(&get<0>(constRefs) == &i);
+  KJ_EXPECT(&get<1>(constRefs) == &j);
+
+  // Moving the tuple expression still lets references borrow its existing elements.
+  auto values = tuple(123, 456);
+  Tuple<const int&, const int&> borrowed = kj::mv(values);
+  KJ_EXPECT(&get<0>(borrowed) == &get<0>(values));
+  KJ_EXPECT(&get<1>(borrowed) == &get<1>(values));
+}
+
+}  // namespace
 }  // namespace kj
