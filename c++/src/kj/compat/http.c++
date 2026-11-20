@@ -5076,6 +5076,26 @@ public:
     });
   }
 
+  void abortRead() override {
+    if (readGuardReleased) {
+      inner->abortRead();
+    } else {
+      // If the guard is rejected instead, the stream has already failed.
+      tasks.add(readGuard.addBranch().then([this]() { inner->abortRead(); },
+                                           [](kj::Exception&&) {}));
+    }
+  }
+
+  void abortRead(kj::Exception&& exception) override {
+    if (readGuardReleased) {
+      inner->abortRead(kj::mv(exception));
+    } else {
+      tasks.add(readGuard.addBranch().then(
+          [this, exception = kj::mv(exception)]() mutable { inner->abortRead(kj::mv(exception)); },
+          [](kj::Exception&&) {}));
+    }
+  }
+
   // AsyncOutputStream
 
   void shutdownWrite() override {
@@ -5083,6 +5103,17 @@ public:
       inner->shutdownWrite();
     } else {
       tasks.add(writeGuard.addBranch().then([this]() { inner->shutdownWrite(); }));
+    }
+  }
+
+  void abortWrite(kj::Exception&& exception) override {
+    if (writeGuardReleased) {
+      inner->abortWrite(kj::mv(exception));
+    } else {
+      // If the guard is rejected instead, the stream has already failed.
+      tasks.add(writeGuard.addBranch().then(
+          [this, exception = kj::mv(exception)]() mutable { inner->abortWrite(kj::mv(exception)); },
+          [](kj::Exception&&) {}));
     }
   }
 
@@ -5154,12 +5185,13 @@ private:
   bool readGuardReleased = false;
   bool writeGuardReleased = false;
   kj::TaskSet tasks;
-  // Set of tasks used to call `shutdownWrite` after write guard is released.
+  // Set of tasks used to call `shutdownWrite`, `abortWrite` and `abortRead` after the guards are
+  // released.
 
   void taskFailed(kj::Exception&& exception) override {
-    // This `taskFailed` callback is only used when `shutdownWrite` is being called. Because we
-    // don't care about DISCONNECTED exceptions when `shutdownWrite` is called we ignore this
-    // class of exceptions here.
+    // The abort tasks ignore a rejected guard, so in practice this `taskFailed` callback is only
+    // used when `shutdownWrite` is being called. Because we don't care about DISCONNECTED
+    // exceptions when `shutdownWrite` is called we ignore this class of exceptions here.
     if (exception.getType() != kj::Exception::Type::DISCONNECTED) {
       KJ_LOG(ERROR, exception);
     }
@@ -7659,11 +7691,12 @@ private:
         // rejecting the fulfiller here.
         streamAndFulfiller.fulfiller->reject(kj::mv(ex));
       } else {
-        // The guard has already been released at this point.
-        // TODO(connect): How to properly propagate the actual exception to the
-        // connect stream? Here we "simply" shut it down.
-        connectStream->abortRead();
-        connectStream->shutdownWrite();
+        // The guard has already been released at this point, so the client may already be
+        // using the connect stream. Fail its reads and writes with the exception, rather than
+        // ending its reads as if the tunnel had closed cleanly and failing its writes with a
+        // generic error.
+        connectStream->abortRead(ex.clone());
+        connectStream->abortWrite(kj::mv(ex));
       }
     }
 
