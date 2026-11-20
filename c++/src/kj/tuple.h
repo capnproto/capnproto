@@ -115,7 +115,15 @@ struct TupleElement {
   constexpr inline TupleElement(U&& value): value(pointerSafeSource<T>(kj::fwd<U>(value))) {}
 };
 
+#if !defined(_MSC_VER) || defined(__clang__)
+// MSVC rejects __reference_constructs_from_temporary as an argument to __has_builtin (C1017), so
+// the check must not be evaluated there.
 #if __has_builtin(__reference_constructs_from_temporary)
+#define KJ_HAS_REFERENCE_CONSTRUCTS_FROM_TEMPORARY 1
+#endif
+#endif
+
+#if KJ_HAS_REFERENCE_CONSTRUCTS_FROM_TEMPORARY
 template <typename T, typename U>
 concept BindsTemporary = __reference_constructs_from_temporary(T, U&&);
 #else
@@ -123,7 +131,7 @@ template <typename T, typename U>
 concept BindsTemporary = false;
 #endif
 // Concept: T is a reference that, initialized from U&&, would bind to a temporary. Compilers
-// without the builtin do not detect this case.
+// without the builtin (including MSVC) do not detect this case.
 
 template <typename T, typename U>
 concept TupleElementConstructibleFrom = PointerSafeConstructibleFrom<T, U> &&
