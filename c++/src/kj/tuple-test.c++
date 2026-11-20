@@ -384,8 +384,7 @@ KJ_TEST("Tuple reference conversion to a derived type uses the conversion operat
   KJ_EXPECT(&get<0>(constFromExplicitRefs) == &explicitTarget);
 }
 
-#ifdef __has_builtin
-#if __has_builtin(__reference_constructs_from_temporary)
+#if KJ_HAS_REFERENCE_CONSTRUCTS_FROM_TEMPORARY
 KJ_TEST("Tuple conversions do not bind reference elements to temporaries") {
   // Converting a long to an int creates a temporary, which would die at the end of the
   // conversion and leave the const reference element dangling.
@@ -406,8 +405,7 @@ KJ_TEST("Tuple conversions do not bind reference elements to temporaries") {
   struct Derived: Base {};
   static_assert(!_::ConstructibleFrom<Tuple<const Derived&, int>, Tuple<Base, int>&>);
 }
-#endif
-#endif
+#endif  // KJ_HAS_REFERENCE_CONSTRUCTS_FROM_TEMPORARY
 
 KJ_TEST("Tuple reference conversions borrow existing elements") {
   // Reference elements that bind to the source's own elements remain convertible.
