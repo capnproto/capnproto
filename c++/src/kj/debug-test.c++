@@ -162,6 +162,26 @@ TEST(Debug, Log) {
   EXPECT_LOG_EQ([&](){
     EXPECT_FATAL(KJ_FAIL_ASSERT("foo")); line = __LINE__;
   }, kj::str("exception: ", fileLine(__FILE__, line), ": failed: foo\n"));
+
+  // KJ_EXPECT describes its failure like KJ_ASSERT, but logs it. A condition that isn't a
+  // comparison isn't shown.
+  EXPECT_LOG_EQ([&](){
+    KJ_EXPECT(1 == 2, i); line = __LINE__;
+  }, kj::str("log message: ", fileLine(__FILE__, line), ":+0: error: "
+      "failed: expected 1 == 2 [1 == 2]; i = 123\n"));
+
+  EXPECT_LOG_EQ([&](){
+    bool flag = false;
+    KJ_EXPECT(flag && i == 123, "message"); line = __LINE__;
+  }, kj::str("log message: ", fileLine(__FILE__, line), ":+0: error: "
+      "failed: expected flag && i == 123; message\n"));
+
+  // A comparison that is an ordinary argument of KJ_LOG is labeled like any other.
+  EXPECT_LOG_EQ([&](){
+    auto comparison = MAGIC_ASSERT << i == 456;
+    KJ_LOG(ERROR, "message", comparison); line = __LINE__;
+  }, kj::str("log message: ", fileLine(__FILE__, line), ":+0: error: "
+      "message; comparison = 123 == 456\n"));
 }
 
 TEST(Debug, EmptyVariadicArgs) {
@@ -226,6 +246,18 @@ void myAssertNonnull(kj::Maybe<int> value, kj::SourceLocation location = {}) {
 void myLog(kj::SourceLocation location = {}) {
   KJ_LOG_AT(WARNING, location, "a_message");
 }
+void myRequireEq(int a, int b, kj::SourceLocation location = {}) {
+  KJ_REQUIRE_AT(a == b, location, "a_message");
+}
+void myExpectEq(int a, int b, kj::SourceLocation location = {}) {
+  KJ_EXPECT_AT(a == b, location, "a_message");
+}
+void myExpect(bool cond, kj::SourceLocation location = {}) {
+  KJ_EXPECT_AT(cond, location);
+}
+void myFailExpect(kj::SourceLocation location = {}) {
+  KJ_FAIL_EXPECT_AT(location, "a_message");
+}
 // Using functional versions of the utility macros used elsewhere, because the __builtin_LINE()
 // primitive used by SourceLocation is inaccurate in macros:
 void expectLogEq(auto&& f, auto&& expTextFunc) {
@@ -261,6 +293,39 @@ TEST(Debug, LogAt) {
   }, [&](){
     return kj::str("exception: ", fileLine(__FILE__, line), ": "
         "failed: expected cond; a_message\n");
+  });
+
+  expectLogEq([&](){
+    expectFatal([&](){ myRequireEq(1, 2); }); line = __LINE__;
+  }, [&](){
+    return kj::str("exception: ", fileLine(__FILE__, line), ": "
+        "failed: expected a == b [1 == 2]; a_message\n");
+  });
+
+  expectLogEq([&](){
+    myExpectEq(1, 2); line = __LINE__;
+  }, [&](){
+    return kj::str("log message: ", fileLine(__FILE__, line), ":+0: error: "
+        "failed: expected a == b [1 == 2]; a_message\n");
+  });
+
+  expectLogEq([&](){
+    myExpectEq(1, 1);
+  }, [&](){
+    return kj::str("");
+  });
+
+  expectLogEq([&](){
+    myExpect(false); line = __LINE__;
+  }, [&](){
+    return kj::str("log message: ", fileLine(__FILE__, line), ":+0: error: "
+        "failed: expected cond\n");
+  });
+
+  expectLogEq([&](){
+    myFailExpect(); line = __LINE__;
+  }, [&](){
+    return kj::str("log message: ", fileLine(__FILE__, line), ":+0: error: a_message\n");
   });
 
   expectLogEq([&](){
@@ -554,6 +619,213 @@ KJ_TEST("magic assert stringification") {
 
     KJ_EXPECT(exception.getDescription() == "expected foo & 2");
   }
+
+  // A condition using `&&` evaluates to a plain bool, which isn't shown, unlike a comparison.
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      int foo = 123;
+      KJ_ASSERT(foo == 123 && foo == 456, "message", foo);
+    }));
+
+    KJ_EXPECT(exception.getDescription() ==
+        "expected foo == 123 && foo == 456; message; foo = 123");
+  }
+
+  // Nor is a condition without a comparison, even if it's also passed as an argument.
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      bool foo = false;
+      KJ_ASSERT(foo, foo);
+    }));
+
+    KJ_EXPECT(exception.getDescription() == "expected foo; foo = false");
+  }
+
+  // A comparison that is an ordinary argument, rather than a check's condition, is labeled and
+  // stringified like any other argument. A macro defined outside of KJ might pass one to KJ_LOG.
+  {
+    int foo = 123;
+    auto comparison = MAGIC_ASSERT << foo == 456;
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_ASSERT("message", comparison);
+    }));
+
+    KJ_EXPECT(exception.getDescription() == "message; comparison = 123 == 456");
+    KJ_EXPECT(KJ_EXCEPTION(FAILED, "message", comparison).getDescription() ==
+        "message; comparison = 123 == 456");
+    KJ_EXPECT(kj::str(comparison) == "123 == 456");
+
+    // Also if it's the argument of a check whose condition is a comparison too.
+    auto exception2 = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_ASSERT(foo == 789, comparison);
+    }));
+
+    KJ_EXPECT(exception2.getDescription() ==
+        "expected foo == 789 [123 == 789]; comparison = 123 == 456");
+  }
+}
+
+KJ_TEST("assertion diagnostics are captured before argument temporaries are destroyed") {
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(kj::str("temporary pointer").cStr());
+    }));
+    KJ_EXPECT(exception.getDescription() == "temporary pointer");
+  }
+
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_REQUIRE(false, kj::str("temporary view").asPtr());
+    }));
+    KJ_EXPECT(exception.getDescription() == "expected false; temporary view");
+  }
+
+  {
+    // The argument is a reference to a subobject, not an owning temporary that can be moved.
+    struct Temporary {
+      kj::String text = kj::str("temporary subobject");
+      kj::String& getText() { return text; }
+    };
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_ASSERT(Temporary().getText());
+    }));
+    KJ_EXPECT(exception.getDescription() == "Temporary().getText() = temporary subobject");
+  }
+}
+
+struct NonmovableDiagnostic {
+  NonmovableDiagnostic() = default;
+  KJ_DISALLOW_COPY_AND_MOVE(NonmovableDiagnostic);
+};
+
+kj::StringPtr KJ_STRINGIFY(const NonmovableDiagnostic&) {
+  return "nonmovable";
+}
+
+KJ_TEST("assertion diagnostics do not require moving their arguments") {
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_UNIMPLEMENTED(kj::str("owning temporary"));
+    }));
+    KJ_EXPECT(exception.getType() == kj::Exception::Type::UNIMPLEMENTED);
+    KJ_EXPECT(exception.getDescription() == "owning temporary");
+  }
+
+  {
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(NonmovableDiagnostic());
+    }));
+    KJ_EXPECT(exception.getDescription() == "NonmovableDiagnostic() = nonmovable");
+  }
+
+  {
+    auto value = kj::str("not moved");
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(kj::mv(value));
+    }));
+    KJ_EXPECT(exception.getDescription() == "kj::mv(value) = not moved");
+    KJ_EXPECT(value == "not moved");
+  }
+}
+
+struct SmallDiagnostic {
+  // Trivially copyable and as big as two pointers, like an iterator.
+  const int* ptr;
+  size_t size;
+
+  bool operator==(const SmallDiagnostic& other) const { return size == other.size; }
+};
+
+kj::String KJ_STRINGIFY(const SmallDiagnostic& value) {
+  return kj::str("small ", value.size);
+}
+
+struct PointerDiagnostic {
+  // Trivially copyable and as big as a pointer, like most iterators.
+  const int* ptr;
+
+  bool operator==(const PointerDiagnostic& other) const { return ptr == other.ptr; }
+};
+
+kj::String KJ_STRINGIFY(const PointerDiagnostic& value) {
+  return kj::str("pointer to ", *value.ptr);
+}
+
+struct Unstringifiable {
+  int value;
+  bool operator==(const Unstringifiable& other) const { return value == other.value; }
+};
+
+KJ_TEST("assertion diagnostics stringify arguments of any type") {
+  {
+    int i = 0;
+    SmallDiagnostic small { &i, 7 };
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE("message", small);
+    }));
+    KJ_EXPECT(exception.getDescription() == "message; small = small 7");
+  }
+
+  {
+    int i = 0;
+    SmallDiagnostic a { &i, 7 };
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_ASSERT(a == SmallDiagnostic({ &i, 8 }));
+    }));
+    KJ_EXPECT(exception.getDescription() ==
+        "expected a == SmallDiagnostic({ &i, 8 }) [small 7 == small 8]");
+  }
+
+  {
+    int i = 1;
+    int j = 2;
+    PointerDiagnostic a { &i };
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_ASSERT(a == PointerDiagnostic { &j });
+    }));
+    KJ_EXPECT(exception.getDescription() ==
+        "expected a == PointerDiagnostic { &j } [pointer to 1 == pointer to 2]");
+  }
+
+  {
+    Unstringifiable a { 1 };
+    Unstringifiable b { 2 };
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_ASSERT(a == b);
+    }));
+    KJ_EXPECT(exception.getDescription() ==
+        "expected a == b [(can't stringify) == (can't stringify)]");
+  }
+
+  {
+    // A char array is stringified up to the first NUL, whatever its size.
+    char buffer[8] = { 'a', 'b', '\0', 'c' };
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(buffer);
+    }));
+    KJ_EXPECT(exception.getDescription() == "buffer = ab");
+    KJ_EXPECT(KJ_EXCEPTION(FAILED, buffer).getDescription() == "buffer = ab");
+  }
+
+  {
+    // A lone argument is labeled unless it's a literal.
+    int i = 1;
+    KJ_EXPECT(KJ_EXCEPTION(FAILED, "foo").getDescription() == "foo");
+    KJ_EXPECT(KJ_EXCEPTION(FAILED, "foo, " "bar").getDescription() == "foo, bar");
+    KJ_EXPECT(KJ_EXCEPTION(FAILED, "").getDescription() == "");
+    KJ_EXPECT(KJ_EXCEPTION(FAILED, i).getDescription() == "i = 1");
+    KJ_EXPECT(KJ_EXCEPTION(FAILED, kj::str("foo", i)).getDescription() == "foo1");
+  }
+
+  {
+    // More arguments than are stringified on the stack.
+    int a = 1, b = 2, c = 3, d = 4, e = 5;
+    auto exception = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_ASSERT(a == b, "message", a, b, c, d, e);
+    }));
+    KJ_EXPECT(exception.getDescription() ==
+        "expected a == b [1 == 2]; message; a = 1; b = 2; c = 3; d = 4; e = 5");
+  }
 }
 
 KJ_NOINLINE void failFailAssert(void*& callerFrame) {
@@ -734,6 +1006,410 @@ KJ_TEST("KJ_DTOR_* failure logged while unwinding includes KJ_CONTEXT once") {
   KJ_EXPECT(capture.messages[1].startsWith("error: failed: secondary\n"), capture.messages[1]);
   KJ_EXPECT(!capture.messages[1].contains("context marker"), capture.messages[1]);
 }
+
+// =======================================================================================
+// Arguments and operands that the failure path must not copy, take the address of, or
+// stringify in the wrong order
+
+struct ForwardingDiagnostic {
+  // Trivially copyable and small, but a constructor template is a better match than the copy
+  // constructor for a non-const lvalue or an rvalue, and doesn't copy the value.
+  int value;
+
+  explicit ForwardingDiagnostic(int value): value(value) {}
+  ForwardingDiagnostic(const ForwardingDiagnostic&) = default;
+  template <typename T, typename = EnableIf<isSameType<Decay<T>, ForwardingDiagnostic>()>>
+  ForwardingDiagnostic(T&&): value(99) {}
+
+  bool operator==(const ForwardingDiagnostic& other) const { return value == other.value; }
+};
+static_assert(__is_trivially_copyable(ForwardingDiagnostic));
+
+kj::String KJ_STRINGIFY(const ForwardingDiagnostic& value) {
+  return kj::str(value.value);
+}
+
+KJ_TEST("assertion diagnostics don't copy arguments through a constructor template") {
+  ForwardingDiagnostic first(1);
+  ForwardingDiagnostic second(2);
+  const ForwardingDiagnostic& constFirst = first;
+
+  {
+    auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_REQUIRE(first == second, first);
+    }));
+    KJ_EXPECT(e.getDescription() == "expected first == second [1 == 2]; first = 1",
+              e.getDescription());
+  }
+
+  {
+    auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_REQUIRE(constFirst == second, constFirst);
+    }));
+    KJ_EXPECT(e.getDescription() == "expected constFirst == second [1 == 2]; constFirst = 1",
+              e.getDescription());
+  }
+
+  {
+    auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(kj::mv(second));
+    }));
+    KJ_EXPECT(e.getDescription() == "kj::mv(second) = 2", e.getDescription());
+  }
+}
+
+struct AddressOfDiagnostic {
+  // Its address operator returns the address of another object.
+  int value;
+
+  const AddressOfDiagnostic* operator&() const;
+  bool operator==(const AddressOfDiagnostic& other) const { return value == other.value; }
+};
+
+const AddressOfDiagnostic addressOfDecoy { 22 };
+
+const AddressOfDiagnostic* AddressOfDiagnostic::operator&() const {
+  return __builtin_addressof(addressOfDecoy);
+}
+
+kj::String KJ_STRINGIFY(const AddressOfDiagnostic& value) {
+  return kj::str(value.value);
+}
+
+KJ_TEST("assertion diagnostics don't call an argument's address operator") {
+  AddressOfDiagnostic actual { 11 };
+  AddressOfDiagnostic other { 33 };
+
+  KJ_EXPECT(KJ_EXCEPTION(FAILED, actual).getDescription() == "actual = 11");
+
+  {
+    auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_FAIL_REQUIRE(actual);
+    }));
+    KJ_EXPECT(e.getDescription() == "actual = 11", e.getDescription());
+  }
+
+  {
+    auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions([&]() {
+      KJ_REQUIRE(actual == other);
+    }));
+    KJ_EXPECT(e.getDescription() == "expected actual == other [11 == 33]", e.getDescription());
+  }
+
+  {
+    kj::Vector<kj::String> messages;
+    {
+      LogCapture capture;
+      KJ_EXPECT(actual == other, actual);
+      messages = kj::mv(capture.messages);
+    }
+    KJ_ASSERT(messages.size() == 1, messages);
+    KJ_EXPECT(messages[0] == "error: failed: expected actual == other [11 == 33]; actual = 11",
+              messages[0]);
+  }
+}
+
+struct IncrementOnStringify {
+  // Stringifying it increments `target`.
+  int& target;
+};
+
+kj::StringPtr KJ_STRINGIFY(const IncrementOnStringify& value) {
+  ++value.target;
+  return "incremented";
+}
+
+KJ_TEST("failed comparison is stringified before the other arguments") {
+  // KJ_EXPECT refers to the operands of the comparison, rather than copying them.
+  int left = 1;
+  int right = 2;
+  IncrementOnStringify extra { left };
+  kj::Vector<kj::String> messages;
+  {
+    LogCapture capture;
+    KJ_EXPECT(left == right, extra);
+    messages = kj::mv(capture.messages);
+  }
+  KJ_EXPECT(left == 2);
+
+  KJ_ASSERT(messages.size() == 1, messages);
+  KJ_EXPECT(messages[0] == "error: failed: expected left == right [1 == 2]; extra = incremented",
+            messages[0]);
+}
+
+template <typename A, typename B>
+kj::SourceLocation locationOf(kj::SourceLocation location) { return location; }
+#define KJ_TEST_COMMA_LOCATION locationOf<int, bool>(location)
+// A location expression with a comma outside of parentheses.
+
+KJ_TEST("_AT macros accept a location containing a comma") {
+  kj::SourceLocation location;
+
+  auto expectFailure = [&](auto&& func, kj::StringPtr description) {
+    auto e = KJ_ASSERT_NONNULL(kj::runCatchingExceptions(func));
+    KJ_EXPECT(e.getLine() == location.lineNumber, e.getLine(), location.lineNumber);
+    KJ_EXPECT(e.getDescription() == description, e.getDescription());
+  };
+
+  expectFailure([&]() {
+    KJ_REQUIRE_AT(false, KJ_TEST_COMMA_LOCATION, "a_message");
+  }, "expected false; a_message");
+  expectFailure([&]() {
+    KJ_FAIL_REQUIRE_AT(KJ_TEST_COMMA_LOCATION, "a_message");
+  }, "a_message");
+  expectFailure([&]() {
+    kj::Maybe<int> maybe;
+    (void)KJ_REQUIRE_NONNULL_AT(maybe, KJ_TEST_COMMA_LOCATION, "a_message");
+  }, "expected maybe != nullptr; a_message");
+
+  kj::Vector<kj::String> messages;
+  {
+    LogCapture capture;
+    KJ_LOG_AT(WARNING, KJ_TEST_COMMA_LOCATION, "a_message");
+    KJ_EXPECT_AT(false, KJ_TEST_COMMA_LOCATION, "a_message");
+    KJ_FAIL_EXPECT_AT(KJ_TEST_COMMA_LOCATION, "a_message");
+    messages = kj::mv(capture.messages);
+  }
+  KJ_ASSERT(messages.size() == 3, messages);
+  KJ_EXPECT(messages[0] == "warning: a_message", messages[0]);
+  KJ_EXPECT(messages[1] == "error: failed: expected false; a_message", messages[1]);
+  KJ_EXPECT(messages[2] == "error: a_message", messages[2]);
+}
+
+#undef KJ_TEST_COMMA_LOCATION
+
+// =======================================================================================
+// Stack frame overhead of assertion macros
+//
+// Measures the exact number of stack bytes that kj/debug.h assertion macros add to the frame of
+// the function that contains them.
+//
+// Each check sits in a KJ_NOINLINE function of the form:
+//
+//     void check() {
+//       <inputs> = opaque(...);
+//       KJ_ASSERT(...);
+//       probe();
+//     }
+//
+// measureFrame() calls the check through a function pointer and computes the distance between
+// its own frame and the frame of probe(). That distance is the frame size of the check plus a
+// constant, which is cancelled out by subtracting the distance measured for a check without
+// any assertion. None of the checks ever fail, so this is the stack cost of the fast path.
+//
+// Ideally an assertion costs no stack at all: the failure path only needs the operands in
+// registers. Any stack slot it does need is reserved, and often written to, every time the
+// function runs.
+
+#if defined(__GNUC__)
+
+template <typename T>
+KJ_ALWAYS_INLINE(T opaque(T value));
+template <typename T>
+inline T opaque(T value) {
+  // Returns `value`, but hides it from the optimizer, so the check can't be constant-folded.
+  asm volatile("" : "+r"(value));
+  return value;
+}
+
+template <typename T>
+KJ_ALWAYS_INLINE(void use(T value));
+template <typename T>
+inline void use(T value) {
+  // Forces `value` to be computed, without storing it anywhere.
+  asm volatile("" :: "r"(value));
+}
+
+uintptr_t probeFrame = 0;
+
+KJ_NOINLINE void probe() {
+  probeFrame = reinterpret_cast<uintptr_t>(__builtin_frame_address(0));
+}
+
+#define KJ_FRAME_PROBE() \
+  probe(); \
+  asm volatile("" ::: "memory")
+// Records the stack depth. The trailing asm keeps the call from being turned into a tail call,
+// which would pop the check's frame before probe() runs.
+
+KJ_NOINLINE ptrdiff_t measureFrame(void (*check)()) {
+  // The frames' addresses are compared as integers: subtracting pointers into different objects
+  // would be undefined behavior.
+  uintptr_t top = reinterpret_cast<uintptr_t>(__builtin_frame_address(0));
+  check = opaque(check);  // Don't let the compiler specialize this function for each check.
+  probeFrame = 0;
+  check();
+  asm volatile("" ::: "memory");
+  KJ_ASSERT(probeFrame != 0);
+  return static_cast<ptrdiff_t>(top - probeFrame);
+}
+
+int value = 1;
+int* const SENTINEL = reinterpret_cast<int*>(1);
+const kj::StringPtr stringPtr = "string"_kj;
+const kj::String string = kj::str("string");
+
+// ---------------------------------------------------------------------------------------
+// Checks. Each one is measured relative to `baseline()`.
+
+KJ_NOINLINE void baseline() {
+  use(opaque(&value));
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertTruthy() {
+  int* ptr = opaque(&value);
+  KJ_ASSERT(ptr);
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertTruthyMessage() {
+  int* ptr = opaque(&value);
+  KJ_ASSERT(ptr, "ptr must be set");
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertEq() {
+  int a = opaque(1);
+  int b = opaque(1);
+  KJ_ASSERT(a == b);
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertNeMessage() {
+  int* ptr = opaque(&value);
+  KJ_ASSERT(ptr != SENTINEL, "should only be called once");
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertCheapArgs() {
+  size_t a = opaque(size_t(1));
+  size_t b = opaque(size_t(2));
+  KJ_ASSERT(a < b, "out of range", a, b);
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertStringPtrArg() {
+  // kj::StringPtr fits in two registers, but isn't trivially copyable, as it has a user-provided
+  // copy constructor.
+  int* ptr = opaque(&value);
+  kj::StringPtr name = *opaque(&stringPtr);
+  KJ_ASSERT(ptr, "ptr must be set", name);
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertSmallClassArg() {
+  // SmallDiagnostic is trivially copyable and fits in two registers.
+  int* ptr = opaque(&value);
+  SmallDiagnostic small { opaque(&value), opaque(size_t(1)) };
+  KJ_ASSERT(ptr, "ptr must be set", small);
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertSmallClassEq() {
+  // The operands are compared by reference, since together they don't fit in two registers.
+  SmallDiagnostic a { opaque(&value), opaque(size_t(1)) };
+  SmallDiagnostic b { opaque(&value), opaque(size_t(1)) };
+  KJ_ASSERT(a == b);
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertPointerClassEq() {
+  PointerDiagnostic a { opaque(&value) };
+  PointerDiagnostic b { opaque(&value) };
+  KJ_ASSERT(a == b);
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertExpensiveArg() {
+  // kj::String isn't trivially copyable. Here it's a reference to an object outside the frame.
+  int* ptr = opaque(&value);
+  const kj::String& name = *opaque(&string);
+  KJ_ASSERT(ptr, "ptr must be set", name);
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void failAssert() {
+  int* ptr = opaque(&value);
+  if (KJ_UNLIKELY(ptr == nullptr)) {
+    KJ_FAIL_ASSERT("ptr must be set");
+  }
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void failAssertCheapArg() {
+  int* ptr = opaque(&value);
+  if (KJ_UNLIKELY(ptr == SENTINEL)) {
+    KJ_FAIL_ASSERT("ptr must not be the sentinel", ptr);
+  }
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertNonNull() {
+  kj::Maybe<int&> maybe = opaque(&value);
+  use(&KJ_ASSERT_NONNULL(maybe));
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertNonNullMessage() {
+  kj::Maybe<int&> maybe = opaque(&value);
+  use(&KJ_ASSERT_NONNULL(maybe, "value must be set"));
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void assertTwice() {
+  size_t a = opaque(size_t(1));
+  size_t b = opaque(size_t(2));
+  KJ_ASSERT(a < b, "out of range", a, b);
+  KJ_ASSERT(a != 0, "zero", a);
+  KJ_FRAME_PROBE();
+}
+
+KJ_NOINLINE void logCheapArgs() {
+  size_t a = opaque(size_t(1));
+  size_t b = opaque(size_t(2));
+  KJ_LOG(INFO, "out of range", a, b);
+  KJ_FRAME_PROBE();
+}
+
+ptrdiff_t frameOverhead(void (*check)()) {
+  return measureFrame(check) - measureFrame(baseline);
+}
+
+KJ_TEST("stack frame overhead of assertion macros") {
+  // Frame sizes vary between compilers, architectures and optimization levels. Like
+  // async-coroutine-alloc-test, only check them in the clang opt build, but always run the
+  // checks. We intentionally check exact values, so that any change (in either direction) is
+  // noticed.
+#if defined(__clang__) && defined(__x86_64__) && defined(KJ_DEBUG_TEST_ASSERT_FRAME_SIZE)
+  #define KJ_EXPECT_FRAME(check, size) KJ_EXPECT(frameOverhead(check) == size)
+#else
+  #define KJ_EXPECT_FRAME(check, size) frameOverhead(check)
+#endif
+
+  KJ_EXPECT(frameOverhead(baseline) == 0);
+
+  KJ_EXPECT_FRAME(assertTruthy, 0);
+  KJ_EXPECT_FRAME(assertTruthyMessage, 0);
+  KJ_EXPECT_FRAME(assertEq, 0);
+  KJ_EXPECT_FRAME(assertNeMessage, 0);
+  KJ_EXPECT_FRAME(assertCheapArgs, 0);
+  KJ_EXPECT_FRAME(assertStringPtrArg, 16);
+  KJ_EXPECT_FRAME(assertSmallClassArg, 0);
+  KJ_EXPECT_FRAME(assertSmallClassEq, 32);
+  KJ_EXPECT_FRAME(assertPointerClassEq, 0);
+  KJ_EXPECT_FRAME(assertExpensiveArg, 0);
+  KJ_EXPECT_FRAME(failAssert, 0);
+  KJ_EXPECT_FRAME(failAssertCheapArg, 0);
+  KJ_EXPECT_FRAME(assertNonNull, 0);
+  KJ_EXPECT_FRAME(assertNonNullMessage, 0);
+  KJ_EXPECT_FRAME(assertTwice, 0);
+  KJ_EXPECT_FRAME(logCheapArgs, 0);
+
+  #undef KJ_EXPECT_FRAME
+}
+
+#endif  // defined(__GNUC__)
 
 }  // namespace
 }  // namespace _ (private)

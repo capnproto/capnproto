@@ -188,9 +188,52 @@ enum DescriptionStyle {
   SYSCALL
 };
 
-static String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNumber,
-                                  const char* sysErrorString, const char* macroArgs,
-                                  ArrayPtr<String> argValues) {
+String stringify(const Debug::Arg& arg) {
+  return arg.stringify(arg.value);
+}
+
+bool needsLabel(ArrayPtr<const char> argName) {
+  // Whether the description shows an argument's name before its value. Literals and `kj::str()`
+  // calls are shown as is.
+  return argName.size() > 0 && argName[0] != '\"' && !argName.startsWith("kj::str("_kjc);
+}
+
+constexpr size_t STACK_ARGS = 4;
+// Most checks and log messages have at most this many arguments, which are stringified into an
+// array on the stack. (Every element is constructed and destroyed, so it shouldn't be bigger.)
+
+String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNumber,
+                           const char* sysErrorString, const char* macroArgs,
+                           ArrayPtr<const Debug::Arg> args,
+                           const Debug::Comparison* comparison = nullptr) {
+  // Stringifies `args` and describes them, labeled with their names parsed from `macroArgs`.
+  // `comparison` is the condition of a failed ASSERTION if it's a comparison. It's shown in
+  // brackets after the condition's text, e.g. "expected a == b [1 == 2]".
+
+  if (style == ASSERTION && *code == '\0') {
+    // A check without a condition, e.g. KJ_FAIL_ASSERT(), is described by its arguments alone.
+    style = LOG;
+  }
+
+  if (style == LOG && args.size() == 1) {
+    // A lone argument needs no delimiter, so if it needs no label either, e.g.
+    // `KJ_EXCEPTION(FAILED, "foo")`, it's described as is. Skip parsing the macro's arguments.
+    while (isspace(*macroArgs)) ++macroArgs;
+    if (!needsLabel(StringPtr(macroArgs))) {
+      return stringify(args[0]);
+    }
+  }
+
+  // Stringify the comparison before the arguments: its operands may refer to variables that
+  // stringifying an argument changes, and it should show the values that were compared.
+  String comparisonValue = style == ASSERTION && comparison != nullptr
+      ? stringifyDebugComparison(*comparison) : String();
+
+  KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
+  for (auto i: kj::indices(args)) {
+    argValues[i] = stringify(args[i]);
+  }
+
   KJ_STACK_ARRAY(ArrayPtr<const char>, argNames, argValues.size(), 8, 64);
 
   if (argValues.size() > 0) {
@@ -250,10 +293,6 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
     }
   }
 
-  if (style == ASSERTION && code == nullptr) {
-    style = LOG;
-  }
-
   {
     StringPtr expected = "expected ";
     StringPtr codeArray = style == LOG ? nullptr : StringPtr(code);
@@ -293,27 +332,16 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
         break;
       case ASSERTION:
         totalSize += expected.size() + codeArray.size();
+        if (comparisonValue.size() > 0) {
+          totalSize += openBracket.size() + comparisonValue.size() + closeBracket.size();
+        }
         break;
       case SYSCALL:
         totalSize += codeArray.size() + colon.size() + sysErrorArray.size();
         break;
     }
 
-    auto needsLabel = [](const ArrayPtr<const char> &argName) -> bool {
-      return argName.size() > 0 && argName[0] != '\"' && !argName.startsWith("kj::str("_kjc);
-    };
-
     for (size_t i = 0; i < argValues.size(); i++) {
-      if (argNames[i] == "_kjCondition"_kj) {
-        // Special handling: don't output delimiter, we want to append this to the previous item,
-        // in brackets. Also, if it's just "[false]" (meaning we didn't manage to extract a
-        // comparison), don't add it at all.
-        if (argValues[i] != "false") {
-          totalSize += openBracket.size() + argValues[i].size() + closeBracket.size();
-        }
-        continue;
-      }
-
       if (i > 0 || style != LOG) {
         totalSize += delim.size();
       }
@@ -331,6 +359,9 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
         break;
       case ASSERTION:
         pos = _::fill(pos, expected, codeArray);
+        if (comparisonValue.size() > 0) {
+          pos = _::fill(pos, openBracket, comparisonValue, closeBracket);
+        }
         break;
       case SYSCALL:
         pos = _::fill(pos, codeArray, colon, sysErrorArray);
@@ -338,16 +369,6 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
     }
 
     for (size_t i = 0; i < argValues.size(); i++) {
-      if (argNames[i] == "_kjCondition"_kj) {
-        // Special handling: don't output delimiter, we want to append this to the previous item,
-        // in brackets. Also, if it's just "[false]" (meaning we didn't manage to extract a
-        // comparison), don't add it at all.
-        if (argValues[i] != "false") {
-          pos = _::fill(pos, openBracket, argValues[i], closeBracket);
-        }
-        continue;
-      }
-
       if (i > 0 || style != LOG) {
         pos = _::fill(pos, delim);
       }
@@ -361,32 +382,50 @@ static String makeDescriptionImpl(DescriptionStyle style, const char* code, int 
   }
 }
 
+Debug::Site unpack(PackedSite site) {
+  // Splits a KJ_PACKED_SITE_ literal into its fields.
+  auto next = [](const char* field) { return field + strlen(field) + 1; };
+  const char* file = site.text;
+  const char* lineText = next(file);
+  const char* condition = next(lineText);
+  const char* macroArgs = next(condition);
+
+  uint line = 0;
+  for (const char* digit = lineText; *digit >= '0' && *digit <= '9'; ++digit) {
+    line = line * 10 + (*digit - '0');
+  }
+
+  return { file, static_cast<int>(line), condition, macroArgs };
+}
+
 }  // namespace
 
 void Debug::logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
-                        ArrayPtr<String> argValues) {
+                        ArrayPtr<const Arg> args) {
   getExceptionCallback().logMessage(severity, trimSourceFilename(file).cStr(), line, 0,
-      makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, argValues));
+      makeDescriptionInternal(macroArgs, args));
 }
 
-Exception Debug::makeFailure(
-    const char* file, int line, Exception::Type type,
-    const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
-  return Exception(type, file, line,
-      makeDescriptionImpl(ASSERTION, condition, 0, nullptr, macroArgs, argValues));
+void Debug::logFailedCheckInternal(LogSeverity severity, const Exception& failure) {
+  getExceptionCallback().logMessage(severity, failure.getFile(), failure.getLine(), 0,
+      str("failed: ", failure.getDescription()));
 }
 
-Exception Debug::makeFailure(
-    const char* file, int line, int osErrorNumber,
-    const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
-  return Exception(typeOfErrno(osErrorNumber), file, line,
-      makeDescriptionImpl(SYSCALL, condition, osErrorNumber, nullptr, macroArgs, argValues));
+Exception Debug::makeFailure(const Site& site, Exception::Type type, ArrayPtr<const Arg> args,
+                             const Comparison* comparison) {
+  return Exception(type, site.file, site.line,
+      makeDescriptionImpl(ASSERTION, site.condition, 0, nullptr, site.macroArgs, args,
+                          comparison));
+}
+
+Exception Debug::makeFailure(const Site& site, int osErrorNumber, ArrayPtr<const Arg> args) {
+  return Exception(typeOfErrno(osErrorNumber), site.file, site.line,
+      makeDescriptionImpl(SYSCALL, site.condition, osErrorNumber, nullptr, site.macroArgs, args));
 }
 
 #if _WIN32 || __CYGWIN__
-Exception Debug::makeFailure(
-    const char* file, int line, Win32Result osErrorNumber,
-    const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
+Exception Debug::makeFailure(const Site& site, Win32Result osErrorNumber,
+                             ArrayPtr<const Arg> args) {
   LPVOID ptr;
   // TODO(someday): Why doesn't this work for winsock errors?
   DWORD result = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER |
@@ -409,14 +448,36 @@ Exception Debug::makeFailure(
     message = kj::str("win32 error code: ", osErrorNumber.number);
   }
 
-  return Exception(typeOfWin32Error(osErrorNumber.number), file, line,
-      makeDescriptionImpl(SYSCALL, condition, 0, message.cStr(),
-                          macroArgs, argValues));
+  return Exception(typeOfWin32Error(osErrorNumber.number), site.file, site.line,
+      makeDescriptionImpl(SYSCALL, site.condition, 0, message.cStr(),
+                          site.macroArgs, args));
 }
 #endif
 
-String Debug::makeDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues) {
-  return makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, argValues);
+Exception Debug::makeFailure(PackedSite site, Exception::Type type, ArrayPtr<const Arg> args,
+                             const Comparison* comparison) {
+  return makeFailure(unpack(site), type, args, comparison);
+}
+
+Exception Debug::makeFailure(PackedSite site, int osErrorNumber, ArrayPtr<const Arg> args) {
+  return makeFailure(unpack(site), osErrorNumber, args);
+}
+
+#if _WIN32 || __CYGWIN__
+Exception Debug::makeFailure(PackedSite site, Win32Result osErrorNumber,
+                             ArrayPtr<const Arg> args) {
+  return makeFailure(unpack(site), osErrorNumber, args);
+}
+#endif
+
+String stringifyDebugComparison(const Debug::Comparison& comparison) {
+  String left = stringify(comparison.left);
+  String right = stringify(comparison.right);
+  return str(left, comparison.op, right);
+}
+
+String Debug::makeDescriptionInternal(const char* macroArgs, ArrayPtr<const Arg> args) {
+  return makeDescriptionImpl(LOG, nullptr, 0, nullptr, macroArgs, args);
 }
 
 int Debug::getOsErrorNumber(bool nonblocking) {
