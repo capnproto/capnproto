@@ -1,6 +1,6 @@
 # KJ Style
 
-This document describes how to write C++ code in KJ style. It may be compared to the [Google C++ Style Guide](http://google-styleguide.googlecode.com/svn/trunk/cppguide.html).
+This document describes how to write C++ code in KJ style. It may be compared to the [Google C++ Style Guide](https://google.github.io/styleguide/cppguide.html).
 
 KJ style is used by KJ (obviously), [Cap'n Proto](https://capnproto.org), [Sandstorm.io](https://sandstorm.io), and possibly other projects. When submitting code to these projects, you should follow this guide.
 
