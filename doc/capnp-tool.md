@@ -10,8 +10,7 @@ debugging.  This tool can be used to:
 
 * Compile Cap'n Proto schemas to produce source code in multiple languages.
 * Generate unique type IDs.
-* Decode Cap'n Proto messages to human-readable text.
-* Encode text representations of Cap'n Proto messages to binary.
+* Convert Cap'n Proto messages between binary, text, and JSON formats.
 * Evaluate and extract constants defined in Cap'n Proto schemas.
 
 This page summarizes the functionality.  A complete reference on the command's usage can be
@@ -35,27 +34,51 @@ compiler plugins](otherlang.html#how-to-write-compiler-plugins).
 Note that some Cap'n Proto implementations (especially for interpreted languages) do not require
 generating source code.
 
-## Decoding Messages
+## Converting Messages
 
-    capnp decode myschema.capnp MyType < message.bin > message.txt
+`capnp decode` and `capnp encode` are deprecated. Use `capnp convert` to convert messages
+between any of the supported formats:
 
-`capnp decode` reads a binary Cap'n Proto message from standard input and decodes it to a
-human-readable text format (specifically, the format used for specifying constants and default
-values in [the schema language](language.html)).  By default it
-expects an unpacked message, but you can decode a
-[packed](encoding.html#packing) message with the `--packed` flag.
+    capnp convert [options] <from>:<to> [schema-file] [type]
 
-## Encoding Messages
+The command reads messages from standard input in the `<from>` format and writes them to standard
+output in the `<to>` format. Both formats must be specified; supported formats are:
 
-    capnp encode myschema.capnp MyType < message.txt > message.bin
+* `binary`: Standard Cap'n Proto serialization format.
+* `packed`: Packed binary format, which compresses zero-valued bytes.
+* `flat`: A single-segment binary message with no segment table.
+* `flat-packed`: A single-segment message in packed format.
+* `canonical`: Canonicalized, single-segment binary format with no segment table.
+* `text`: A struct literal in the format used by the [schema language](language.html).
+* `json`: JSON representation of the message.
 
-`capnp encode` is the opposite of `capnp decode`: it takes a text-format message on stdin and
-encodes it to binary (possibly [packed](encoding.html#packing),
-with the `--packed` flag).
+When either format is `text` or `json`, provide the schema file and the root struct type. For
+conversions between binary formats, the schema file and type are not needed.
 
-This is mainly useful for debugging purposes, to build test data or to apply tweaks to data
-decoded with `capnp decode`.  You should not rely on `capnp encode` for encoding data written
-and maintained in text format long-term -- instead, use `capnp eval`, which is much more powerful.
+For example, convert a binary message to schema-language text:
+
+    capnp convert binary:text myschema.capnp MyType < message.bin > message.txt
+
+Convert text to packed binary:
+
+    capnp convert text:packed myschema.capnp MyType < message.txt > message.packed
+
+Convert a binary message to JSON:
+
+    capnp convert binary:json myschema.capnp MyType < message.bin > message.json
+
+Convert between binary formats without specifying a schema:
+
+    capnp convert binary:packed < message.bin > message.packed
+
+The `--short` option writes text or JSON output on one line without pretty-printing:
+
+    capnp convert --short binary:json myschema.capnp MyType < message.bin
+
+The `--quiet` option suppresses warnings when the input does not appear to match the specified
+format:
+
+    capnp convert --quiet packed:binary < message.packed > message.bin
 
 ## Evaluating Constants
 
