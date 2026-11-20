@@ -59,7 +59,7 @@ constexpr const uint MESSAGE_TARGET_SIZE_HINT = sizeInWords<rpc::MessageTarget>(
 constexpr const uint CAP_DESCRIPTOR_SIZE_HINT = sizeInWords<rpc::CapDescriptor>() +
     sizeInWords<rpc::PromisedAnswer>();
 
-constexpr const uint64_t MAX_SIZE_HINT = 1 << 20;
+constexpr const uint64_t MAX_SIZE_HINT = 8 << 20;  // words (64 MiB)
 
 uint copySizeHint(MessageSize size) {
   uint64_t sizeHint = size.wordCount + size.capCount * CAP_DESCRIPTOR_SIZE_HINT
