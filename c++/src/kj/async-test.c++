@@ -78,12 +78,34 @@ TEST(Async, EvalVoid) {
   EventLoop loop;
   WaitScope waitScope(loop);
 
-  bool done = false;
-
-  Promise<void> promise = evalLater([&]() { done = true; });
-  EXPECT_FALSE(done);
-  promise.wait(waitScope);
-  EXPECT_TRUE(done);
+  {
+    bool done = false;
+    Promise<void> promise = evalLater([&]() { done = true; });
+    EXPECT_FALSE(done);
+    promise.wait(waitScope);
+    EXPECT_TRUE(done);
+  }
+  {
+    bool done = false;
+    Promise<void> promise = evalLast([&]() { done = true; });
+    EXPECT_FALSE(done);
+    promise.wait(waitScope);
+    EXPECT_TRUE(done);
+  }
+  {
+    bool done = false;
+    Promise<void> promise = evalLater().then([&]() { done = true; });
+    EXPECT_FALSE(done);
+    promise.wait(waitScope);
+    EXPECT_TRUE(done);
+  }
+  {
+    bool done = false;
+    Promise<void> promise = evalLast().then([&]() { done = true; });
+    EXPECT_FALSE(done);
+    promise.wait(waitScope);
+    EXPECT_TRUE(done);
+  }
 }
 
 TEST(Async, EvalInt) {
