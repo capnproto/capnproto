@@ -1415,7 +1415,7 @@ private:
 // =======================================================================================
 
 static constexpr size_t MIN_BUFFER = 4096;
-static constexpr size_t MAX_BUFFER = 128 * 1024;
+static constexpr size_t MAX_BUFFER = 150 * 1024;
 static constexpr size_t MAX_CHUNK_HEADER_SIZE = 32;
 
 class HttpInputStreamImpl final: public HttpInputStream,
