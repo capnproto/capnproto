@@ -194,6 +194,16 @@ jobs:
             arch: -A x64
     steps:
       - uses: actions/checkout@v7
+      - name: Use Visual Studio's bundled LLVM
+        # The standalone LLVM preinstalled in C:\Program Files\LLVM can lag behind the minimum Clang
+        # version required by the MSVC STL, so point Bazel's clang-cl toolchain at the LLVM that
+        # ships with Visual Studio instead.
+        run: |
+            $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath
+            $llvm = "$vs\VC\Tools\Llvm\x64"
+            if (-not (Test-Path "$llvm\bin\clang-cl.exe")) { throw "clang-cl not found in $llvm" }
+            & "$llvm\bin\clang-cl.exe" --version
+            echo "BAZEL_LLVM=$llvm" >> $env:GITHUB_ENV
       - name: test
         run: |
             cd c++ && bazel test --config=ci //...
