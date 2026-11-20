@@ -651,7 +651,7 @@ Maybe<size_t> StringPtr::find(const StringPtr& other) const {
     return kj::none;
   }
 
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(_WIN64) && !defined(__CYGWIN__)
   void* found = memmem(begin(), size(), other.begin(), other.size());
   if (found == nullptr) {
     return kj::none;
