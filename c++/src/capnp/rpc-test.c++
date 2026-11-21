@@ -89,9 +89,7 @@ public:
           }
           InterfaceSchema::Method method = methods[call.getMethodId()];
 
-          auto schemaProto = schema.getProto();
-          auto interfaceName =
-              schemaProto.getDisplayName().slice(schemaProto.getDisplayNamePrefixLength());
+          auto interfaceName = schema.getUnqualifiedName();
 
           auto methodProto = method.getProto();
           auto paramType = method.getParamType();
