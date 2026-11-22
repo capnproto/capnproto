@@ -216,6 +216,10 @@ public:
   HttpHeaderTable();
   // Constructs a table that only contains the builtin headers.
 
+  static const HttpHeaderTable& builtinOnly();
+  // A table that only contains the builtin headers, shared by the whole process, for code that
+  // needs a table but registers no headers of its own.
+
   class Builder {
   public:
     Builder();
@@ -242,9 +246,6 @@ public:
 
   kj::Maybe<HttpHeaderId> stringToId(kj::StringPtr name) const;
   // Try to find an ID for the given name. The matching is case-insensitive, per the HTTP spec.
-  //
-  // Note: if `name` contains characters that aren't allowed in HTTP header names, this may return
-  //   a bogus value rather than null, due to optimizations used in case-insensitive matching.
 
   kj::StringPtr idToString(HttpHeaderId id) const;
   // Get the canonical string name for the given ID.
@@ -305,6 +306,17 @@ public:
   // Creates a shallow clone of the HttpHeaders. The returned object references the same strings
   // as the original, owning none of them.
 
+  HttpHeaders derive() const;
+  // Creates a header set that starts out with this one's headers and records only the changes
+  // made to it: reading a header it hasn't changed reads it from this object. Use this to pass on
+  // a message's headers with a few of them changed, which is what a proxy or a layer of
+  // middleware does, without copying all of them as cloneShallow() would.
+  //
+  // WARNING: This object must outlive the result, and must not be moved or cleared while the
+  //   result exists. The result also sees later changes to this object's headers, except those it
+  //   has changed itself. If this object was itself made by derive(), the object it was made from
+  //   must outlive the result too. Use cloneShallow() or clone() when that can't be promised.
+
   bool isWebSocket() const;
   // Convenience method that checks for the presence of the header `Upgrade: websocket`.
   //
@@ -312,14 +324,14 @@ public:
   // with the correct version number -- such validation will occur if and when you call
   // acceptWebSocket().
 
-  kj::Maybe<kj::StringPtr> get(HttpHeaderId id) const;
+  KJ_ALWAYS_INLINE(kj::Maybe<kj::StringPtr> get(HttpHeaderId id) const);
   // Read a header.
   //
   // Note that there is intentionally no method to look up a header by string name rather than
   // header ID. The intent is that you should always allocate a header ID for any header that you
-  // care about, so that you can get() it by ID. Headers with registered IDs are stored in an array
-  // indexed by ID, making lookup fast. Headers without registered IDs are stored in a separate list
-  // that is optimized for re-transmission of the whole list, but not for lookup.
+  // care about, so that you can get() it by ID. Headers with registered IDs are kept apart, in ID
+  // order, making lookup fast. Headers without registered IDs are stored in a separate list that
+  // is optimized for re-transmission of the whole list, but not for lookup.
 
   template <typename Func>
   void forEach(Func&& func) const;
@@ -371,9 +383,10 @@ public:
 
   void unset(HttpHeaderId id);
   // Removes a header.
-  //
-  // It's not possible to remove a header by string name because non-indexed headers would take
-  // O(n) time to remove. Instead, construct a new HttpHeaders object and copy contents.
+
+  void unset(kj::StringPtr name);
+  // Removes every header with this name, compared case-insensitively. For a name the table
+  // doesn't have, this takes time linear in the number of such headers in the set.
 
   void takeOwnership(kj::String&& string);
   void takeOwnership(kj::Array<char>&& chars);
@@ -483,19 +496,33 @@ public:
 private:
   const HttpHeaderTable* table;
 
+  const HttpHeaders* base = nullptr;
+  // Set in an object made by derive(). Such an object holds only its own changes; a header it
+  // hasn't changed is read from `base`. `base` is never itself a derived object.
+
   // Backing storage must be destroyed after all header views.
   kj::Vector<kj::Array<char>> ownedStrings;
+  kj::ArrayPtr<char> arenaSpace;
+  // The unused end of a block in `ownedStrings`, where copied and joined values go, so that each
+  // doesn't cost an allocation of its own.
 
   struct IndexedHeader {
     // A set header whose name the table has. Plain data with no initializers, so that room for
     // these costs nothing until a header is set.
     uint32_t id;
     uint32_t size;      // Not counting the NUL.
-    const char* value;  // NUL-terminated.
+    const char* value;  // NUL-terminated. Null in a derived object for a header of `base` that
+                        // the object unset.
 
+    bool isUnset() const { return value == nullptr; }
     kj::StringPtr get() const { return kj::StringPtr(value, size); }
   };
   static_assert(sizeof(IndexedHeader) == 8 + sizeof(void*), "IndexedHeader should stay packed");
+
+  struct Header {
+    kj::StringPtr name;
+    kj::StringPtr value;
+  };
 
   // The set headers whose names the table has, in id order: the first `inlineCount` of
   // `inlineIndexed`, or all of `spilledIndexed` once more than INLINE_INDEXED were set at once.
@@ -505,30 +532,58 @@ private:
   static constexpr uint INLINE_INDEXED = 24;
   uint inlineCount = 0;
   bool spilled = false;
+  bool ownsUnindexed = true;
+  // False in a derived object until it first changes an unindexed header. Until then its
+  // unindexed headers are `base`'s.
   IndexedHeader inlineIndexed[INLINE_INDEXED];
   kj::Vector<IndexedHeader> spilledIndexed;
 
   static constexpr uint SET_BITS = 256;
   uint64_t setBits[SET_BITS / 64] = {};
-  // Which ids below SET_BITS have a header, so that looking up one without costs a bit test.
+  // Which ids below SET_BITS this object has an entry for. Looking up one it doesn't have costs a
+  // bit test.
+  uint16_t entriesBefore[SET_BITS / 64 + 1] = {};
+  // `entriesBefore[w]` counts the entries for ids below `w * 64`. As the entries are in id order,
+  // an id's entry is at `entriesBefore[id / 64]` plus the bits set below it in its word, and the
+  // entries for ids of SET_BITS and up start at `entriesBefore[SET_BITS / 64]`.
+
+  void markSet(uint id);
+  void markUnset(uint id);
+
+  kj::Vector<Header> unindexedHeaders;
 
   kj::ArrayPtr<const IndexedHeader> indexed() const {
+    // This object's own entries, without `base`'s.
     return spilled ? spilledIndexed.asPtr() : kj::arrayPtr(inlineIndexed, inlineCount);
   }
-  const IndexedHeader* findIndexed(uint id) const;
-  void setIndexed(uint id, kj::StringPtr value);
-  void unsetIndexed(uint id);
-  void takeIndexed(HttpHeaders& other);
-  // Replaces this object's indexed headers with `other`'s, leaving `other` with none.
+  kj::ArrayPtr<IndexedHeader> mutableIndexed() {
+    return spilled ? spilledIndexed.asPtr() : kj::arrayPtr(inlineIndexed, inlineCount);
+  }
+  KJ_ALWAYS_INLINE(const IndexedHeader* findIndexed(uint id) const);
+  // This object's own entry for `id`, if any, which in a derived object may mark it unset.
+  KJ_ALWAYS_INLINE(kj::Maybe<kj::StringPtr> getIndexed(uint id) const);
+  kj::Maybe<kj::StringPtr> getInherited(uint id) const;
+  // `base`'s value for an id this object has no entry for.
+  template <typename Func>
+  void forEachIndexed(Func&& func) const;
+  // Calls `func(id, value)` for each indexed header, in id order, `base`'s included.
 
-  struct Header {
-    kj::StringPtr name;
-    kj::StringPtr value;
-  };
-  kj::Vector<Header> unindexedHeaders;
+  kj::ArrayPtr<const Header> unindexed() const {
+    return ownsUnindexed ? unindexedHeaders.asPtr() : base->unindexedHeaders.asPtr();
+  }
+  kj::Vector<Header>& ownUnindexed();
+
+  void setIndexed(uint id, kj::StringPtr value);
+  void putIndexed(IndexedHeader header);
+  void appendIndexed(IndexedHeader header);
+  void unsetIndexed(uint id);
+  void takeHeaders(HttpHeaders& other);
+  // Replaces this object's headers with `other`'s, leaving `other` with none. Owned strings are
+  // the caller's to move.
 
   void addNoCheck(kj::StringPtr name, kj::StringPtr value);
 
+  char* allocateOwned(size_t size);
   kj::StringPtr cloneToOwn(kj::StringPtr str);
 
   kj::String serialize(kj::ArrayPtr<const char> word1,
@@ -537,10 +592,6 @@ private:
                        kj::ArrayPtr<const kj::StringPtr> connectionHeaders) const;
 
   bool parseHeaders(char* ptr, char* end);
-
-  // TODO(perf): Arguably we should store a map, but header sets are never very long
-  // TODO(perf): We could optimize for common headers by storing them directly as fields. We could
-  //   also add direct accessors for those headers.
 };
 
 struct HttpByteRange {
@@ -1555,21 +1606,73 @@ inline kj::StringPtr HttpHeaderTable::idToString(HttpHeaderId id) const {
 }
 
 inline const HttpHeaders::IndexedHeader* HttpHeaders::findIndexed(uint id) const {
-  if (id < SET_BITS && (setBits[id / 64] & (uint64_t(1) << (id % 64))) == 0) {
-    return nullptr;
+  auto all = indexed();
+  auto header = all.begin();
+  if (id < SET_BITS) {
+    uint64_t word = setBits[id / 64];
+    uint64_t bit = uint64_t(1) << (id % 64);
+    if ((word & bit) == 0) return nullptr;
+    header += entriesBefore[id / 64];
+#if (defined(__GNUC__) || defined(__clang__)) && (defined(__POPCNT__) || defined(__aarch64__))
+    // The entry is there, after one for each bit set below its own.
+    header += __builtin_popcountll(word & (bit - 1));
+    KJ_IREQUIRE(header < all.end() && header->id == id);
+    return header;
+#else
+    // Without a popcount instruction, scanning the entries for the ids in the same word is
+    // quicker than counting its bits in software. The entry is there, so the scan needs no bound.
+    while (header->id < id) ++header;
+    KJ_IREQUIRE(header < all.end() && header->id == id);
+    return header;
+#endif
+  } else {
+    header += entriesBefore[SET_BITS / 64];
   }
-  for (auto& header: indexed()) {
-    if (header.id >= id) {
-      return header.id == id ? &header : nullptr;
-    }
+  for (; header < all.end(); ++header) {
+    if (header->id >= id) return header->id == id ? header : nullptr;
   }
   return nullptr;
 }
 
+inline kj::Maybe<kj::StringPtr> HttpHeaders::getIndexed(uint id) const {
+  auto header = findIndexed(id);
+  if (header == nullptr) {
+    if (base == nullptr) return kj::none;
+    return getInherited(id);
+  }
+  if (header->isUnset()) return kj::none;
+  return header->get();
+}
+
+template <typename Func>
+inline void HttpHeaders::forEachIndexed(Func&& func) const {
+  auto own = indexed();
+  if (base == nullptr) {
+    for (auto& header: own) {
+      func(header.id, header.get());
+    }
+    return;
+  }
+
+  // Both lists are in id order, so one pass merges them. An entry of our own replaces `base`'s.
+  auto inherited = base->indexed();
+  auto o = own.begin();
+  auto b = inherited.begin();
+  while (o != own.end() || b != inherited.end()) {
+    if (o == own.end() || (b != inherited.end() && b->id < o->id)) {
+      func(b->id, b->get());
+      ++b;
+    } else {
+      if (b != inherited.end() && b->id == o->id) ++b;
+      if (!o->isUnset()) func(o->id, o->get());
+      ++o;
+    }
+  }
+}
+
 inline kj::Maybe<kj::StringPtr> HttpHeaders::get(HttpHeaderId id) const {
   id.requireFrom(*table);
-  auto header = findIndexed(id.id);
-  return header == nullptr ? kj::Maybe<kj::StringPtr>(kj::none) : header->get();
+  return getIndexed(id.id);
 }
 
 inline void HttpHeaders::unset(HttpHeaderId id) {
@@ -1579,22 +1682,22 @@ inline void HttpHeaders::unset(HttpHeaderId id) {
 
 template <typename Func>
 inline void HttpHeaders::forEach(Func&& func) const {
-  for (auto& header: indexed()) {
-    func(table->idToString(HttpHeaderId(table, header.id)), header.get());
-  }
+  forEachIndexed([&](uint id, kj::StringPtr value) {
+    func(table->idToString(HttpHeaderId(table, id)), value);
+  });
 
-  for (auto& header: unindexedHeaders) {
+  for (auto& header: unindexed()) {
     func(header.name, header.value);
   }
 }
 
 template <typename Func1, typename Func2>
 inline void HttpHeaders::forEach(Func1&& func1, Func2&& func2) const {
-  for (auto& header: indexed()) {
-    func1(HttpHeaderId(table, header.id), header.get());
-  }
+  forEachIndexed([&](uint id, kj::StringPtr value) {
+    func1(HttpHeaderId(table, id), value);
+  });
 
-  for (auto& header: unindexedHeaders) {
+  for (auto& header: unindexed()) {
     func2(header.name, header.value);
   }
 }
