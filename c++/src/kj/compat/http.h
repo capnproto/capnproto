@@ -210,8 +210,6 @@ class HttpHeaderTable {
   //         .wait(waitScope);
   //     auto msg = kj::str("Response content type: ", response.headers.get(contentType));
 
-  struct IdsByNameMap;
-
 public:
   HttpHeaderTable();
   // Constructs a table that only contains the builtin headers.
@@ -255,7 +253,16 @@ public:
 
 private:
   kj::Vector<kj::StringPtr> namesById;
-  kj::Own<IdsByNameMap> idsByName;
+
+  struct NameSlot {
+    uint32_t hash;
+    uint32_t idPlusOne;  // Zero marks an empty slot.
+  };
+  kj::Array<NameSlot> nameSlots;
+  // An open-addressed hash table from case-folded name to id: a power of two in size, at most half
+  // full, probed linearly.
+
+  void addName(kj::StringPtr name, uint id);
 
   enum class BuildStatus {
     UNSTARTED = 0,

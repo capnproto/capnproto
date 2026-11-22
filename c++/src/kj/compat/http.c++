@@ -25,7 +25,6 @@
 #include <kj/debug.h>
 #include <kj/parse/char.h>
 #include <kj/string.h>
-#include <unordered_map>
 #include <stdlib.h>
 #include <kj/encoding.h>
 #include <deque>
@@ -547,37 +546,88 @@ kj::StringPtr HttpHeaderId::toString() const {
 
 namespace {
 
-struct HeaderNameHash {
-  size_t operator()(kj::StringPtr s) const {
-    size_t result = 5381;
-    for (byte b: s.asBytes()) {
-      // Masking bit 0x20 makes our hash case-insensitive while conveniently avoiding any
-      // collisions that would matter for header names.
-      result = ((result << 5) + result) ^ (b & ~0x20);
-    }
-    return result;
-  }
+// Header names are matched case-insensitively, a word of eight bytes at a time. All loads are of
+// a fixed size so that they compile to plain loads; the last word of a name overlaps the one
+// before it rather than reading past the name.
 
-  bool operator()(kj::StringPtr a, kj::StringPtr b) const {
-    // TODO(perf): I wonder if we can beat strcasecmp() by masking bit 0x20 from each byte. We'd
-    //   need to prohibit one of the technically-legal characters '^' or '~' from header names
-    //   since they'd otherwise be ambiguous, but otherwise there is no ambiguity.
-#if _MSC_VER
-    return _stricmp(a.cStr(), b.cStr()) == 0;
-#else
-    return strcasecmp(a.cStr(), b.cStr()) == 0;
-#endif
+inline uint64_t asciiToLower(uint64_t word) {
+  // Lowercases each byte of `word` that is an ASCII capital letter, leaving the others as they
+  // are. Adding 0x3f to a byte's low seven bits sets its top bit if it is at least 'A', and adding
+  // 0x25 sets it if it is above 'Z'. Neither sum can carry into the next byte. Bytes with the top
+  // bit set are not letters and are left alone.
+  constexpr uint64_t LOW7 = 0x7f7f7f7f7f7f7f7full;
+  constexpr uint64_t HIGH = 0x8080808080808080ull;
+  uint64_t low = word & LOW7;
+  uint64_t atLeastA = low + 0x3f3f3f3f3f3f3f3full;
+  uint64_t aboveZ = low + 0x2525252525252525ull;
+  uint64_t upper = atLeastA & ~aboveZ & ~word & HIGH;
+  return word | (upper >> 2);
+}
+
+inline uint64_t loadWord(const char* p) {
+  uint64_t word;
+  memcpy(&word, p, sizeof(word));
+  return word;
+}
+
+inline uint64_t loadShortName(const char* p, size_t size) {
+  // Packs a name of 1 to 7 bytes into a word that depends on every byte. Two names of the same
+  // size give equal words exactly when their bytes are equal.
+  if (size >= 4) {
+    uint32_t first, last;
+    memcpy(&first, p, sizeof(first));
+    memcpy(&last, p + size - 4, sizeof(last));
+    return uint64_t(first) | (uint64_t(last) << 32);
   }
-};
+  return uint64_t(static_cast<byte>(p[0])) |
+         (uint64_t(static_cast<byte>(p[size / 2])) << 8) |
+         (uint64_t(static_cast<byte>(p[size - 1])) << 16);
+}
+
+template <typename Func>
+inline void forEachNameWord(kj::StringPtr name, Func&& func) {
+  // Calls `func(word)` with words that together cover every byte of `name`, the same ones for
+  // any name of the same size.
+  const char* p = name.begin();
+  size_t size = name.size();
+  if (size < 8) {
+    if (size > 0) func(loadShortName(p, size));
+    return;
+  }
+  const char* last = p + size - 8;
+  for (; p < last; p += 8) {
+    func(loadWord(p));
+  }
+  func(loadWord(last));
+}
+
+uint32_t hashHeaderName(kj::StringPtr name) {
+  uint64_t hash = name.size() * 0x9e3779b97f4a7c15ull;
+  forEachNameWord(name, [&](uint64_t word) {
+    hash = (hash ^ asciiToLower(word)) * 0xbf58476d1ce4e5b9ull;
+  });
+  hash ^= hash >> 31;
+  return static_cast<uint32_t>(hash) ^ static_cast<uint32_t>(hash >> 32);
+}
+
+bool headerNamesEqual(kj::StringPtr a, kj::StringPtr b) {
+  size_t size = a.size();
+  if (size != b.size()) return false;
+  if (size < 8) {
+    return size == 0 ||
+        asciiToLower(loadShortName(a.begin(), size)) ==
+        asciiToLower(loadShortName(b.begin(), size));
+  }
+  const char* p = a.begin();
+  const char* q = b.begin();
+  const char* last = p + size - 8;
+  for (; p < last; p += 8, q += 8) {
+    if (asciiToLower(loadWord(p)) != asciiToLower(loadWord(q))) return false;
+  }
+  return asciiToLower(loadWord(last)) == asciiToLower(loadWord(b.begin() + size - 8));
+}
 
 }  // namespace
-
-struct HttpHeaderTable::IdsByNameMap {
-  // TODO(perf): If we were cool we could maybe use a perfect hash here, since our hashtable is
-  //   static once built.
-
-  std::unordered_map<kj::StringPtr, uint, HeaderNameHash, HeaderNameHash> map;
-};
 
 HttpHeaderTable::Builder::Builder()
     : table(kj::heap<HttpHeaderTable>()) {
@@ -587,29 +637,55 @@ HttpHeaderTable::Builder::Builder()
 HttpHeaderId HttpHeaderTable::Builder::add(kj::StringPtr name) {
   requireValidHeaderName(name);
 
-  auto insertResult = table->idsByName->map.insert(std::make_pair(name, table->namesById.size()));
-  if (insertResult.second) {
-    table->namesById.add(name);
+  KJ_IF_SOME(id, table->stringToId(name)) {
+    return id;
   }
-  return HttpHeaderId(table, insertResult.first->second);
+  uint id = table->namesById.size();
+  table->namesById.add(name);
+  table->addName(name, id);
+  return HttpHeaderId(table, id);
 }
 
-HttpHeaderTable::HttpHeaderTable()
-    : idsByName(kj::heap<IdsByNameMap>()) {
+void HttpHeaderTable::addName(kj::StringPtr name, uint id) {
+  if ((id + 1) * 2 > nameSlots.size()) {
+    // Keep the table at most half full, so that probes stay short. Re-adding every name puts
+    // them back in id order, as they were.
+    auto newSlots = kj::heapArray<NameSlot>(kj::max(nameSlots.size() * 2, size_t(64)));
+    for (auto& slot: newSlots) slot = { 0, 0 };
+    nameSlots = kj::mv(newSlots);
+    for (uint i = 0; i < id; i++) {
+      addName(namesById[i], i);
+    }
+  }
+
+  uint32_t hash = hashHeaderName(name);
+  size_t mask = nameSlots.size() - 1;
+  for (size_t i = hash & mask;; i = (i + 1) & mask) {
+    if (nameSlots[i].idPlusOne == 0) {
+      nameSlots[i] = { hash, id + 1 };
+      return;
+    }
+  }
+}
+
+HttpHeaderTable::HttpHeaderTable() {
 #define ADD_HEADER(id, name) \
   namesById.add(name); \
-  idsByName->map.insert(std::make_pair(name, HttpHeaders::BuiltinIndices::id));
+  addName(name, HttpHeaders::BuiltinIndices::id);
   KJ_HTTP_FOR_EACH_BUILTIN_HEADER(ADD_HEADER);
 #undef ADD_HEADER
 }
 HttpHeaderTable::~HttpHeaderTable() noexcept(false) {}
 
 kj::Maybe<HttpHeaderId> HttpHeaderTable::stringToId(kj::StringPtr name) const {
-  auto iter = idsByName->map.find(name);
-  if (iter == idsByName->map.end()) {
-    return kj::none;
-  } else {
-    return HttpHeaderId(this, iter->second);
+  uint32_t hash = hashHeaderName(name);
+  size_t mask = nameSlots.size() - 1;
+  for (size_t i = hash & mask;; i = (i + 1) & mask) {
+    auto& slot = nameSlots[i];
+    if (slot.idPlusOne == 0) return kj::none;
+    if (slot.hash == hash && headerNamesEqual(namesById[slot.idPlusOne - 1], name)) {
+      return HttpHeaderId(this, slot.idPlusOne - 1);
+    }
   }
 }
 

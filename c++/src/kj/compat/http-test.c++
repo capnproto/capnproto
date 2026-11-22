@@ -659,6 +659,63 @@ KJ_TEST("HttpHeaders moves leave the source empty") {
   }
 }
 
+KJ_TEST("HttpHeaderTable matches names case-insensitively, at any length") {
+  HttpHeaderTable::Builder builder;
+  kj::Vector<kj::String> names;  // The table refers to them.
+  kj::Vector<HttpHeaderId> ids;
+  // Lengths on both sides of each eight-byte word, and enough names to grow the table.
+  for (auto length: kj::range(1, 41)) {
+    auto name = kj::heapString(length);
+    for (auto i: kj::indices(name)) name[i] = "abcdefghijklmnopqrstuvwxyz"[(i + length) % 26];
+    ids.add(builder.add(name));
+    names.add(kj::mv(name));
+  }
+  for (auto i: kj::range(0, 100)) {
+    ids.add(builder.add(names.add(kj::str("X-Name-", i))));
+  }
+  auto caret = builder.add("X-Mark^");
+  auto tilde = builder.add("X-Mark~");
+  auto table = builder.build();
+
+  for (auto i: kj::indices(names)) {
+    auto& name = names[i];
+    KJ_EXPECT(KJ_ASSERT_NONNULL(table->stringToId(name)) == ids[i], name);
+
+    auto upper = kj::heapString(name);
+    for (auto& c: upper) if ('a' <= c && c <= 'z') c = c - 'a' + 'A';
+    KJ_EXPECT(KJ_ASSERT_NONNULL(table->stringToId(upper)) == ids[i], upper);
+
+    // Shorter, longer, and different in the last byte: no match. (The letter-only names are
+    // shifted by their length, so no two share a prefix.)
+    if (i < 40) {
+      KJ_EXPECT(table->stringToId(kj::heapString(name.first(name.size() - 1))) == kj::none, name);
+      KJ_EXPECT(table->stringToId(kj::str(name, "q")) == kj::none, name);
+    }
+    auto changed = kj::heapString(name);
+    changed[changed.size() - 1] = '!';
+    KJ_EXPECT(table->stringToId(changed) == kj::none, changed);
+  }
+
+  // Only letters fold: '^' and '~' differ in the same bit as a letter's case, but are two names.
+  KJ_EXPECT(caret != tilde);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table->stringToId("x-mark^")) == caret);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table->stringToId("X-MARK~")) == tilde);
+  // Likewise for characters that can't be in a name, which lookups don't check for.
+  KJ_EXPECT(table->stringToId("X-Mark@") == kj::none);
+  KJ_EXPECT(table->stringToId("X-Mark`") == kj::none);
+  KJ_EXPECT(table->stringToId("X-Mark>") == kj::none);
+
+  // Adding a name again, in any case, gives the same id.
+  HttpHeaderTable::Builder again;
+  auto first = again.add("X-Same");
+  KJ_EXPECT(again.add("x-same") == first);
+  KJ_EXPECT(again.add("X-SAME") == first);
+  KJ_EXPECT(again.add("Host") == HttpHeaderId::HOST);
+  auto built = again.build();
+  KJ_EXPECT(built->idCount() == HttpHeaderTable().idCount() + 1);
+  KJ_EXPECT(built->idToString(first) == "X-Same");
+}
+
 KJ_TEST("HttpHeaders Set-Cookie handling") {
   HttpHeaderTable::Builder builder;
   auto hCookie = builder.add("Cookie");
