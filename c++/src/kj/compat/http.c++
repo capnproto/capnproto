@@ -629,38 +629,128 @@ bool HttpHeaders::isValidHeaderValue(kj::StringPtr value) {
 }
 
 HttpHeaders::HttpHeaders(const HttpHeaderTable& table)
-    : table(&table),
-      indexedHeaders(kj::heapArray<kj::StringPtr>(table.idCount())) {
+    : table(&table) {
   KJ_ASSERT(
       table.isReady(), "HttpHeaders object was constructed from "
       "HttpHeaderTable that wasn't fully built yet at the time of construction");
 }
 
-void HttpHeaders::clear() {
-  for (auto& header: indexedHeaders) {
-    header = nullptr;
+HttpHeaders::HttpHeaders(HttpHeaders&& other) noexcept
+    : table(other.table),
+      ownedStrings(kj::mv(other.ownedStrings)),
+      unindexedHeaders(kj::mv(other.unindexedHeaders)) {
+  takeIndexed(other);
+}
+
+HttpHeaders& HttpHeaders::operator=(HttpHeaders&& other) noexcept {
+  if (this != &other) {
+    table = other.table;
+    ownedStrings = kj::mv(other.ownedStrings);
+    unindexedHeaders = kj::mv(other.unindexedHeaders);
+    takeIndexed(other);
   }
+  return *this;
+}
+
+void HttpHeaders::takeIndexed(HttpHeaders& other) {
+  // Copies only the inline entries in use, so neither the copy nor the uninitialized rest of the
+  // room is ever read.
+  inlineCount = other.inlineCount;
+  spilled = other.spilled;
+  for (uint i = 0; i < inlineCount; i++) {
+    inlineIndexed[i] = other.inlineIndexed[i];
+  }
+  spilledIndexed = kj::mv(other.spilledIndexed);
+  for (auto i: kj::indices(setBits)) {
+    setBits[i] = other.setBits[i];
+  }
+
+  other.inlineCount = 0;
+  other.spilled = false;
+  kj::memzero(other.setBits);
+}
+
+void HttpHeaders::setIndexed(uint id, kj::StringPtr value) {
+  if (value == nullptr) {
+    // As a slot per id held: an empty value is no value.
+    unsetIndexed(id);
+    return;
+  }
+  KJ_REQUIRE(static_cast<uint32_t>(value.size()) == value.size(), "HTTP header value too long",
+      value.size());
+  IndexedHeader header { id, static_cast<uint32_t>(value.size()), value.begin() };
+  if (id < SET_BITS) {
+    setBits[id / 64] |= uint64_t(1) << (id % 64);
+  }
+
+  if (!spilled) {
+    uint at = inlineCount;
+    while (at > 0 && inlineIndexed[at - 1].id >= id) --at;
+    if (at < inlineCount && inlineIndexed[at].id == id) {
+      inlineIndexed[at] = header;
+      return;
+    }
+    if (inlineCount < INLINE_INDEXED) {
+      memmove(inlineIndexed + at + 1, inlineIndexed + at,
+          (inlineCount - at) * sizeof(IndexedHeader));
+      inlineIndexed[at] = header;
+      ++inlineCount;
+      return;
+    }
+    // Too many for the inline room: all of them move to the vector, kept from now on. Room for
+    // twice as many makes the move a single allocation.
+    spilledIndexed.reserve(INLINE_INDEXED * 2);
+    spilledIndexed.addAll(inlineIndexed, inlineIndexed + inlineCount);
+    inlineCount = 0;
+    spilled = true;
+  }
+
+  size_t at = spilledIndexed.size();
+  while (at > 0 && spilledIndexed[at - 1].id >= id) --at;
+  if (at < spilledIndexed.size() && spilledIndexed[at].id == id) {
+    spilledIndexed[at] = header;
+    return;
+  }
+  spilledIndexed.add(header);
+  auto moved = spilledIndexed.begin() + at;
+  memmove(moved + 1, moved, (spilledIndexed.size() - 1 - at) * sizeof(IndexedHeader));
+  *moved = header;
+}
+
+void HttpHeaders::unsetIndexed(uint id) {
+  auto header = findIndexed(id);
+  if (header == nullptr) return;
+  if (id < SET_BITS) {
+    setBits[id / 64] &= ~(uint64_t(1) << (id % 64));
+  }
+  auto all = spilled ? spilledIndexed.asPtr() : kj::arrayPtr(inlineIndexed, inlineCount);
+  size_t at = header - all.begin();
+  memmove(all.begin() + at, all.begin() + at + 1, (all.size() - at - 1) * sizeof(IndexedHeader));
+  if (spilled) {
+    spilledIndexed.removeLast();
+  } else {
+    --inlineCount;
+  }
+}
+
+void HttpHeaders::clear() {
+  inlineCount = 0;
+  spilled = false;
+  spilledIndexed.clear();
+  kj::memzero(setBits);
 
   unindexedHeaders.clear();
 }
 
 size_t HttpHeaders::size() const {
-  size_t result = unindexedHeaders.size();
-  for (auto i: kj::indices(indexedHeaders)) {
-    if (indexedHeaders[i] != nullptr) {
-      ++result;
-    }
-  }
-  return result;
+  return indexed().size() + unindexedHeaders.size();
 }
 
 HttpHeaders HttpHeaders::clone() const {
   HttpHeaders result(*table);
 
-  for (auto i: kj::indices(indexedHeaders)) {
-    if (indexedHeaders[i] != nullptr) {
-      result.indexedHeaders[i] = result.cloneToOwn(indexedHeaders[i]);
-    }
+  for (auto& header: indexed()) {
+    result.setIndexed(header.id, result.cloneToOwn(header.get()));
   }
 
   result.unindexedHeaders.resize(unindexedHeaders.size());
@@ -675,10 +765,8 @@ HttpHeaders HttpHeaders::clone() const {
 HttpHeaders HttpHeaders::cloneShallow() const {
   HttpHeaders result(*table);
 
-  for (auto i: kj::indices(indexedHeaders)) {
-    if (indexedHeaders[i] != nullptr) {
-      result.indexedHeaders[i] = indexedHeaders[i];
-    }
+  for (auto& header: indexed()) {
+    result.setIndexed(header.id, header.get());
   }
 
   result.unindexedHeaders.resize(unindexedHeaders.size());
@@ -718,7 +806,7 @@ void HttpHeaders::setPtr(HttpHeaderId id, kj::StringPtr value) {
   id.requireFrom(*table);
   requireValidHeaderValue(value, id);
 
-  indexedHeaders[id.id] = value;
+  setIndexed(id.id, value);
 }
 
 void HttpHeaders::set(HttpHeaderId id, kj::String&& value) {
@@ -754,8 +842,9 @@ void HttpHeaders::add(kj::String&& name, kj::String&& value) {
 
 void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
   KJ_IF_SOME(id, table->stringToId(name)) {
-    if (indexedHeaders[id.id] == nullptr) {
-      indexedHeaders[id.id] = value;
+    auto existing = findIndexed(id.id);
+    if (existing == nullptr) {
+      setIndexed(id.id, value);
     } else {
       // Duplicate HTTP headers are equivalent to the values being separated by a comma.
 
@@ -769,8 +858,8 @@ void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
         // TODO(cleanup): Maybe HttpHeaders should just special-case set-cookie in general?
         unindexedHeaders.add(Header {name, value});
       } else {
-        auto concat = kj::str(indexedHeaders[id.id], ", ", value);
-        indexedHeaders[id.id] = concat;
+        auto concat = kj::str(existing->get(), ", ", value);
+        setIndexed(id.id, concat);
         ownedStrings.add(concat.releaseArray());
       }
     }
@@ -1166,13 +1255,23 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
   if (word1 != nullptr) {
     size += word1.size() + word2.size() + word3.size() + 4;
   }
-  KJ_ASSERT(connectionHeaders.size() <= indexedHeaders.size());
-  for (auto i: kj::indices(indexedHeaders)) {
-    kj::StringPtr value = i < connectionHeaders.size() ? connectionHeaders[i] : indexedHeaders[i];
-    if (value != nullptr) {
-      size += table->idToString(HttpHeaderId(table, i)).size() + value.size() + 4;
+  KJ_ASSERT(connectionHeaders.size() <= table->idCount());
+  // The connection headers stand in for the first ids' values; the set ones follow.
+  auto forEachValue = [&](auto&& func) {
+    for (auto i: kj::indices(connectionHeaders)) {
+      if (connectionHeaders[i] != nullptr) {
+        func(static_cast<uint>(i), connectionHeaders[i]);
+      }
     }
-  }
+    for (auto& header: indexed()) {
+      if (header.id >= connectionHeaders.size()) {
+        func(header.id, header.get());
+      }
+    }
+  };
+  forEachValue([&](uint i, kj::StringPtr value) {
+    size += table->idToString(HttpHeaderId(table, i)).size() + value.size() + 4;
+  });
   for (auto& header: unindexedHeaders) {
     size += header.name.size() + header.value.size() + 4;
   }
@@ -1183,12 +1282,9 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
   if (word1 != nullptr) {
     ptr = kj::_::fill(ptr, word1, space, word2, space, word3, newline);
   }
-  for (auto i: kj::indices(indexedHeaders)) {
-    kj::StringPtr value = i < connectionHeaders.size() ? connectionHeaders[i] : indexedHeaders[i];
-    if (value != nullptr) {
-      ptr = kj::_::fill(ptr, table->idToString(HttpHeaderId(table, i)), colon, value, newline);
-    }
-  }
+  forEachValue([&](uint i, kj::StringPtr value) {
+    ptr = kj::_::fill(ptr, table->idToString(HttpHeaderId(table, i)), colon, value, newline);
+  });
   for (auto& header: unindexedHeaders) {
     ptr = kj::_::fill(ptr, header.name, colon, header.value, newline);
   }
