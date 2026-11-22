@@ -27,6 +27,9 @@
 #include <kj/encoding.h>
 #include <kj/vector.h>
 #include <map>
+#if !_WIN32
+#include <signal.h>
+#endif
 
 #if KJ_HTTP_TEST_USE_OS_PIPE
 // Run the test using OS-level socketpairs. (See http-socketpair-test.c++.)
@@ -751,6 +754,423 @@ KJ_TEST("HttpHeaders parses header values of every length") {
     nul[nul.size() - 5] = '\0';
     HttpHeaders headers2(*table);
     KJ_EXPECT(headers2.tryParseRequest(nul.asArray()).is<HttpHeaders::ProtocolError>(), length);
+  }
+}
+
+KJ_TEST("HttpHeaders derive() starts as the base and keeps only its own changes") {
+  HttpHeaderTable::Builder builder;
+  kj::Vector<kj::String> names;  // The table refers to them.
+  kj::Vector<HttpHeaderId> ids;
+  for (auto i: kj::range(0, 300)) {
+    ids.add(builder.add(names.add(kj::str("X-H", i))));
+  }
+  auto table = builder.build();
+
+  HttpHeaders base(*table);
+  base.setPtr(ids[1], "one");
+  base.setPtr(ids[5], "five");
+  base.setPtr(ids[280], "far");
+  base.addPtrPtr("X-Un", "u1");
+  base.addPtrPtr("X-Un2", "u2");
+  auto baseText = base.toString();
+
+  {
+    auto derived = base.derive();
+    KJ_EXPECT(derived.toString() == baseText);
+    KJ_EXPECT(derived.size() == base.size());
+
+    derived.unset(ids[1]);           // Hides one of base's.
+    derived.setPtr(ids[5], "FIVE");  // Replaces one.
+    derived.setPtr(ids[3], "three");  // Adds one.
+    derived.setPtr(ids[290], "farther");
+    derived.unset(ids[280]);
+    derived.unset(ids[7]);           // Not there: nothing to do.
+    derived.addPtrPtr("X-Un3", "u3");
+    derived.addPtrPtr("x-h5", "more");  // Joins the replaced value.
+
+    KJ_EXPECT(derived.toString() ==
+        "X-H3: three\r\nX-H5: FIVE, more\r\nX-H290: farther\r\n"
+        "X-Un: u1\r\nX-Un2: u2\r\nX-Un3: u3\r\n\r\n", derived.toString());
+    KJ_EXPECT(derived.size() == 6);
+    KJ_EXPECT(derived.get(ids[1]) == kj::none);
+    KJ_EXPECT(derived.get(ids[280]) == kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(derived.get(ids[290])) == "farther");
+
+    // The base is untouched.
+    KJ_EXPECT(base.toString() == baseText);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(base.get(ids[1])) == "one");
+
+    // And can't change while derived exists.
+    KJ_EXPECT_THROW_MESSAGE("sets derived from it exist", base.setPtr(ids[2], "x"));
+    KJ_EXPECT_THROW_MESSAGE("sets derived from it exist", base.unset(ids[1]));
+    KJ_EXPECT_THROW_MESSAGE("sets derived from it exist", base.addPtrPtr("X-New", "x"));
+    KJ_EXPECT_THROW_MESSAGE("sets derived from it exist", base.unset("X-Un"));
+    KJ_EXPECT_THROW_MESSAGE("sets derived from it exist", base.clear());
+    KJ_EXPECT(base.toString() == baseText);
+
+    // Putting a hidden header back.
+    derived.setPtr(ids[1], "again");
+    KJ_EXPECT(KJ_ASSERT_NONNULL(derived.get(ids[1])) == "again");
+    derived.unset(ids[1]);
+    KJ_EXPECT(derived.get(ids[1]) == kj::none);
+
+    // Removing base's unindexed headers by name takes a copy of them first.
+    derived.unset("x-un");
+    KJ_EXPECT(derived.toString() ==
+        "X-H3: three\r\nX-H5: FIVE, more\r\nX-H290: farther\r\nX-Un2: u2\r\nX-Un3: u3\r\n\r\n",
+        derived.toString());
+    KJ_EXPECT(base.toString() == baseText);
+
+    // Copies are independent of base.
+    auto shallow = derived.cloneShallow();
+    auto deep = derived.clone();
+    KJ_EXPECT(shallow.toString() == derived.toString());
+    KJ_EXPECT(deep.toString() == derived.toString());
+    KJ_EXPECT(shallow.size() == derived.size());
+
+    // Serializing with connection headers merges in order too.
+    kj::StringPtr connection[HttpHeaders::CONNECTION_HEADERS_COUNT];
+    connection[HttpHeaders::BuiltinIndices::CONTENT_LENGTH] = "0";
+    KJ_EXPECT(derived.serializeResponse(200, "OK", connection) == kj::str(
+        "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n", derived.toString()));
+
+    // Walking with ids.
+    kj::Vector<kj::String> seen;
+    derived.forEach(
+        [&](HttpHeaderId id, kj::StringPtr value) { seen.add(kj::str(id.toString(), "=", value)); },
+        [&](kj::StringPtr name, kj::StringPtr value) { seen.add(kj::str(name, "=", value)); });
+    KJ_EXPECT(kj::strArray(seen, " ") ==
+        "X-H3=three X-H5=FIVE, more X-H290=farther X-Un2=u2 X-Un3=u3", kj::strArray(seen, " "));
+  }
+
+  // With no derived sets left, the base can change again.
+  base.setPtr(ids[2], "two");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(base.get(ids[2])) == "two");
+}
+
+KJ_TEST("HttpHeaders derive() from a derived set refers to the same base") {
+  HttpHeaderTable::Builder builder;
+  kj::Vector<kj::String> names;  // The table refers to them.
+  kj::Vector<HttpHeaderId> ids;
+  for (auto i: kj::range(0, 40)) {
+    ids.add(builder.add(names.add(kj::str("X-H", i))));
+  }
+  auto table = builder.build();
+
+  HttpHeaders base(*table);
+  for (auto i: kj::range(0, 20)) base.setPtr(ids[i * 2], names[i * 2]);
+  base.addPtrPtr("X-Un", "u");
+  auto baseText = base.toString();
+
+  kj::Maybe<HttpHeaders> second;
+  {
+    auto first = base.derive();
+    first.unset(ids[0]);
+    first.setPtr(ids[1], "odd");
+    first.addPtrPtr("X-More", "m");
+    // Strings the first set owns: its own copies, and a value joined to one of base's.
+    first.set(ids[5], kj::str("owned"));
+    first.add(kj::str("X-Owned"), kj::str("owned too"));
+    first.addPtrPtr("X-H6", "joined");
+
+    second = first.derive();
+    auto& s = KJ_ASSERT_NONNULL(second);
+    s.setPtr(ids[3], "odd too");
+    s.unset(ids[2]);
+
+    // The first can change and go away without the second noticing.
+    first.setPtr(ids[39], "late");
+    first.clear();
+  }
+  auto& s = KJ_ASSERT_NONNULL(second);
+  KJ_EXPECT(s.get(ids[0]) == kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(s.get(ids[1])) == "odd");
+  KJ_EXPECT(s.get(ids[2]) == kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(s.get(ids[3])) == "odd too");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(s.get(ids[4])) == "X-H4");
+  KJ_EXPECT(s.get(ids[39]) == kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(s.get(ids[5])) == "owned");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(s.get(ids[6])) == "X-H6, joined");
+  KJ_EXPECT(s.size() == 24);
+  KJ_EXPECT(s.toString().endsWith("X-Un: u\r\nX-More: m\r\nX-Owned: owned too\r\n\r\n"),
+      s.toString());
+
+  // Many changes spill to the heap like any other set.
+  for (auto i: kj::range(0, 20)) s.setPtr(ids[i * 2 + 1], names[i * 2 + 1]);
+  KJ_EXPECT(s.size() == 41);
+
+  // Moving a derived set carries its base along.
+  auto moved = kj::mv(s);
+  KJ_EXPECT(s.size() == 0);
+  KJ_EXPECT(moved.size() == 41);
+  KJ_EXPECT_THROW_MESSAGE("sets derived from it exist", base.clear());
+  second = kj::none;
+  KJ_EXPECT_THROW_MESSAGE("sets derived from it exist", base.clear());
+
+  // Clearing a derived set lets go of the base.
+  moved.clear();
+  base.clear();
+  KJ_EXPECT(base.size() == 0);
+}
+
+#if !_WIN32
+KJ_TEST("HttpHeaders aborts if a set with derived sets is moved or destroyed") {
+  HttpHeaderTable table;
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    auto base = kj::heap<HttpHeaders>(table);
+    base->setPtr(HttpHeaderId::HOST, "h");
+    auto derived = base->derive();
+    base = nullptr;
+  });
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    HttpHeaders base(table);
+    auto derived = base.derive();
+    HttpHeaders moved = kj::mv(base);
+  });
+  KJ_EXPECT_SIGNAL(SIGABRT, {
+    HttpHeaders base(table);
+    auto derived = base.derive();
+    HttpHeaders other(table);
+    base = kj::mv(other);
+  });
+}
+#endif
+
+KJ_TEST("HttpHeaders unset() by name") {
+  HttpHeaderTable::Builder builder;
+  auto hIndexed = builder.add("X-Indexed");
+  auto hSetCookie = builder.add("Set-Cookie");
+  auto table = builder.build();
+
+  HttpHeaders headers(*table);
+  headers.setPtr(hIndexed, "i");
+  headers.addPtrPtr("X-Plain", "p1");
+  headers.addPtrPtr("Set-Cookie", "a=1");
+  headers.addPtrPtr("X-Kept", "k");
+  headers.addPtrPtr("set-cookie", "b=2");
+  headers.addPtrPtr("x-plain", "p2");
+  KJ_EXPECT(headers.size() == 6);
+
+  headers.unset("x-INDEXED");
+  KJ_EXPECT(headers.get(hIndexed) == kj::none);
+  headers.unset("X-PLAIN");
+  headers.unset("X-Absent");
+  KJ_EXPECT(headers.toString() == "Set-Cookie: a=1\r\nX-Kept: k\r\nset-cookie: b=2\r\n\r\n",
+      headers.toString());
+
+  // Set-Cookie is indexed but its repeats aren't; unsetting by name removes them all.
+  headers.unset("SET-COOKIE");
+  KJ_EXPECT(headers.get(hSetCookie) == kj::none);
+  KJ_EXPECT(headers.toString() == "X-Kept: k\r\n\r\n", headers.toString());
+}
+
+KJ_TEST("HttpHeaders clone() owns copies of every string") {
+  HttpHeaderTable::Builder builder;
+  auto hIndexed = builder.add("X-Indexed");
+  auto table = builder.build();
+
+  kj::Maybe<HttpHeaders> copy;
+  kj::String expected;
+  {
+    // Strings that go away before the copy is read.
+    auto value = kj::str("indexed value");
+    auto name = kj::str("X-Unindexed");
+    auto value2 = kj::str("unindexed value");
+    HttpHeaders headers(*table);
+    headers.setPtr(hIndexed, value);
+    headers.addPtrPtr(name, value2);
+    headers.addPtrPtr("X-Empty", "");
+    expected = headers.toString();
+    copy = headers.clone();
+  }
+  auto& c = KJ_ASSERT_NONNULL(copy);
+  KJ_EXPECT(c.toString() == expected, c.toString());
+  KJ_EXPECT(KJ_ASSERT_NONNULL(c.get(hIndexed)) == "indexed value");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(c.get(hIndexed)).cStr()[13] == '\0');
+
+  // An empty set copies without allocating anything.
+  HttpHeaders empty(*table);
+  KJ_EXPECT(empty.clone().size() == 0);
+}
+
+// A model of what a header set should hold, to check HttpHeaders against under random changes.
+struct HeaderModel {
+  const HttpHeaderTable& table;
+  struct Entry {
+    HttpHeaderId id;
+    kj::String value;
+  };
+  std::map<uint, Entry> indexed;
+  kj::Vector<std::pair<kj::String, kj::String>> unindexed;
+
+  explicit HeaderModel(const HttpHeaderTable& table): table(table) {}
+
+  HeaderModel copy() const {
+    HeaderModel result(table);
+    for (auto& entry: indexed) {
+      result.indexed.emplace(entry.first, Entry { entry.second.id, kj::str(entry.second.value) });
+    }
+    for (auto& entry: unindexed) {
+      result.unindexed.add(kj::str(entry.first), kj::str(entry.second));
+    }
+    return result;
+  }
+
+  static bool sameName(kj::StringPtr a, kj::StringPtr b) {
+    if (a.size() != b.size()) return false;
+    for (auto i: kj::indices(a)) {
+      char x = a[i], y = b[i];
+      if ('A' <= x && x <= 'Z') x = x - 'A' + 'a';
+      if ('A' <= y && y <= 'Z') y = y - 'A' + 'a';
+      if (x != y) return false;
+    }
+    return true;
+  }
+
+  void set(HttpHeaderId id, kj::StringPtr value) {
+    if (value.size() == 0) {
+      indexed.erase(id.hashCode());
+    } else {
+      indexed.insert_or_assign(id.hashCode(), Entry { id, kj::str(value) });
+    }
+  }
+  void add(kj::StringPtr name, kj::StringPtr value) {
+    KJ_IF_SOME(id, table.stringToId(name)) {
+      auto iter = indexed.find(id.hashCode());
+      if (iter == indexed.end()) {
+        set(id, value);
+      } else if (sameName(name, "set-cookie")) {
+        unindexed.add(kj::str(name), kj::str(value));
+      } else {
+        iter->second.value = kj::str(iter->second.value, ", ", value);
+      }
+    } else {
+      unindexed.add(kj::str(name), kj::str(value));
+    }
+  }
+  void unset(kj::StringPtr name) {
+    KJ_IF_SOME(id, table.stringToId(name)) {
+      indexed.erase(id.hashCode());
+    }
+    kj::Vector<std::pair<kj::String, kj::String>> kept;
+    for (auto& entry: unindexed) {
+      if (!sameName(entry.first, name)) kept.add(kj::mv(entry));
+    }
+    unindexed = kj::mv(kept);
+  }
+  kj::String toString() const {
+    kj::Vector<kj::String> lines;
+    for (auto& entry: indexed) {
+      lines.add(kj::str(table.idToString(entry.second.id), ": ", entry.second.value, "\r\n"));
+    }
+    for (auto& entry: unindexed) {
+      lines.add(kj::str(entry.first, ": ", entry.second, "\r\n"));
+    }
+    lines.add(kj::str("\r\n"));
+    return kj::strArray(lines, "");
+  }
+};
+
+KJ_TEST("HttpHeaders and derived sets match a model under random changes") {
+  for (uint tableSize: {20u, 300u}) {
+    HttpHeaderTable::Builder builder;
+    kj::Vector<kj::String> names;  // The table refers to them.
+    kj::Vector<HttpHeaderId> ids;
+    for (auto i: kj::range(0u, tableSize)) {
+      ids.add(builder.add(names.add(kj::str("X-H", i))));
+    }
+    ids.add(builder.add("Set-Cookie"));
+    auto table = builder.build();
+
+    kj::Vector<kj::String> pool;  // Values and names the header sets refer to.
+    uint64_t state = 0x1234567 + tableSize;
+    auto next = [&](uint bound) {
+      state = state * 6364136223846793005ull + 1442695040888963407ull;
+      return static_cast<uint>((state >> 33) % bound);
+    };
+    auto someName = [&]() -> kj::StringPtr {
+      switch (next(4)) {
+        case 0: return pool.add(kj::str("x-h", next(tableSize)));
+        case 1: return pool.add(kj::str("X-Un", next(4)));
+        case 2: return next(2) ? "Set-Cookie"_kj : "set-cookie"_kj;
+        default: return pool.add(kj::str("X-H", next(tableSize)));
+      }
+    };
+    auto someValue = [&]() -> kj::StringPtr {
+      return next(8) == 0 ? ""_kj : pool.add(kj::str("v", next(1000)));
+    };
+
+    for (uint round = 0; round < 200; round++) {
+      HttpHeaders base(*table);
+      HeaderModel baseModel(*table);
+      auto change = [&](HttpHeaders& headers, HeaderModel& model) {
+        switch (next(5)) {
+          case 0: {
+            auto& id = ids[next(ids.size())];
+            auto value = someValue();
+            headers.setPtr(id, value);
+            model.set(id, value);
+            break;
+          }
+          case 1: {
+            auto& id = ids[next(ids.size())];
+            headers.unset(id);
+            model.indexed.erase(id.hashCode());
+            break;
+          }
+          case 2:
+          case 3: {
+            auto name = someName();
+            auto value = someValue();
+            headers.addPtrPtr(name, value);
+            model.add(name, value);
+            break;
+          }
+          case 4: {
+            auto name = someName();
+            headers.unset(name);
+            model.unset(name);
+            break;
+          }
+        }
+      };
+
+      for (uint i = next(40); i > 0; i--) change(base, baseModel);
+      KJ_ASSERT(base.toString() == baseModel.toString(), round);
+
+      // Derive, change the derived set, sometimes derive again from it.
+      auto derived = base.derive();
+      auto derivedModel = baseModel.copy();
+      for (uint i = next(40); i > 0; i--) {
+        change(derived, derivedModel);
+        KJ_ASSERT(derived.toString() == derivedModel.toString(), round, i);
+        KJ_ASSERT(derived.size() == derivedModel.indexed.size() + derivedModel.unindexed.size(),
+            round, i);
+      }
+      KJ_ASSERT(base.toString() == baseModel.toString(), round);
+
+      auto again = derived.derive();
+      auto againModel = derivedModel.copy();
+      for (uint i = next(20); i > 0; i--) change(again, againModel);
+      KJ_ASSERT(again.toString() == againModel.toString(), round);
+      KJ_ASSERT(derived.toString() == derivedModel.toString(), round);
+
+      // `again` doesn't need `derived`, including any strings `derived` owns, such as values
+      // joined by addPtrPtr().
+      derived = HttpHeaders(*table);
+      KJ_ASSERT(again.clone().toString() == againModel.toString(), round);
+      KJ_ASSERT(again.cloneShallow().toString() == againModel.toString(), round);
+
+      for (auto& id: ids) {
+        auto expected = againModel.indexed.find(id.hashCode());
+        KJ_IF_SOME(value, again.get(id)) {
+          KJ_ASSERT(expected != againModel.indexed.end() && expected->second.value == value,
+              round);
+        } else {
+          KJ_ASSERT(expected == againModel.indexed.end(), round);
+        }
+      }
+    }
   }
 }
 

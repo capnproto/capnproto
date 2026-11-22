@@ -711,15 +711,29 @@ HttpHeaders::HttpHeaders(const HttpHeaderTable& table)
       "HttpHeaderTable that wasn't fully built yet at the time of construction");
 }
 
+namespace {
+
+[[noreturn]] void abortDerivedFrom(const char* what) {
+  // Carrying on would leave the derived sets referring to memory that's gone or changed.
+  KJ_LOG(FATAL, "HttpHeaders was moved or destroyed while sets derived from it existed", what);
+  abort();
+}
+
+}  // namespace
+
 HttpHeaders::HttpHeaders(HttpHeaders&& other) noexcept
     : table(other.table),
       ownedStrings(kj::mv(other.ownedStrings)),
       unindexedHeaders(kj::mv(other.unindexedHeaders)) {
+  if (other.loadDerivedCount() != 0) abortDerivedFrom("moved");
   takeIndexed(other);
 }
 
 HttpHeaders& HttpHeaders::operator=(HttpHeaders&& other) noexcept {
   if (this != &other) {
+    if (loadDerivedCount() != 0) abortDerivedFrom("assigned to");
+    if (other.loadDerivedCount() != 0) abortDerivedFrom("moved");
+    releaseBase();
     table = other.table;
     ownedStrings = kj::mv(other.ownedStrings);
     unindexedHeaders = kj::mv(other.unindexedHeaders);
@@ -728,9 +742,38 @@ HttpHeaders& HttpHeaders::operator=(HttpHeaders&& other) noexcept {
   return *this;
 }
 
+void HttpHeaders::failShared() {
+  KJ_FAIL_REQUIRE("can't change an HttpHeaders while sets derived from it exist");
+}
+
+void HttpHeaders::destroyShared() {
+  // The rest of the destructor, for sets that are, or are derived from, a base.
+  if (kj::atomicLoad(&derivedCount, kj::AtomicMemoryOrder::ACQUIRE) != 0) {
+    abortDerivedFrom("destroyed");
+  }
+  releaseBase();
+}
+
+const HttpHeaders::IndexedHeader* HttpHeaders::findIndexed(uint id) const {
+  auto header = findOwn(id);
+  if (header != nullptr) {
+    return header->value == nullptr ? nullptr : header;
+  }
+  return base == nullptr ? nullptr : base->findOwn(id);
+}
+
+void HttpHeaders::releaseBase() {
+  if (base != nullptr) {
+    kj::atomicSubFetch(&base->derivedCount, 1u, kj::AtomicMemoryOrder::RELEASE);
+    base = nullptr;
+  }
+  unindexedFromBase = false;
+}
+
 void HttpHeaders::takeIndexed(HttpHeaders& other) {
   // Copies only the inline entries in use, so neither the copy nor the uninitialized rest of the
-  // room is ever read.
+  // room is ever read. The base reference moves with the entries, so the count of sets derived
+  // from it is unchanged.
   inlineCount = other.inlineCount;
   spilled = other.spilled;
   for (uint i = 0; i < inlineCount; i++) {
@@ -740,35 +783,64 @@ void HttpHeaders::takeIndexed(HttpHeaders& other) {
   for (auto i: kj::indices(setBits)) {
     setBits[i] = other.setBits[i];
   }
+  base = other.base;
+  unindexedFromBase = other.unindexedFromBase;
 
   other.inlineCount = 0;
   other.spilled = false;
   kj::memzero(other.setBits);
+  other.base = nullptr;
+  other.unindexedFromBase = false;
 }
 
-void HttpHeaders::setIndexed(uint id, kj::StringPtr value) {
-  if (value == nullptr) {
-    // As a slot per id held: an empty value is no value.
-    unsetIndexed(id);
-    return;
+void HttpHeaders::copyOwnFrom(const HttpHeaders& other) {
+  // Copies `other`'s own entries over this set's, which must have none.
+  auto entries = other.indexed();
+  if (entries.size() <= INLINE_INDEXED) {
+    if (entries.size() > 0) {
+      memcpy(inlineIndexed, entries.begin(), entries.size() * sizeof(IndexedHeader));
+    }
+    inlineCount = entries.size();
+  } else {
+    spilledIndexed.clear();
+    spilledIndexed.reserve(entries.size());
+    spilledIndexed.addAll(entries);
+    spilled = true;
   }
-  KJ_REQUIRE(static_cast<uint32_t>(value.size()) == value.size(), "HTTP header value too long",
-      value.size());
-  IndexedHeader header { id, static_cast<uint32_t>(value.size()), value.begin() };
+  for (auto i: kj::indices(setBits)) {
+    setBits[i] = other.setBits[i];
+  }
+}
+
+void HttpHeaders::putOwn(uint id, const char* value, uint32_t size) {
+  // Sets this set's own entry for `id`, keeping the entries in id order.
+  IndexedHeader header { id, size, value };
+  size_t at;
   if (id < SET_BITS) {
-    setBits[id / 64] |= uint64_t(1) << (id % 64);
+    at = countBelow(id);
+    uint64_t& word = setBits[id / 64];
+    uint64_t bit = uint64_t(1) << (id % 64);
+    if (word & bit) {
+      indexedMut()[at] = header;
+      return;
+    }
+    word |= bit;
+  } else {
+    auto all = indexed();
+    at = countBelow(SET_BITS);
+    while (at < all.size() && all[at].id < id) ++at;
+    if (at < all.size() && all[at].id == id) {
+      indexedMut()[at] = header;
+      return;
+    }
   }
 
   if (!spilled) {
-    uint at = inlineCount;
-    while (at > 0 && inlineIndexed[at - 1].id >= id) --at;
-    if (at < inlineCount && inlineIndexed[at].id == id) {
-      inlineIndexed[at] = header;
-      return;
-    }
     if (inlineCount < INLINE_INDEXED) {
-      memmove(inlineIndexed + at + 1, inlineIndexed + at,
-          (inlineCount - at) * sizeof(IndexedHeader));
+      // Shift the later entries up one. There are few, so a loop beats a call to memmove().
+      for (size_t i = inlineCount; i > at; i--) {
+        inlineIndexed[i] = inlineIndexed[i - 1];
+      }
       inlineIndexed[at] = header;
       ++inlineCount;
       return;
@@ -781,27 +853,25 @@ void HttpHeaders::setIndexed(uint id, kj::StringPtr value) {
     spilled = true;
   }
 
-  size_t at = spilledIndexed.size();
-  while (at > 0 && spilledIndexed[at - 1].id >= id) --at;
-  if (at < spilledIndexed.size() && spilledIndexed[at].id == id) {
-    spilledIndexed[at] = header;
-    return;
-  }
   spilledIndexed.add(header);
   auto moved = spilledIndexed.begin() + at;
   memmove(moved + 1, moved, (spilledIndexed.size() - 1 - at) * sizeof(IndexedHeader));
   *moved = header;
 }
 
-void HttpHeaders::unsetIndexed(uint id) {
-  auto header = findIndexed(id);
-  if (header == nullptr) return;
+void HttpHeaders::appendOwn(uint id, kj::StringPtr value) {
+  // Callers add in id order, so this always lands at the end.
+  putOwn(id, value.begin(), static_cast<uint32_t>(value.size()));
+}
+
+void HttpHeaders::eraseOwn(size_t index) {
+  auto all = indexedMut();
+  uint id = all[index].id;
   if (id < SET_BITS) {
     setBits[id / 64] &= ~(uint64_t(1) << (id % 64));
   }
-  auto all = spilled ? spilledIndexed.asPtr() : kj::arrayPtr(inlineIndexed, inlineCount);
-  size_t at = header - all.begin();
-  memmove(all.begin() + at, all.begin() + at + 1, (all.size() - at - 1) * sizeof(IndexedHeader));
+  memmove(all.begin() + index, all.begin() + index + 1,
+      (all.size() - index - 1) * sizeof(IndexedHeader));
   if (spilled) {
     spilledIndexed.removeLast();
   } else {
@@ -809,7 +879,42 @@ void HttpHeaders::unsetIndexed(uint id) {
   }
 }
 
+void HttpHeaders::setIndexed(uint id, kj::StringPtr value) {
+  if (value == nullptr) {
+    // As a slot per id held: an empty value is no value.
+    unsetIndexed(id);
+    return;
+  }
+  KJ_REQUIRE(static_cast<uint32_t>(value.size()) == value.size(), "HTTP header value too long",
+      value.size());
+  putOwn(id, value.begin(), static_cast<uint32_t>(value.size()));
+}
+
+void HttpHeaders::unsetIndexed(uint id) {
+  if (base != nullptr && base->findOwn(id) != nullptr) {
+    // Hide `base`'s value.
+    putOwn(id, nullptr, 0);
+    return;
+  }
+  auto header = findOwn(id);
+  if (header != nullptr) {
+    eraseOwn(header - indexed().begin());
+  }
+}
+
+void HttpHeaders::materializeUnindexed() {
+  // Takes a copy of `base`'s unindexed headers, so that they can be changed.
+  if (!unindexedFromBase) return;
+  kj::Vector<Header> all(base->unindexedHeaders.size() + unindexedHeaders.size());
+  all.addAll(base->unindexedHeaders);
+  all.addAll(unindexedHeaders);
+  unindexedHeaders = kj::mv(all);
+  unindexedFromBase = false;
+}
+
 void HttpHeaders::clear() {
+  requireUnshared();
+  releaseBase();
   inlineCount = 0;
   spilled = false;
   spilledIndexed.clear();
@@ -819,21 +924,62 @@ void HttpHeaders::clear() {
 }
 
 size_t HttpHeaders::size() const {
-  return indexed().size() + unindexedHeaders.size();
+  size_t result = unindexedHeaders.size();
+  if (unindexedFromBase) {
+    result += base->unindexedHeaders.size();
+  }
+  if (base == nullptr) {
+    return result + indexed().size();
+  }
+
+  result += base->indexed().size();
+  for (auto& header: indexed()) {
+    bool inBase = base->findOwn(header.id) != nullptr;
+    if (header.value == nullptr) {
+      // A tombstone always hides one of base's.
+      --result;
+    } else if (!inBase) {
+      ++result;
+    }
+  }
+  return result;
 }
 
 HttpHeaders HttpHeaders::clone() const {
   HttpHeaders result(*table);
 
-  for (auto& header: indexed()) {
-    result.setIndexed(header.id, result.cloneToOwn(header.get()));
-  }
+  // Copy every string into one allocation.
+  size_t total = 0;
+  size_t unindexedCount = 0;
+  forEachIndexed([&](uint, kj::StringPtr value) {
+    total += value.size() + 1;
+  });
+  forEachUnindexed([&](const Header& header) {
+    total += header.name.size() + header.value.size() + 2;
+    ++unindexedCount;
+  });
+  if (total == 0) return result;
 
-  result.unindexedHeaders.resize(unindexedHeaders.size());
-  for (auto i: kj::indices(unindexedHeaders)) {
-    result.unindexedHeaders[i].name = result.cloneToOwn(unindexedHeaders[i].name);
-    result.unindexedHeaders[i].value = result.cloneToOwn(unindexedHeaders[i].value);
-  }
+  auto storage = kj::heapArray<char>(total);
+  char* pos = storage.begin();
+  auto copy = [&](kj::StringPtr str) {
+    memcpy(pos, str.begin(), str.size());
+    pos[str.size()] = '\0';
+    kj::StringPtr copied(pos, str.size());
+    pos += str.size() + 1;
+    return copied;
+  };
+
+  forEachIndexed([&](uint id, kj::StringPtr value) {
+    result.appendOwn(id, copy(value));
+  });
+  result.unindexedHeaders.reserve(unindexedCount);
+  forEachUnindexed([&](const Header& header) {
+    auto name = copy(header.name);
+    result.unindexedHeaders.add(Header { name, copy(header.value) });
+  });
+  KJ_ASSERT(pos == storage.end());
+  result.ownedStrings.add(kj::mv(storage));
 
   return result;
 }
@@ -841,16 +987,81 @@ HttpHeaders HttpHeaders::clone() const {
 HttpHeaders HttpHeaders::cloneShallow() const {
   HttpHeaders result(*table);
 
-  for (auto& header: indexed()) {
-    result.setIndexed(header.id, header.get());
+  if (base == nullptr) {
+    result.copyOwnFrom(*this);
+  } else {
+    forEachIndexed([&](uint id, kj::StringPtr value) {
+      result.appendOwn(id, value);
+    });
   }
 
-  result.unindexedHeaders.resize(unindexedHeaders.size());
-  for (auto i: kj::indices(unindexedHeaders)) {
-    result.unindexedHeaders[i] = unindexedHeaders[i];
+  size_t unindexedCount = unindexedHeaders.size() +
+      (unindexedFromBase ? base->unindexedHeaders.size() : 0);
+  if (unindexedCount > 0) {
+    result.unindexedHeaders.reserve(unindexedCount);
+    forEachUnindexed([&](const Header& header) {
+      result.unindexedHeaders.add(header);
+    });
   }
 
   return result;
+}
+
+HttpHeaders HttpHeaders::derive() const {
+  HttpHeaders result(*table);
+
+  const HttpHeaders* root = this;
+  if (base == nullptr) {
+    result.unindexedFromBase = true;
+  } else {
+    // Refer to the same set this one does, with a copy of the changes made to this one.
+    root = base;
+    result.copyOwnFrom(*this);
+    result.unindexedFromBase = unindexedFromBase;
+    if (unindexedHeaders.size() > 0) {
+      result.unindexedHeaders.reserve(unindexedHeaders.size());
+      result.unindexedHeaders.addAll(unindexedHeaders);
+    }
+    // This set may own some of the strings its changes refer to, and unlike `base` it may go away
+    // first.
+    result.copyChangedStrings();
+  }
+
+  kj::atomicAddFetch(&root->derivedCount, 1u, kj::AtomicMemoryOrder::RELAXED);
+  result.base = root;
+  return result;
+}
+
+void HttpHeaders::copyChangedStrings() {
+  // Points this set's own entries at copies of their strings, in one allocation that it owns.
+  size_t total = 0;
+  for (auto& header: indexed()) {
+    if (header.value != nullptr) total += header.size + 1;
+  }
+  for (auto& header: unindexedHeaders) {
+    total += header.name.size() + header.value.size() + 2;
+  }
+  if (total == 0) return;
+
+  auto storage = kj::heapArray<char>(total);
+  char* pos = storage.begin();
+  auto copy = [&](const char* str, size_t size) {
+    memcpy(pos, str, size);
+    pos[size] = '\0';
+    const char* copied = pos;
+    pos += size + 1;
+    return copied;
+  };
+  for (auto& header: indexedMut()) {
+    if (header.value != nullptr) header.value = copy(header.value, header.size);
+  }
+  for (auto& header: unindexedHeaders) {
+    header.name = kj::StringPtr(copy(header.name.begin(), header.name.size()), header.name.size());
+    header.value =
+        kj::StringPtr(copy(header.value.begin(), header.value.size()), header.value.size());
+  }
+  KJ_ASSERT(pos == storage.end());
+  ownedStrings.add(kj::mv(storage));
 }
 
 kj::StringPtr HttpHeaders::cloneToOwn(kj::StringPtr str) {
@@ -881,6 +1092,7 @@ void HttpHeaders::set(HttpHeaderId id, kj::StringPtr value) {
 void HttpHeaders::setPtr(HttpHeaderId id, kj::StringPtr value) {
   id.requireFrom(*table);
   requireValidHeaderValue(value, id);
+  requireUnshared();
 
   setIndexed(id.id, value);
 }
@@ -917,6 +1129,7 @@ void HttpHeaders::add(kj::String&& name, kj::String&& value) {
 }
 
 void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
+  requireUnshared();
   KJ_IF_SOME(id, table->stringToId(name)) {
     auto existing = findIndexed(id.id);
     if (existing == nullptr) {
@@ -942,6 +1155,30 @@ void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
   } else {
     unindexedHeaders.add(Header {name, value});
   }
+}
+
+void HttpHeaders::unset(kj::StringPtr name) {
+  requireUnshared();
+  KJ_IF_SOME(id, table->stringToId(name)) {
+    unsetIndexed(id.id);
+  }
+
+  // Duplicate Set-Cookie headers are kept unindexed even though the name may be indexed, so look
+  // there too.
+  bool found = false;
+  forEachUnindexed([&](const Header& header) {
+    if (headerNamesEqual(header.name, name)) found = true;
+  });
+  if (!found) return;
+
+  materializeUnindexed();
+  size_t kept = 0;
+  for (auto& header: unindexedHeaders) {
+    if (!headerNamesEqual(header.name, name)) {
+      unindexedHeaders[kept++] = header;
+    }
+  }
+  unindexedHeaders.truncate(kept);
 }
 
 void HttpHeaders::takeOwnership(kj::String&& string) {
@@ -1362,18 +1599,18 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
         func(static_cast<uint>(i), connectionHeaders[i]);
       }
     }
-    for (auto& header: indexed()) {
-      if (header.id >= connectionHeaders.size()) {
-        func(header.id, header.get());
+    forEachIndexed([&](uint id, kj::StringPtr value) {
+      if (id >= connectionHeaders.size()) {
+        func(id, value);
       }
-    }
+    });
   };
   forEachValue([&](uint i, kj::StringPtr value) {
     size += table->idToString(HttpHeaderId(table, i)).size() + value.size() + 4;
   });
-  for (auto& header: unindexedHeaders) {
+  forEachUnindexed([&](const Header& header) {
     size += header.name.size() + header.value.size() + 4;
-  }
+  });
 
   String result = heapString(size);
   char* ptr = result.begin();
@@ -1384,9 +1621,9 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
   forEachValue([&](uint i, kj::StringPtr value) {
     ptr = kj::_::fill(ptr, table->idToString(HttpHeaderId(table, i)), colon, value, newline);
   });
-  for (auto& header: unindexedHeaders) {
+  forEachUnindexed([&](const Header& header) {
     ptr = kj::_::fill(ptr, header.name, colon, header.value, newline);
-  }
+  });
   ptr = kj::_::fill(ptr, newline);
 
   KJ_ASSERT(ptr == result.end());
