@@ -1059,14 +1059,37 @@ static kj::Maybe<uint64_t> consumeNumber64(const char*& ptr) {
   }
 }
 
-static kj::StringPtr consumeLine(char*& ptr, bool* sawFolding = nullptr) {
+static inline bool wordHasLineEnd(uint64_t word) {
+  // Whether any byte of `word` is '\0', '\r' or '\n'. A byte of `x` is zero exactly when the
+  // classic test below sets its top bit; it can set the top bit of a higher byte too, but only
+  // when a lower one is zero, so the result is still exact for "any".
+  constexpr uint64_t ONES = 0x0101010101010101ull;
+  constexpr uint64_t HIGH = 0x8080808080808080ull;
+  auto hasZero = [](uint64_t x) { return (x - ONES) & ~x & HIGH; };
+  return (hasZero(word) | hasZero(word ^ (ONES * '\r')) | hasZero(word ^ (ONES * '\n'))) != 0;
+}
+
+static kj::StringPtr consumeLine(char*& ptr, bool* sawFolding = nullptr,
+                                 const char* end = nullptr) {
   // If `sawFolding` is non-null, it is set to true if an obsolete "line folding" continuation was
   // encountered. Callers that parse header fields use this to reject the message (see
   // parseHeaders()).
+  //
+  // If `end` is non-null, it points to the '\0' that terminates the text, and the scan skips
+  // eight bytes at a time while none of them can end the line. It never reads past `end`.
   char* start = skipSpace(ptr);
   char* p = start;
 
   for (;;) {
+    if (end != nullptr) {
+      while (end - p >= 8) {
+        uint64_t word;
+        memcpy(&word, p, sizeof(word));
+        if (wordHasLineEnd(word)) break;
+        p += 8;
+      }
+    }
+
     switch (*p) {
       case '\0':
         ptr = p;
@@ -1217,7 +1240,7 @@ HttpHeaders::RequestConnectOrProtocolError HttpHeaders::tryParseRequestOrConnect
   }
 
   // Ignore rest of line. Don't care about "HTTP/1.1" or whatever.
-  consumeLine(ptr);
+  consumeLine(ptr, nullptr, end);
 
   if (!parseHeaders(ptr, end)) {
     return ProtocolError { 400, "Bad Request",
@@ -1277,7 +1300,7 @@ bool HttpHeaders::parseHeaders(char* ptr, char* end) {
   while (*ptr != '\0') {
     KJ_IF_SOME(name, consumeHeaderName(ptr)) {
       bool sawFolding = false;
-      kj::StringPtr line = consumeLine(ptr, &sawFolding);
+      kj::StringPtr line = consumeLine(ptr, &sawFolding, end);
       if (sawFolding) {
         // Obsolete line folding (a continuation line beginning with whitespace). RFC 9112 section
         // 7.1.4 says a server MUST either reject such a message with 400 (Bad Request) or replace

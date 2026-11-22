@@ -716,6 +716,44 @@ KJ_TEST("HttpHeaderTable matches names case-insensitively, at any length") {
   KJ_EXPECT(built->idToString(first) == "X-Same");
 }
 
+KJ_TEST("HttpHeaders parses header values of every length") {
+  HttpHeaderTable::Builder builder;
+  auto hValue = builder.add("X-Value");
+  auto table = builder.build();
+
+  for (auto length: kj::range(0, 50)) {
+    auto value = kj::heapString(length);
+    for (auto i: kj::indices(value)) value[i] = 'a' + (i % 26);
+
+    // Each line ending, and the header both last and followed by another.
+    for (kj::StringPtr ending: {"\r\n"_kj, "\n"_kj}) {
+      auto text = kj::str("GET / HTTP/1.1", ending, "X-Value: ", value, ending,
+          "X-Other: ", value, ending, "X-Value: ", value, ending, ending);
+      HttpHeaders headers(*table);
+      auto result = headers.tryParseRequest(text.asArray());
+      KJ_ASSERT(result.is<HttpHeaders::Request>(), length);
+      if (length == 0) {
+        // An empty value is no value.
+        KJ_EXPECT(headers.get(hValue) == kj::none, length);
+      } else {
+        KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(hValue)) == kj::str(value, ", ", value), length);
+      }
+      KJ_EXPECT(headers.size() == (length == 0 ? 1 : 2), length);
+    }
+
+    // Folding is still rejected wherever it falls.
+    auto folded = kj::str("GET / HTTP/1.1\r\nX-Value: ", value, "\r\n more\r\n\r\n");
+    HttpHeaders headers(*table);
+    KJ_EXPECT(headers.tryParseRequest(folded.asArray()).is<HttpHeaders::ProtocolError>(), length);
+
+    // So is a NUL in a value.
+    auto nul = kj::str("GET / HTTP/1.1\r\nX-Value: ", value, "x\r\n\r\n");
+    nul[nul.size() - 5] = '\0';
+    HttpHeaders headers2(*table);
+    KJ_EXPECT(headers2.tryParseRequest(nul.asArray()).is<HttpHeaders::ProtocolError>(), length);
+  }
+}
+
 KJ_TEST("HttpHeaders Set-Cookie handling") {
   HttpHeaderTable::Builder builder;
   auto hCookie = builder.add("Cookie");
