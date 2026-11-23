@@ -639,8 +639,13 @@ using DebugParam = typename DebugParam_<T>::Type;
 // that the function containing the check doesn't take the argument's address: a local variable
 // can stay in registers, rather than being written to the stack every time the check passes.
 //
-// Copies don't change the description: everything is stringified before the call returns, while
-// any temporaries in the macro's arguments are still alive.
+// The arguments are formatted before the call returns, while temporaries in the macro's
+// arguments are still alive.
+//
+// StringPtr is passed by reference. A caller logging a local copy may need a stack slot for it
+// even when KJ_LOG is filtered. A caller borrowing an existing StringPtr can pass its address.
+// The formatter reads the view when it reaches that argument, so it sees any reassignment by an
+// earlier argument's formatter.
 
 template <typename T>
 struct DebugConditionParam_ { typedef DebugParam<T> Type; };
