@@ -725,7 +725,7 @@ public:
 
     template <typename T>
     static KJ_FAIL_COLD_ String stringifyValue(const void* value) {
-      // `str(value)` on a non-const lvalue, as the macro's arguments are named parameters.
+      // Recover the T& captured by of() so str() sees the same const qualification.
       return str(*const_cast<T*>(static_cast<const T*>(value)));
     }
 
