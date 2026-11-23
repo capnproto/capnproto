@@ -604,10 +604,9 @@ inline constexpr bool debugIsSmallClass = requires {
   requires __is_trivially_copyable(T);
   requires __is_trivially_constructible(T, From);
 };
-// Whether `T` is a complete class that can be copied as cheaply as two pointers, e.g. a StringPtr
-// or an iterator, from a `From`, the reference to the value that is copied. Being trivially
-// copyable isn't enough: for a non-const lvalue, a constructor template taking `U&&` is a better
-// match than the copy constructor, and could make a copy that is stringified differently.
+// A class qualifies if it fits in two pointers, is trivially copyable, and is trivially
+// constructible from the source reference `From`. For a non-const lvalue, a constructor template
+// taking `U&&` can be a better match than the copy constructor and produce a different value.
 
 template <typename T, typename From>
 inline constexpr bool debugByValue = __is_trivially_copyable(T);
