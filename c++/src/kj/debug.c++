@@ -229,7 +229,7 @@ String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNu
   String comparisonValue = style == ASSERTION && comparison != nullptr
       ? stringifyDebugComparison(*comparison) : String();
 
-  KJ_STACK_ARRAY(String, argValues, args.size(), STACK_ARGS, 32);
+  SmallArray<String, STACK_ARGS> argValues(args.size());
   for (auto i: kj::indices(args)) {
     argValues[i] = stringify(args[i]);
   }
