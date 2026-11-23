@@ -55,6 +55,11 @@ def kj_configure():
         build_setting_default = True,
     )
 
+    bool_flag(
+        name = "kj_crc32_hash",
+        build_setting_default = False,
+    )
+
     # Settings to use in select() expressions
     native.config_setting(
         name = "use_openssl",
@@ -101,6 +106,12 @@ def kj_configure():
         name = "use_kj_enable_irequire",
         flag_values = {"kj_enable_irequire": "True"},
     )
+
+    native.config_setting(
+        name = "use_kj_crc32_hash",
+        flag_values = {"kj_crc32_hash": "True"},
+    )
+
     cc_library(
         name = "kj-defines",
         defines = select({
@@ -131,5 +142,8 @@ def kj_configure():
             "//src/kj:use_kj_enable_irequire": ["KJ_ENABLE_IREQUIRE=1"],
             # Unsupported: kj/common.h will fail to compile.
             "//conditions:default": ["KJ_ENABLE_IREQUIRE=0"],
+        }) + select({
+            "//src/kj:use_kj_crc32_hash": ["KJ_HAS_CRC32=1"],
+            "//conditions:default": [],
         }),
     )
