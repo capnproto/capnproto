@@ -786,7 +786,7 @@ char sharedStringsAnchor = 0;
 kj::Array<char> holdSharedStrings(kj::Arc<SharedStrings> shared) {
   // An entry for `ownedStrings` that keeps `shared` alive. The array itself is a placeholder:
   // attach() needs something to point at.
-  return kj::arrayPtr(&sharedStringsAnchor, 1).attach(kj::mv(shared));
+  return kj::arrayPtr(sharedStringsAnchor).attach(kj::mv(shared));
 }
 
 }  // namespace
