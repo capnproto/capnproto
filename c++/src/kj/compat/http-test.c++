@@ -26,10 +26,9 @@
 #include <kj/test.h>
 #include <kj/encoding.h>
 #include <kj/vector.h>
+#include <kj/mutex.h>
+#include <kj/thread.h>
 #include <map>
-#if !_WIN32
-#include <signal.h>
-#endif
 
 #if KJ_HTTP_TEST_USE_OS_PIPE
 // Run the test using OS-level socketpairs. (See http-socketpair-test.c++.)
@@ -800,14 +799,6 @@ KJ_TEST("HttpHeaders derive() starts as the base and keeps only its own changes"
     KJ_EXPECT(base.toString() == baseText);
     KJ_EXPECT(KJ_ASSERT_NONNULL(base.get(ids[1])) == "one");
 
-    // And can't change while derived exists.
-    KJ_EXPECT_THROW_MESSAGE("sets derived from it exist", base.setPtr(ids[2], "x"));
-    KJ_EXPECT_THROW_MESSAGE("sets derived from it exist", base.unset(ids[1]));
-    KJ_EXPECT_THROW_MESSAGE("sets derived from it exist", base.addPtrPtr("X-New", "x"));
-    KJ_EXPECT_THROW_MESSAGE("sets derived from it exist", base.unset("X-Un"));
-    KJ_EXPECT_THROW_MESSAGE("sets derived from it exist", base.clear());
-    KJ_EXPECT(base.toString() == baseText);
-
     // Putting a hidden header back.
     derived.setPtr(ids[1], "again");
     KJ_EXPECT(KJ_ASSERT_NONNULL(derived.get(ids[1])) == "again");
@@ -843,7 +834,6 @@ KJ_TEST("HttpHeaders derive() starts as the base and keeps only its own changes"
         "X-H3=three X-H5=FIVE, more X-H290=farther X-Un2=u2 X-Un3=u3", kj::strArray(seen, " "));
   }
 
-  // With no derived sets left, the base can change again.
   base.setPtr(ids[2], "two");
   KJ_EXPECT(KJ_ASSERT_NONNULL(base.get(ids[2])) == "two");
 }
@@ -903,38 +893,241 @@ KJ_TEST("HttpHeaders derive() from a derived set refers to the same base") {
   auto moved = kj::mv(s);
   KJ_EXPECT(s.size() == 0);
   KJ_EXPECT(moved.size() == 41);
-  KJ_EXPECT_THROW_MESSAGE("sets derived from it exist", base.clear());
   second = kj::none;
-  KJ_EXPECT_THROW_MESSAGE("sets derived from it exist", base.clear());
 
-  // Clearing a derived set lets go of the base.
-  moved.clear();
+  // Clearing the base leaves the derived set as it was.
+  auto movedText = moved.toString();
   base.clear();
   KJ_EXPECT(base.size() == 0);
+  KJ_EXPECT(moved.toString() == movedText);
+  KJ_EXPECT(moved.size() == 41);
 }
 
-#if !_WIN32
-KJ_TEST("HttpHeaders aborts if a set with derived sets is moved or destroyed") {
-  HttpHeaderTable table;
-  KJ_EXPECT_SIGNAL(SIGABRT, {
-    auto base = kj::heap<HttpHeaders>(table);
-    base->setPtr(HttpHeaderId::HOST, "h");
-    auto derived = base->derive();
+KJ_TEST("HttpHeaders derived sets keep their contents when their base changes or goes away") {
+  HttpHeaderTable::Builder builder;
+  kj::Vector<kj::String> names;  // The table refers to them.
+  kj::Vector<HttpHeaderId> ids;
+  for (auto i: kj::range(0, 20)) {
+    ids.add(builder.add(names.add(kj::str("X-H", i))));
+  }
+  auto table = builder.build();
+
+  // A base that owns some of its strings and refers to others. Under ASan, reading one of its
+  // own strings after it has gone fails.
+  auto borrowed = kj::str("borrowed");
+  auto makeBase = [&]() {
+    auto base = kj::heap<HttpHeaders>(*table);
+    base->setPtr(ids[1], borrowed);
+    base->set(ids[2], kj::str("owned"));
+    base->addPtrPtr("X-H3", "three");
+    base->addPtrPtr("x-h3", "joined");  // The joined value is a string the base owns.
+    base->add(kj::str("X-Un"), kj::str("owned unindexed"));
+    return base;
+  };
+  kj::StringPtr baseText =
+      "X-H1: borrowed\r\nX-H2: owned\r\nX-H3: three, joined\r\nX-Un: owned unindexed\r\n\r\n";
+
+  {
+    // Destroyed.
+    auto base = makeBase();
+    KJ_EXPECT(base->toString() == baseText, base->toString());
+    auto plain = base->derive();
+    auto changed = base->derive();
+    changed.setPtr(ids[4], "four");
+    changed.unset(ids[1]);
+    changed.addPtrPtr("X-Mine", "mine");
+    kj::StringPtr changedText =
+        "X-H2: owned\r\nX-H3: three, joined\r\nX-H4: four\r\nX-Un: owned unindexed\r\n"
+        "X-Mine: mine\r\n\r\n";
+    KJ_EXPECT(changed.toString() == changedText, changed.toString());
+
     base = nullptr;
-  });
-  KJ_EXPECT_SIGNAL(SIGABRT, {
-    HttpHeaders base(table);
-    auto derived = base.derive();
-    HttpHeaders moved = kj::mv(base);
-  });
-  KJ_EXPECT_SIGNAL(SIGABRT, {
-    HttpHeaders base(table);
-    auto derived = base.derive();
-    HttpHeaders other(table);
-    base = kj::mv(other);
-  });
+    KJ_EXPECT(plain.toString() == baseText, plain.toString());
+    KJ_EXPECT(plain.size() == 4);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(plain.get(ids[3])) == "three, joined");
+    KJ_EXPECT(changed.toString() == changedText, changed.toString());
+    KJ_EXPECT(changed.get(ids[1]) == kj::none);
+
+    // They're ordinary sets now.
+    plain.setPtr(ids[1], "replaced");
+    plain.unset("X-Un");
+    KJ_EXPECT(plain.toString() == "X-H1: replaced\r\nX-H2: owned\r\nX-H3: three, joined\r\n\r\n",
+        plain.toString());
+    auto again = changed.derive();
+    KJ_EXPECT(again.toString() == changedText, again.toString());
+    changed = HttpHeaders(*table);
+    KJ_EXPECT(again.toString() == changedText, again.toString());
+  }
+
+  {
+    // Changed, in each way it can be.
+    auto base = makeBase();
+    auto first = base->derive();
+    base->setPtr(ids[1], "changed");
+    KJ_EXPECT(first.toString() == baseText, first.toString());
+
+    auto second = base->derive();  // Sees the change.
+    auto secondText = second.toString();
+    KJ_EXPECT(KJ_ASSERT_NONNULL(second.get(ids[1])) == "changed");
+    base->unset(ids[2]);
+    auto third = base->derive();
+    base->addPtrPtr("X-New", "n");
+    auto fourth = base->derive();
+    base->unset("X-Un");
+    auto fifth = base->derive();
+    base->set(ids[5], kj::str("five"));
+    auto sixth = base->derive();
+    base->clear();
+    auto seventh = base->derive();
+    HttpHeaders other(*table);
+    other.takeOwnership(kj::mv(*base));
+
+    KJ_EXPECT(first.toString() == baseText, first.toString());
+    KJ_EXPECT(second.toString() == secondText, second.toString());
+    KJ_EXPECT(third.get(ids[2]) == kj::none);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(fourth.get(ids[1])) == "changed");
+    KJ_EXPECT(fourth.toString().endsWith("X-Un: owned unindexed\r\nX-New: n\r\n\r\n"),
+        fourth.toString());
+    KJ_EXPECT(fifth.toString() == "X-H1: changed\r\nX-H3: three, joined\r\nX-New: n\r\n\r\n",
+        fifth.toString());
+    KJ_EXPECT(KJ_ASSERT_NONNULL(sixth.get(ids[5])) == "five");
+    KJ_EXPECT(seventh.size() == 0);
+
+    // The strings the base owned when each was detached stay alive for it.
+    base = nullptr;
+    other = HttpHeaders(*table);
+    KJ_EXPECT(first.toString() == baseText, first.toString());
+    KJ_EXPECT(second.toString() == secondText, second.toString());
+    KJ_EXPECT(KJ_ASSERT_NONNULL(sixth.get(ids[5])) == "five");
+    KJ_EXPECT(KJ_ASSERT_NONNULL(sixth.get(ids[3])) == "three, joined");
+  }
+
+  {
+    // Moved and assigned: the derived sets follow it. Assigned to: they're detached.
+    auto base = makeBase();
+    auto derived = base->derive();
+    derived.setPtr(ids[6], "six");
+    auto derivedText = derived.toString();
+
+    HttpHeaders moved = kj::mv(*base);
+    base = nullptr;
+    KJ_EXPECT(derived.toString() == derivedText, derived.toString());
+    auto later = moved.derive();
+
+    HttpHeaders assigned(*table);
+    assigned = kj::mv(moved);
+    KJ_EXPECT(derived.toString() == derivedText, derived.toString());
+    KJ_EXPECT(later.toString() == baseText, later.toString());
+    assigned.setPtr(ids[7], "seven");
+    KJ_EXPECT(later.get(ids[7]) == kj::none);
+
+    assigned = HttpHeaders(*table);
+    KJ_EXPECT(derived.toString() == derivedText, derived.toString());
+    KJ_EXPECT(later.toString() == baseText, later.toString());
+  }
+
+  {
+    // A derived set assigned its base.
+    auto base = makeBase();
+    auto derived = base->derive();
+    auto other = base->derive();
+    derived = kj::mv(*base);
+    KJ_EXPECT(derived.toString() == baseText, derived.toString());
+    base = nullptr;
+    KJ_EXPECT(derived.toString() == baseText, derived.toString());
+    KJ_EXPECT(other.toString() == baseText, other.toString());
+  }
+
+  {
+    // A base assigned one of its derived sets.
+    auto base = makeBase();
+    auto derived = base->derive();
+    derived.setPtr(ids[8], "eight");
+    auto other = base->derive();
+    *base = kj::mv(derived);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(base->get(ids[8])) == "eight");
+    KJ_EXPECT(other.toString() == baseText, other.toString());
+    base = nullptr;
+    KJ_EXPECT(other.toString() == baseText, other.toString());
+  }
 }
-#endif
+
+KJ_TEST("HttpHeaders derived sets and their base can be used on different threads") {
+  HttpHeaderTable::Builder builder;
+  kj::Vector<kj::String> names;  // The table refers to them.
+  kj::Vector<HttpHeaderId> ids;
+  for (auto i: kj::range(0, 10)) {
+    ids.add(builder.add(names.add(kj::str("X-H", i))));
+  }
+  auto table = builder.build();
+
+  auto base = kj::heap<HttpHeaders>(*table);
+  base->set(ids[0], kj::str("zero"));
+  base->setPtr(ids[1], "one");
+  base->add(kj::str("X-Un"), kj::str("u"));
+
+  // Each thread derives from the base at the same time as the others, keeping some of the
+  // results, then destroys half of those while the main thread destroys the base, and finally
+  // checks the rest.
+  constexpr uint THREADS = 4;
+  constexpr uint PER_THREAD = 300;
+  constexpr uint DESTROYING = 100;
+  constexpr uint CHECKING = 200;
+  kj::MutexGuarded<uint> phase(0);  // Below DESTROYING, the number of threads done deriving.
+  bool ok[THREADS] = {};
+
+  kj::Vector<kj::Own<kj::Thread>> threads;
+  for (uint t = 0; t < THREADS; t++) {
+    threads.add(kj::heap<kj::Thread>([&, t]() {
+      struct Kept {
+        uint i;
+        HttpHeaders headers;
+      };
+      kj::Vector<Kept> kept;
+      for (uint i = 0; i < PER_THREAD; i++) {
+        auto derived = base->derive();
+        if (i % 2 == 1) derived.setPtr(ids[2 + t], "mine");
+        if (i % 3 == 0) continue;  // Destroyed at once.
+        kept.add(Kept { i, kj::mv(derived) });  // Moved, and moved again as `kept` grows.
+      }
+
+      {
+        auto lock = phase.lockExclusive();
+        ++*lock;
+      }
+      phase.when([](uint p) { return p >= DESTROYING; }, [](uint&) {});
+      for (uint k = 0; k < kept.size(); k += 2) {
+        kept[k].headers = HttpHeaders(*table);
+      }
+
+      phase.when([](uint p) { return p >= CHECKING; }, [](uint&) {});
+      auto is = [](kj::Maybe<kj::StringPtr> value, kj::StringPtr expected) {
+        KJ_IF_SOME(v, value) {
+          return v == expected;
+        }
+        return false;
+      };
+      bool good = true;
+      for (uint k = 1; k < kept.size(); k += 2) {
+        auto& headers = kept[k].headers;
+        bool mine = kept[k].i % 2 == 1;
+        good = good && is(headers.get(ids[0]), "zero") && is(headers.get(ids[1]), "one") &&
+            (mine ? is(headers.get(ids[2 + t]), "mine") : headers.get(ids[2 + t]) == kj::none) &&
+            headers.size() == (mine ? 4u : 3u) && headers.toString().endsWith("X-Un: u\r\n\r\n");
+      }
+      ok[t] = good;
+    }));
+  }
+
+  phase.when([&](uint p) { return p == THREADS; }, [&](uint& p) { p = DESTROYING; });
+  base = nullptr;
+  *phase.lockExclusive() = CHECKING;
+  threads.clear();
+
+  for (auto t: kj::zeroTo(THREADS)) {
+    KJ_EXPECT(ok[t], t);
+  }
+}
 
 KJ_TEST("HttpHeaders unset() by name") {
   HttpHeaderTable::Builder builder;
@@ -1160,6 +1353,19 @@ KJ_TEST("HttpHeaders and derived sets match a model under random changes") {
       derived = HttpHeaders(*table);
       KJ_ASSERT(again.clone().toString() == againModel.toString(), round);
       KJ_ASSERT(again.cloneShallow().toString() == againModel.toString(), round);
+
+      // The base may change and go away while sets derived from it exist.
+      auto late = base.derive();
+      auto lateModel = baseModel.copy();
+      for (uint i = next(10); i > 0; i--) change(late, lateModel);
+      for (uint i = next(20); i > 0; i--) change(base, baseModel);
+      KJ_ASSERT(late.toString() == lateModel.toString(), round);
+      KJ_ASSERT(again.toString() == againModel.toString(), round);
+      KJ_ASSERT(base.toString() == baseModel.toString(), round);
+      base = HttpHeaders(*table);
+      KJ_ASSERT(late.toString() == lateModel.toString(), round);
+      KJ_ASSERT(late.size() == lateModel.indexed.size() + lateModel.unindexed.size(), round);
+      KJ_ASSERT(again.toString() == againModel.toString(), round);
 
       for (auto& id: ids) {
         auto expected = againModel.indexed.find(id.hashCode());

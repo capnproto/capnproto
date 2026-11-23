@@ -713,44 +713,200 @@ HttpHeaders::HttpHeaders(const HttpHeaderTable& table)
 
 namespace {
 
-[[noreturn]] void abortDerivedFrom(const char* what) {
-  // Carrying on would leave the derived sets referring to memory that's gone or changed.
-  KJ_LOG(FATAL, "HttpHeaders was moved or destroyed while sets derived from it existed", what);
-  abort();
+// The lists of sets made by derive() change under one of these locks, chosen by the base's
+// address. They're global rather than in the base so that they outlive it: a derived set being
+// destroyed on one thread must lock its base's list without knowing whether another thread is
+// destroying the base at the same time. Each is held only for a few pointer updates, or for
+// detaching the sets derived from one base, so a spinlock does.
+struct alignas(64) DerivedLock {
+  bool held = false;
+};
+DerivedLock derivedLocks[64];
+
+DerivedLock& derivedLockFor(const void* base) {
+  uint64_t bits = reinterpret_cast<uintptr_t>(base);
+  return derivedLocks[(bits * 0x9e3779b97f4a7c15ull) >> 58];
+}
+
+void acquire(DerivedLock& lock) {
+  while (kj::atomicExchange(&lock.held, true, kj::AtomicMemoryOrder::ACQUIRE)) {
+    while (kj::atomicLoad(&lock.held, kj::AtomicMemoryOrder::RELAXED)) {}
+  }
+}
+
+void release(DerivedLock& lock) {
+  kj::atomicStore(&lock.held, false, kj::AtomicMemoryOrder::RELEASE);
+}
+
+class DerivedLockGuard {
+public:
+  explicit DerivedLockGuard(const void* base): first(derivedLockFor(base)), second(nullptr) {
+    acquire(first);
+  }
+  DerivedLockGuard(const void* a, const void* b)
+      : first(derivedLockFor(a)), second(&derivedLockFor(b)) {
+    // Both, in address order so that two threads never wait on each other.
+    if (second == &first) {
+      second = nullptr;
+      acquire(first);
+    } else if (second < &first) {
+      acquire(*second);
+      acquire(first);
+    } else {
+      acquire(first);
+      acquire(*second);
+    }
+  }
+  ~DerivedLockGuard() noexcept {
+    release(first);
+    if (second != nullptr) release(*second);
+  }
+  KJ_DISALLOW_COPY_AND_MOVE(DerivedLockGuard);
+
+private:
+  DerivedLock& first;
+  DerivedLock* second;
+};
+
+template <typename T>
+void releaseStore(T*& field, T* value) {
+  kj::atomicStore(&field, value, kj::AtomicMemoryOrder::RELEASE);
+}
+
+// The strings a set owned when it was detached from the sets derived from it, now owned jointly
+// by that set and each of them, since all may refer to them.
+struct SharedStrings final: public kj::AtomicRefcounted {
+  explicit SharedStrings(kj::Vector<kj::Array<char>> strings): strings(kj::mv(strings)) {}
+
+  kj::Vector<kj::Array<char>> strings;
+};
+
+char sharedStringsAnchor = 0;
+
+kj::Array<char> holdSharedStrings(kj::Arc<SharedStrings> shared) {
+  // An entry for `ownedStrings` that keeps `shared` alive. The array itself is a placeholder:
+  // attach() needs something to point at.
+  return kj::arrayPtr(&sharedStringsAnchor, 1).attach(kj::mv(shared));
 }
 
 }  // namespace
 
 HttpHeaders::HttpHeaders(HttpHeaders&& other) noexcept
-    : table(other.table),
-      ownedStrings(kj::mv(other.ownedStrings)),
-      unindexedHeaders(kj::mv(other.unindexedHeaders)) {
-  if (other.loadDerivedCount() != 0) abortDerivedFrom("moved");
-  takeIndexed(other);
+    : table(other.table) {
+  takeFrom(other);
 }
 
 HttpHeaders& HttpHeaders::operator=(HttpHeaders&& other) noexcept {
   if (this != &other) {
-    if (loadDerivedCount() != 0) abortDerivedFrom("assigned to");
-    if (other.loadDerivedCount() != 0) abortDerivedFrom("moved");
+    prepareToChange();
     releaseBase();
     table = other.table;
-    ownedStrings = kj::mv(other.ownedStrings);
-    unindexedHeaders = kj::mv(other.unindexedHeaders);
-    takeIndexed(other);
+    takeFrom(other);
   }
   return *this;
 }
 
-void HttpHeaders::failShared() {
-  KJ_FAIL_REQUIRE("can't change an HttpHeaders while sets derived from it exist");
+void HttpHeaders::takeFrom(HttpHeaders& other) {
+  auto move = [&]() {
+    ownedStrings = kj::mv(other.ownedStrings);
+    unindexedHeaders = kj::mv(other.unindexedHeaders);
+    takeIndexed(other);
+  };
+
+  for (;;) {
+    auto otherBase = acquireLoad(other.base);
+    if (otherBase == nullptr) break;
+    // `other` is derived: take its place in its base's list. Under the lock, since its base may
+    // be detaching it on another thread.
+    DerivedLockGuard guard(otherBase);
+    if (other.base != otherBase) continue;  // Detached, or its base moved, meanwhile.
+    move();
+    base = otherBase;
+    other.base = nullptr;
+    nextDerived = other.nextDerived;
+    prevDerived = other.prevDerived;
+    other.nextDerived = nullptr;
+    other.prevDerived = nullptr;
+    if (nextDerived != nullptr) nextDerived->prevDerived = &nextDerived;
+    releaseStore(*prevDerived, this);
+    return;
+  }
+
+  if (acquireLoad(other.firstDerived) != nullptr) {
+    // `other` has derived sets: they follow it here.
+    DerivedLockGuard guard(&other, this);
+    move();
+    firstDerived = other.firstDerived;
+    other.firstDerived = nullptr;
+    if (firstDerived != nullptr) {
+      firstDerived->prevDerived = &firstDerived;
+      for (auto derived = firstDerived; derived != nullptr; derived = derived->nextDerived) {
+        releaseStore(derived->base, static_cast<const HttpHeaders*>(this));
+      }
+    }
+    return;
+  }
+
+  move();
+}
+
+void HttpHeaders::detachDerived() {
+  // Each derived set gets a copy of what it sees through this one, and a share of the strings
+  // this one owns, since those copies may refer to them. The strings this one adds later are its
+  // own again.
+  DerivedLockGuard guard(this);
+  auto derived = firstDerived;
+  if (derived == nullptr) return;
+
+  kj::Maybe<kj::Arc<SharedStrings>> shared;
+  if (!ownedStrings.empty()) {
+    auto s = kj::arc<SharedStrings>(kj::mv(ownedStrings));
+    ownedStrings = kj::Vector<kj::Array<char>>();
+    ownedStrings.add(holdSharedStrings(s.addRef()));
+    shared = kj::mv(s);
+  }
+
+  while (derived != nullptr) {
+    auto next = derived->nextDerived;
+    derived->absorbBase();
+    KJ_IF_SOME(s, shared) {
+      derived->ownedStrings.add(holdSharedStrings(s.addRef()));
+    }
+    derived->nextDerived = nullptr;
+    derived->prevDerived = nullptr;
+    // Last: once a derived set's thread sees this, it may go ahead and destroy it.
+    releaseStore(derived->base, static_cast<const HttpHeaders*>(nullptr));
+    derived = next;
+  }
+  releaseStore(firstDerived, static_cast<HttpHeaders*>(nullptr));
+}
+
+void HttpHeaders::absorbBase() {
+  if (indexed().size() == 0) {
+    // Nothing of its own: the base's entries, which are all values since it has no base, are
+    // exactly what it sees.
+    spilled = false;
+    spilledIndexed.clear();
+    copyOwnFrom(*base);
+  } else {
+    kj::Vector<IndexedHeader> merged(base->indexed().size() + indexed().size());
+    forEachIndexed([&](uint id, kj::StringPtr value) {
+      merged.add(IndexedHeader { id, static_cast<uint32_t>(value.size()), value.begin() });
+    });
+    inlineCount = 0;
+    spilled = false;
+    spilledIndexed.clear();
+    kj::memzero(setBits);
+    for (auto& header: merged) {
+      putOwn(header.id, header.value, header.size);
+    }
+  }
+  materializeUnindexed();
 }
 
 void HttpHeaders::destroyShared() {
   // The rest of the destructor, for sets that are, or are derived from, a base.
-  if (kj::atomicLoad(&derivedCount, kj::AtomicMemoryOrder::ACQUIRE) != 0) {
-    abortDerivedFrom("destroyed");
-  }
+  if (acquireLoad(firstDerived) != nullptr) detachDerived();
   releaseBase();
 }
 
@@ -763,17 +919,24 @@ const HttpHeaders::IndexedHeader* HttpHeaders::findIndexed(uint id) const {
 }
 
 void HttpHeaders::releaseBase() {
-  if (base != nullptr) {
-    kj::atomicSubFetch(&base->derivedCount, 1u, kj::AtomicMemoryOrder::RELEASE);
+  for (;;) {
+    auto current = acquireLoad(base);
+    if (current == nullptr) break;
+    DerivedLockGuard guard(current);
+    if (base != current) continue;  // Detached, or its base moved, meanwhile.
+    if (nextDerived != nullptr) nextDerived->prevDerived = prevDerived;
+    releaseStore(*prevDerived, nextDerived);
+    nextDerived = nullptr;
+    prevDerived = nullptr;
     base = nullptr;
+    break;
   }
   unindexedFromBase = false;
 }
 
 void HttpHeaders::takeIndexed(HttpHeaders& other) {
   // Copies only the inline entries in use, so neither the copy nor the uninitialized rest of the
-  // room is ever read. The base reference moves with the entries, so the count of sets derived
-  // from it is unchanged.
+  // room is ever read.
   inlineCount = other.inlineCount;
   spilled = other.spilled;
   for (uint i = 0; i < inlineCount; i++) {
@@ -783,13 +946,11 @@ void HttpHeaders::takeIndexed(HttpHeaders& other) {
   for (auto i: kj::indices(setBits)) {
     setBits[i] = other.setBits[i];
   }
-  base = other.base;
   unindexedFromBase = other.unindexedFromBase;
 
   other.inlineCount = 0;
   other.spilled = false;
   kj::memzero(other.setBits);
-  other.base = nullptr;
   other.unindexedFromBase = false;
 }
 
@@ -913,7 +1074,7 @@ void HttpHeaders::materializeUnindexed() {
 }
 
 void HttpHeaders::clear() {
-  requireUnshared();
+  prepareToChange();
   releaseBase();
   inlineCount = 0;
   spilled = false;
@@ -1022,13 +1183,20 @@ HttpHeaders HttpHeaders::derive() const {
       result.unindexedHeaders.reserve(unindexedHeaders.size());
       result.unindexedHeaders.addAll(unindexedHeaders);
     }
-    // This set may own some of the strings its changes refer to, and unlike `base` it may go away
-    // first.
+    // This set may own some of the strings its changes refer to, and may go away first.
     result.copyChangedStrings();
   }
 
-  kj::atomicAddFetch(&root->derivedCount, 1u, kj::AtomicMemoryOrder::RELAXED);
-  result.base = root;
+  {
+    // Link the result into `root`'s list. derive() is const, so other threads may be doing the
+    // same. The lock is released before returning, since moving the result takes it too.
+    DerivedLockGuard guard(root);
+    result.base = root;
+    result.prevDerived = &root->firstDerived;
+    result.nextDerived = root->firstDerived;
+    if (result.nextDerived != nullptr) result.nextDerived->prevDerived = &result.nextDerived;
+    releaseStore(root->firstDerived, &result);
+  }
   return result;
 }
 
@@ -1092,7 +1260,7 @@ void HttpHeaders::set(HttpHeaderId id, kj::StringPtr value) {
 void HttpHeaders::setPtr(HttpHeaderId id, kj::StringPtr value) {
   id.requireFrom(*table);
   requireValidHeaderValue(value, id);
-  requireUnshared();
+  prepareToChange();
 
   setIndexed(id.id, value);
 }
@@ -1129,7 +1297,7 @@ void HttpHeaders::add(kj::String&& name, kj::String&& value) {
 }
 
 void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
-  requireUnshared();
+  prepareToChange();
   KJ_IF_SOME(id, table->stringToId(name)) {
     auto existing = findIndexed(id.id);
     if (existing == nullptr) {
@@ -1158,7 +1326,7 @@ void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
 }
 
 void HttpHeaders::unset(kj::StringPtr name) {
-  requireUnshared();
+  prepareToChange();
   KJ_IF_SOME(id, table->stringToId(name)) {
     unsetIndexed(id.id);
   }
@@ -1188,6 +1356,8 @@ void HttpHeaders::takeOwnership(kj::Array<char>&& chars) {
   ownedStrings.add(kj::mv(chars));
 }
 void HttpHeaders::takeOwnership(HttpHeaders&& otherHeaders) {
+  // Sets derived from `otherHeaders` may refer to its strings, and this one could go away first.
+  otherHeaders.prepareToChange();
   for (auto& str: otherHeaders.ownedStrings) {
     ownedStrings.add(kj::mv(str));
   }
