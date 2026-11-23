@@ -598,35 +598,37 @@ namespace _ {  // private
 
 #if KJ_FAIL_BY_VALUE_
 
-template <typename T, typename From, typename = void>
-struct DebugIsSmallClass_ { static constexpr bool value = false; };
 template <typename T, typename From>
-struct DebugIsSmallClass_<T, From, decltype(void(sizeof(T)))> {
-  static constexpr bool value = __is_trivially_copyable(T) &&
-      __is_trivially_constructible(T, From) && sizeof(T) <= 2 * sizeof(void*);
+inline constexpr bool debugIsSmallClass = requires {
+  requires (sizeof(T) <= 2 * sizeof(void*));
+  requires __is_trivially_copyable(T);
+  requires __is_trivially_constructible(T, From);
 };
 // Whether `T` is a complete class that can be copied as cheaply as two pointers, e.g. a StringPtr
 // or an iterator, from a `From`, the reference to the value that is copied. Being trivially
 // copyable isn't enough: for a non-const lvalue, a constructor template taking `U&&` is a better
 // match than the copy constructor, and could make a copy that is stringified differently.
 
-template <typename T, typename From, bool = __is_class(T) || __is_union(T)>
-struct DebugByValue_ { static constexpr bool value = __is_trivially_copyable(T); };
 template <typename T, typename From>
-struct DebugByValue_<T, From, true>: DebugIsSmallClass_<T, From> {};
+inline constexpr bool debugByValue = __is_trivially_copyable(T);
+
 template <typename T, typename From>
-struct DebugByValue_<T&, From, false>: DebugByValue_<T, From> {};
+  requires (__is_class(T) || __is_union(T))
+inline constexpr bool debugByValue<T, From> = debugIsSmallClass<T, From>;
+
 template <typename T, typename From>
-struct DebugByValue_<T&&, From, false>: DebugByValue_<T, From> {};
-template <typename T, size_t s, typename From>
-struct DebugByValue_<T[s], From, false> { static constexpr bool value = false; };
+inline constexpr bool debugByValue<T&, From> = debugByValue<T, From>;
 template <typename T, typename From>
-struct DebugByValue_<T[], From, false> { static constexpr bool value = false; };
+inline constexpr bool debugByValue<T&&, From> = debugByValue<T, From>;
+template <typename T, size_t n, typename From>
+inline constexpr bool debugByValue<T[n], From> = false;
+template <typename T, typename From>
+inline constexpr bool debugByValue<T[], From> = false;
 // Whether `T`, ignoring references, is cheap to copy from a `From`: a scalar type (a number, enum
 // or pointer; non-class, non-array types are trivially copyable if and only if they are scalars),
-// or a small class (see DebugIsSmallClass_).
+// or a small class (see debugIsSmallClass).
 
-template <typename T, bool = DebugByValue_<T, T&&>::value>
+template <typename T, bool = debugByValue<T, T&&>>
 struct DebugParam_ { typedef T&& Type; };
 template <typename T>
 struct DebugParam_<T, true> { typedef Decay<T> Type; };
@@ -657,11 +659,9 @@ using DebugParam = T&&;
 
 #endif  // KJ_FAIL_BY_VALUE_, else
 
-template <typename T, typename = void>
-struct DebugIsComparison_ { static constexpr bool value = false; };
 template <typename T>
-struct DebugIsComparison_<T, decltype(void(debugComparison(instance<T&>())))> {
-  static constexpr bool value = true;
+inline constexpr bool debugIsComparison = requires(T& condition) {
+  debugComparison(condition);
 };
 // Whether a check's evaluated condition is a comparison, whose operands are shown when the check
 // fails: a DebugComparison, or the DebugComparisonOperands that DebugConditionParam passes one as.
@@ -699,7 +699,7 @@ public:
   struct ConditionFailed {};
   // The code that the check macros pass to fail() when their condition is false. The exception's
   // type is FAILED, and the first param is the evaluated condition. If it's a comparison (see
-  // DebugIsComparison_), its operands are shown after the condition's text, e.g.
+  // debugIsComparison), its operands are shown after the condition's text, e.g.
   // "expected a == b [1 == 2]". Anything else, e.g. a DebugExpression or the bool that `&&`
   // returns, isn't shown.
 
@@ -952,7 +952,7 @@ Exception Debug::makeFailureWithParams(S site, Code code, Params&&... params) {
 template <typename S, typename Condition, typename... Params>
 Exception Debug::makeFailureWithParams(S site, ConditionFailed code, Condition&& condition,
                                        Params&&... params) {
-  if constexpr (DebugIsComparison_<Decay<Condition>>::value) {
+  if constexpr (debugIsComparison<Decay<Condition>>) {
     const Comparison comparison = debugComparison(condition);
     if constexpr (sizeof...(Params) == 0) {
       return makeFailure(site, Exception::Type::FAILED, nullptr, &comparison);
@@ -975,7 +975,7 @@ inline void Debug::fail(S site, Code code, Params&&... params) {
 
 template <typename S, typename Condition, typename... Params>
 inline void Debug::fail(S site, ConditionFailed code, Condition&& condition, Params&&... params) {
-  if constexpr (DebugIsComparison_<Decay<Condition>>::value) {
+  if constexpr (debugIsComparison<Decay<Condition>>) {
     failImpl<S, ConditionFailed, DebugConditionParam<Condition>, DebugParam<Params>...>(
         site, code, kj::fwd<Condition>(condition), kj::fwd<Params>(params)...);
   } else {
@@ -991,7 +991,7 @@ inline void Debug::failUnlessUnwinding(S site, Code code, Params&&... params) {
 template <typename S, typename Condition, typename... Params>
 inline void Debug::failUnlessUnwinding(S site, ConditionFailed code, Condition&& condition,
                                        Params&&... params) {
-  if constexpr (DebugIsComparison_<Decay<Condition>>::value) {
+  if constexpr (debugIsComparison<Decay<Condition>>) {
     failUnlessUnwindingImpl<S, ConditionFailed, DebugConditionParam<Condition>,
                             DebugParam<Params>...>(
         site, code, kj::fwd<Condition>(condition), kj::fwd<Params>(params)...);
@@ -1176,7 +1176,7 @@ String KJ_STRINGIFY(DebugComparison<Left, Right, Op>& cmp) {
 
 #if KJ_FAIL_BY_VALUE_
 
-template <typename T, bool = DebugByValue_<T, T&>::value>
+template <typename T, bool = debugByValue<T, T&>>
 struct DebugOperandByValue_ { static constexpr bool value = false; };
 template <typename T>
 struct DebugOperandByValue_<T, true> {
@@ -1188,7 +1188,7 @@ template <typename T>
 struct DebugOperand_<T, true> { typedef Decay<T> Type; };
 template <typename T>
 using DebugOperand = typename DebugOperand_<T>::Type;
-// How DebugComparisonOperands holds an operand of type `T`: cheap ones (see DebugByValue_; they
+// How DebugComparisonOperands holds an operand of type `T`: cheap ones (see debugByValue; they
 // are copied from the DebugComparison's member, a `T&`) that fit in a register by value,
 // everything else by reference to the operand in the DebugComparison. So
 // DebugComparisonOperands always fits in two registers: a bigger one would be passed on the
