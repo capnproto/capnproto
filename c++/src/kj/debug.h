@@ -692,9 +692,9 @@ public:
   template <typename... Params>
   static KJ_FAIL_INLINE_ void log(const char* file, int line, LogSeverity severity,
                                   const char* macroArgs, Params&&... params);
-  // Logs a message. Used by KJ_LOG, which only calls it if `shouldLog(severity)`. Forwards to the
-  // out-of-line logImpl(), passing cheap arguments by value (see `DebugParam`), so that like a
-  // check, a KJ_LOG costs no stack in the function containing it.
+  // Used by KJ_LOG when shouldLog(severity) is true. logImpl() builds the argument array out of
+  // line, so the caller can keep cheap arguments in registers (see DebugParam). An argument passed
+  // by reference may still need stack space in the caller.
 
   struct ConditionFailed {};
   // The code that the check macros pass to fail() when their condition is false. The exception's
