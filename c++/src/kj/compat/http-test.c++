@@ -1187,6 +1187,40 @@ KJ_TEST("HttpHeaders frees the strings of a set detached many times") {
   KJ_EXPECT(KJ_ASSERT_NONNULL(first.get(id)) == "0");
 }
 
+KJ_TEST("HttpHeaders derived sets keep unindexed headers from their base after unset() by name") {
+  // unset() by name takes a copy of the base's unindexed headers. Once they're the derived set's
+  // own entries, nothing records which came from the base, so their names and values must be
+  // copied then, not left pointing at the base's strings.
+  HttpHeaderTable::Builder builder;
+  auto table = builder.build();
+
+  auto makeBase = [&]() {
+    HttpHeaders base(*table);
+    base.add(kj::str("X-Gone"), kj::str("g"));
+    base.add(kj::str("X-Kept"), kj::str("kept value"));
+    return base;
+  };
+  auto check = [](const HttpHeaders& headers) {
+    KJ_EXPECT(headers.toString() == "X-Kept: kept value\r\n\r\n", headers.toString());
+  };
+
+  {
+    auto base = kj::heap<HttpHeaders>(makeBase());
+    auto derived = base->derive();
+    derived.unset("x-gone");
+    base = nullptr;
+    check(derived);
+  }
+  {
+    auto base = makeBase();
+    auto derived = base.derive();
+    derived.unset("x-gone");
+    base.add(kj::str("X-New"), kj::str("n"));
+    base = HttpHeaders(*table);
+    check(derived);
+  }
+}
+
 KJ_TEST("HttpHeaders frees a derived set that its base owns") {
   // A detached set copies the strings it sees rather than sharing its base's, since an array the
   // base owns may own the derived set, and sharing would then make a cycle that nothing frees.

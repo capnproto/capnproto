@@ -867,11 +867,6 @@ void HttpHeaders::absorbBase() {
   forEachIndexed([&](uint id, kj::StringPtr value) {
     if (fromBase(id)) total += value.size() + 1;
   });
-  if (unindexedFromBase) {
-    for (auto& header: from.unindexedHeaders) {
-      total += header.name.size() + header.value.size() + 2;
-    }
-  }
 
   auto storage = kj::heapArray<char>(total);
   char* pos = storage.begin();
@@ -896,18 +891,10 @@ void HttpHeaders::absorbBase() {
     putOwn(header.id, header.value, header.size);
   }
 
-  if (unindexedFromBase) {
-    kj::Vector<Header> all(from.unindexedHeaders.size() + unindexedHeaders.size());
-    for (auto& header: from.unindexedHeaders) {
-      all.add(Header { copy(header.name), copy(header.value) });
-    }
-    all.addAll(unindexedHeaders);
-    unindexedHeaders = kj::mv(all);
-    unindexedFromBase = false;
-  }
-
   KJ_ASSERT(pos == storage.end());
   if (total > 0) ownedStrings.add(kj::mv(storage));
+
+  materializeUnindexed();
 }
 
 void HttpHeaders::destroyShared() {
@@ -1071,12 +1058,34 @@ void HttpHeaders::unsetIndexed(uint id) {
 }
 
 void HttpHeaders::materializeUnindexed() {
-  // Takes a copy of `base`'s unindexed headers, so that they can be changed.
+  // Takes a copy of `base`'s unindexed headers, so that they can be changed. The copy includes
+  // their names and values, since once they're this set's own entries, nothing records which of
+  // them came from `base`, and `base` may change or go away first.
   if (!unindexedFromBase) return;
-  kj::Vector<Header> all(base->unindexedHeaders.size() + unindexedHeaders.size());
-  all.addAll(base->unindexedHeaders);
+  auto& from = base->unindexedHeaders;
+  size_t total = 0;
+  for (auto& header: from) {
+    total += header.name.size() + header.value.size() + 2;
+  }
+
+  auto storage = kj::heapArray<char>(total);
+  char* pos = storage.begin();
+  auto copy = [&](kj::StringPtr str) {
+    memcpy(pos, str.begin(), str.size());
+    pos[str.size()] = '\0';
+    kj::StringPtr copied(pos, str.size());
+    pos += str.size() + 1;
+    return copied;
+  };
+  kj::Vector<Header> all(from.size() + unindexedHeaders.size());
+  for (auto& header: from) {
+    all.add(Header { copy(header.name), copy(header.value) });
+  }
   all.addAll(unindexedHeaders);
+  KJ_ASSERT(pos == storage.end());
+
   unindexedHeaders = kj::mv(all);
+  if (total > 0) ownedStrings.add(kj::mv(storage));
   unindexedFromBase = false;
 }
 
