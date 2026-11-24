@@ -1129,6 +1129,154 @@ KJ_TEST("HttpHeaders derived sets and their base can be used on different thread
   }
 }
 
+KJ_TEST("HttpHeaders assigned to while its strings own a set derived from the same base") {
+  // The strings a set owned are freed after an assignment rather than during it, since an array
+  // given to takeOwnership() may own a set whose destruction needs the lock the move holds.
+  HttpHeaderTable::Builder builder;
+  auto id = builder.add("X-H");
+  auto table = builder.build();
+
+  HttpHeaders base(*table);
+  base.set(id, kj::str("b"));
+
+  {
+    // Assigned a set derived from `base`.
+    auto derived = base.derive();
+    HttpHeaders target(*table);
+    target.takeOwnership(kj::heapArray<char>(1).attach(base.derive()));
+    target = kj::mv(derived);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(target.get(id)) == "b");
+  }
+
+  {
+    // Assigned `base` itself, whose derived sets follow it.
+    HttpHeaders target(*table);
+    target.takeOwnership(kj::heapArray<char>(1).attach(base.derive()));
+    target = kj::mv(base);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(target.get(id)) == "b");
+    auto derived = target.derive();
+    target.set(id, kj::str("t"));
+    KJ_EXPECT(KJ_ASSERT_NONNULL(derived.get(id)) == "b");
+  }
+}
+
+KJ_TEST("HttpHeaders frees the strings of a set detached many times") {
+  // Each detach after the set owns more strings keeps the strings shared before alive, which
+  // forms a chain as long as the number of detaches. Freeing it mustn't take that much stack.
+  HttpHeaderTable::Builder builder;
+  auto id = builder.add("X-H");
+  auto table = builder.build();
+
+  constexpr uint TIMES = 100000;
+  auto base = kj::heap<HttpHeaders>(*table);
+  HttpHeaders last(*table);
+  HttpHeaders first(*table);
+  for (uint i = 0; i < TIMES; i++) {
+    base->set(id, kj::str(i));
+    auto derived = base->derive();
+    base->setPtr(id, "changed");  // Detaches `derived`, which keeps "i" alive.
+    if (i == 0) first = kj::mv(derived);
+    if (i == TIMES - 1) last = kj::mv(derived);
+  }
+  KJ_EXPECT(KJ_ASSERT_NONNULL(first.get(id)) == "0");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(last.get(id)) == kj::str(TIMES - 1));
+
+  // The base goes first, so the whole chain is freed with `last`, apart from what `first` keeps.
+  base = nullptr;
+  KJ_EXPECT(KJ_ASSERT_NONNULL(last.get(id)) == kj::str(TIMES - 1));
+  last = HttpHeaders(*table);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(first.get(id)) == "0");
+}
+
+KJ_TEST("HttpHeaders derived sets can move and be destroyed on other threads while their base moves") {
+  HttpHeaderTable::Builder builder;
+  kj::Vector<kj::String> names;  // The table refers to them.
+  kj::Vector<HttpHeaderId> ids;
+  for (auto i: kj::range(0, 10)) {
+    ids.add(builder.add(names.add(kj::str("X-H", i))));
+  }
+  auto table = builder.build();
+
+  // The base goes round three places, so that a move can happen under locks a thread moving or
+  // destroying a derived set doesn't hold: that of the place it last saw the base in.
+  HttpHeaders a(*table);
+  HttpHeaders b(*table);
+  HttpHeaders c(*table);
+  HttpHeaders* places[3] = {&a, &b, &c};
+  a.set(ids[0], kj::str("zero"));
+  a.setPtr(ids[1], "one");
+
+  constexpr uint THREADS = 4;
+  constexpr uint PER_THREAD = 200;
+  constexpr uint MOVES = 2000;
+  struct Kept {
+    bool mine;
+    HttpHeaders headers;
+  };
+  kj::Vector<Kept> kept[THREADS];
+  for (uint t = 0; t < THREADS; t++) {
+    for (uint i = 0; i < PER_THREAD; i++) {
+      auto derived = a.derive();
+      if (i % 2 == 1) derived.setPtr(ids[2 + t], "mine");
+      kept[t].add(Kept { i % 2 == 1, kj::mv(derived) });
+    }
+  }
+
+  // Each thread moves its sets back and forth, destroying some, until the main thread has moved
+  // their base MOVES times. Then each checks what it has left.
+  constexpr uint MOVING = 100;
+  constexpr uint CHECKING = 200;
+  kj::MutexGuarded<uint> phase(0);  // Below MOVING, the number of threads started.
+  bool done = false;
+  bool ok[THREADS] = {};
+
+  kj::Vector<kj::Own<kj::Thread>> threads;
+  for (uint t = 0; t < THREADS; t++) {
+    threads.add(kj::heap<kj::Thread>([&, t]() {
+      {
+        auto lock = phase.lockExclusive();
+        ++*lock;
+      }
+      phase.when([](uint p) { return p >= MOVING; }, [](uint&) {});
+      auto& mine = kept[t];
+      while (!kj::atomicLoad(&done, kj::AtomicMemoryOrder::ACQUIRE)) {
+        kj::Vector<Kept> moved(mine.size());
+        for (auto& k: mine) {
+          moved.add(Kept { k.mine, kj::mv(k.headers) });
+        }
+        if (moved.size() > PER_THREAD / 2) moved.removeLast();
+        mine = kj::mv(moved);
+      }
+
+      phase.when([](uint p) { return p >= CHECKING; }, [](uint&) {});
+      auto is = [](kj::Maybe<kj::StringPtr> value, kj::StringPtr expected) {
+        KJ_IF_SOME(v, value) {
+          return v == expected;
+        }
+        return false;
+      };
+      bool good = mine.size() > 0;
+      for (auto& k: mine) {
+        good = good && is(k.headers.get(ids[0]), "zero") && is(k.headers.get(ids[1]), "one") &&
+            (k.mine ? is(k.headers.get(ids[2 + t]), "mine") : k.headers.get(ids[2 + t]) == kj::none);
+      }
+      ok[t] = good;
+    }));
+  }
+
+  phase.when([&](uint p) { return p == THREADS; }, [&](uint& p) { p = MOVING; });
+  for (uint i = 0; i < MOVES; i++) {
+    *places[(i + 1) % 3] = kj::mv(*places[i % 3]);
+  }
+  kj::atomicStore(&done, true, kj::AtomicMemoryOrder::RELEASE);
+  *phase.lockExclusive() = CHECKING;
+  threads.clear();
+
+  for (auto t: kj::zeroTo(THREADS)) {
+    KJ_EXPECT(ok[t], t);
+  }
+}
+
 KJ_TEST("HttpHeaders unset() by name") {
   HttpHeaderTable::Builder builder;
   auto hIndexed = builder.add("X-Indexed");

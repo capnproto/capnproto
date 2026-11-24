@@ -544,6 +544,9 @@ private:
   // In a set made by derive(): its unindexed headers are `base`'s followed by `unindexedHeaders`.
   // Set until something needs to change `base`'s part.
 
+  bool sharesStrings = false;
+  // Whether `ownedStrings[0]` holds a reference to strings this set owns jointly with others,
+  // after it or its base was detached from sets derived from it (see detachDerived()).
 
   static constexpr uint SET_BITS = 256;
   uint64_t setBits[SET_BITS / 64] = {};
@@ -624,7 +627,13 @@ private:
   void releaseBase();
   // Unlinks this set from its base, if it has one.
   void takeFrom(HttpHeaders& other);
-  // Moves `other`'s contents and links into this set, which must have neither.
+  // Moves `other`'s contents and links into this set, which must have neither, nor any strings.
+  struct SharedStrings;
+  SharedStrings* shareStrings();
+  // Moves the strings this set owns where others can hold them too, and returns them, or null if
+  // it owns none.
+  void holdStrings(SharedStrings* shared);
+  // Keeps `shared` alive as long as this set. Frees nothing, so may be called under a lock.
   void materializeUnindexed();
 
   template <typename Func>
