@@ -1188,36 +1188,78 @@ KJ_TEST("HttpHeaders frees the strings of a set detached many times") {
 }
 
 KJ_TEST("HttpHeaders derived sets keep unindexed headers from their base after unset() by name") {
-  // unset() by name takes a copy of the base's unindexed headers. Once they're the derived set's
-  // own entries, nothing records which came from the base, so their names and values must be
-  // copied then, not left pointing at the base's strings.
+  // unset() by name takes a copy of the base's unindexed headers that still refers to the base's
+  // strings. If the base then changes or goes away, the derived set must copy those strings, and
+  // only those, wherever its own changes have left them.
   HttpHeaderTable::Builder builder;
   auto table = builder.build();
 
   auto makeBase = [&]() {
     HttpHeaders base(*table);
-    base.add(kj::str("X-Gone"), kj::str("g"));
-    base.add(kj::str("X-Kept"), kj::str("kept value"));
+    base.add(kj::str("X-A"), kj::str("a"));
+    base.add(kj::str("X-B"), kj::str("b"));
+    base.add(kj::str("X-C"), kj::str("c value"));
     return base;
   };
-  auto check = [](const HttpHeaders& headers) {
-    KJ_EXPECT(headers.toString() == "X-Kept: kept value\r\n\r\n", headers.toString());
+  auto edit = [](HttpHeaders& derived) {
+    // Removes one of the base's from the middle and one of its own, so that the base's left are
+    // followed by one of its own.
+    derived.add(kj::str("X-Own"), kj::str("o"));
+    derived.unset("x-b");
+    derived.add(kj::str("X-D"), kj::str("d"));
+    derived.unset("x-own");
+  };
+  constexpr auto EXPECTED = "X-A: a\r\nX-C: c value\r\nX-D: d\r\n\r\n"_kj;
+  auto check = [&](const HttpHeaders& headers) {
+    KJ_EXPECT(headers.toString() == EXPECTED, headers.toString());
   };
 
   {
+    // The base goes away.
     auto base = kj::heap<HttpHeaders>(makeBase());
     auto derived = base->derive();
-    derived.unset("x-gone");
+    edit(derived);
+    check(derived);
     base = nullptr;
     check(derived);
   }
   {
+    // The base changes, then is assigned to.
     auto base = makeBase();
     auto derived = base.derive();
-    derived.unset("x-gone");
+    edit(derived);
     base.add(kj::str("X-New"), kj::str("n"));
     base = HttpHeaders(*table);
     check(derived);
+  }
+  {
+    // The derived set moves first.
+    auto base = kj::heap<HttpHeaders>(makeBase());
+    auto derived = base->derive();
+    edit(derived);
+    auto moved = kj::mv(derived);
+    base = nullptr;
+    check(moved);
+  }
+  {
+    // A set derived from the derived set.
+    auto base = kj::heap<HttpHeaders>(makeBase());
+    auto derived = base->derive();
+    edit(derived);
+    auto again = derived.derive();
+    base = nullptr;
+    check(derived);
+    check(again);
+  }
+  {
+    // The derived set is cleared, then refilled.
+    auto base = kj::heap<HttpHeaders>(makeBase());
+    auto derived = base->derive();
+    edit(derived);
+    derived.clear();
+    derived.add(kj::str("X-E"), kj::str("e"));
+    base = nullptr;
+    KJ_EXPECT(derived.toString() == "X-E: e\r\n\r\n", derived.toString());
   }
 }
 

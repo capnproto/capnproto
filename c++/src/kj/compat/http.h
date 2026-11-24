@@ -541,7 +541,8 @@ private:
 
   bool unindexedFromBase = false;
   // In a set made by derive(): its unindexed headers are `base`'s followed by `unindexedHeaders`.
-  // Set until something needs to change `base`'s part.
+  // Set until something needs to change `base`'s part, which then goes first in
+  // `unindexedHeaders` (see `inheritedUnindexed`).
 
   static constexpr uint SET_BITS = 256;
   uint64_t setBits[SET_BITS / 64] = {};
@@ -572,6 +573,10 @@ private:
   HttpHeaders* nextDerived = nullptr;
   HttpHeaders** prevDerived = nullptr;
   // This set's place in its base's list: the next set, and where the pointer to this one is.
+
+  uint inheritedUnindexed = 0;
+  // In a set made by derive(): how many of the first `unindexedHeaders` are copies of `base`'s,
+  // which refer to its strings. absorbBase() copies those strings if `base` changes or goes away.
 
   kj::ArrayPtr<const IndexedHeader> indexed() const {
     return spilled ? spilledIndexed.asPtr() : kj::arrayPtr(inlineIndexed, inlineCount);

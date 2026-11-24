@@ -859,14 +859,20 @@ void HttpHeaders::detachDerived() {
 
 void HttpHeaders::absorbBase() {
   // Copies the strings rather than sharing them with the base: an array the base owns may own
-  // this set, so sharing could make a cycle that nothing frees. Allocates, but frees nothing, since
-  // it runs under the base's lock.
+  // this set, so sharing could make a cycle that nothing frees. Allocates, but frees nothing that
+  // might own a set, since it runs under the base's lock.
+  materializeUnindexed();
+  auto inherited = unindexedHeaders.first(inheritedUnindexed);
+
   auto& from = *base;
   auto fromBase = [&](uint id) { return findOwn(id) == nullptr; };
   size_t total = 0;
   forEachIndexed([&](uint id, kj::StringPtr value) {
     if (fromBase(id)) total += value.size() + 1;
   });
+  for (auto& header: inherited) {
+    total += header.name.size() + header.value.size() + 2;
+  }
 
   auto storage = kj::heapArray<char>(total);
   char* pos = storage.begin();
@@ -891,10 +897,13 @@ void HttpHeaders::absorbBase() {
     putOwn(header.id, header.value, header.size);
   }
 
+  for (auto& header: inherited) {
+    header = Header { copy(header.name), copy(header.value) };
+  }
+  inheritedUnindexed = 0;
+
   KJ_ASSERT(pos == storage.end());
   if (total > 0) ownedStrings.add(kj::mv(storage));
-
-  materializeUnindexed();
 }
 
 void HttpHeaders::destroyShared() {
@@ -926,6 +935,7 @@ void HttpHeaders::releaseBase() {
     break;
   }
   unindexedFromBase = false;
+  inheritedUnindexed = 0;
 }
 
 void HttpHeaders::takeIndexed(HttpHeaders& other) {
@@ -941,11 +951,13 @@ void HttpHeaders::takeIndexed(HttpHeaders& other) {
     setBits[i] = other.setBits[i];
   }
   unindexedFromBase = other.unindexedFromBase;
+  inheritedUnindexed = other.inheritedUnindexed;
 
   other.inlineCount = 0;
   other.spilled = false;
   kj::memzero(other.setBits);
   other.unindexedFromBase = false;
+  other.inheritedUnindexed = 0;
 }
 
 void HttpHeaders::copyOwnFrom(const HttpHeaders& other) {
@@ -1058,34 +1070,17 @@ void HttpHeaders::unsetIndexed(uint id) {
 }
 
 void HttpHeaders::materializeUnindexed() {
-  // Takes a copy of `base`'s unindexed headers, so that they can be changed. The copy includes
-  // their names and values, since once they're this set's own entries, nothing records which of
-  // them came from `base`, and `base` may change or go away first.
+  // Takes a copy of `base`'s unindexed headers, so that they can be changed. The copies still refer
+  // to `base`'s strings, so they're kept first and counted, for absorbBase() to copy those strings
+  // if `base` changes or goes away first.
   if (!unindexedFromBase) return;
+  KJ_DASSERT(inheritedUnindexed == 0);
   auto& from = base->unindexedHeaders;
-  size_t total = 0;
-  for (auto& header: from) {
-    total += header.name.size() + header.value.size() + 2;
-  }
-
-  auto storage = kj::heapArray<char>(total);
-  char* pos = storage.begin();
-  auto copy = [&](kj::StringPtr str) {
-    memcpy(pos, str.begin(), str.size());
-    pos[str.size()] = '\0';
-    kj::StringPtr copied(pos, str.size());
-    pos += str.size() + 1;
-    return copied;
-  };
   kj::Vector<Header> all(from.size() + unindexedHeaders.size());
-  for (auto& header: from) {
-    all.add(Header { copy(header.name), copy(header.value) });
-  }
+  all.addAll(from);
   all.addAll(unindexedHeaders);
-  KJ_ASSERT(pos == storage.end());
-
   unindexedHeaders = kj::mv(all);
-  if (total > 0) ownedStrings.add(kj::mv(storage));
+  inheritedUnindexed = from.size();
   unindexedFromBase = false;
 }
 
@@ -1356,13 +1351,18 @@ void HttpHeaders::unset(kj::StringPtr name) {
   if (!found) return;
 
   materializeUnindexed();
+  // Removing entries keeps the rest in order, so those from `base` stay first.
   size_t kept = 0;
-  for (auto& header: unindexedHeaders) {
+  size_t inheritedKept = 0;
+  for (auto i: kj::indices(unindexedHeaders)) {
+    auto header = unindexedHeaders[i];
     if (!headerNamesEqual(header.name, name)) {
+      if (i < inheritedUnindexed) inheritedKept++;
       unindexedHeaders[kept++] = header;
     }
   }
   unindexedHeaders.truncate(kept);
+  inheritedUnindexed = inheritedKept;
 }
 
 void HttpHeaders::takeOwnership(kj::String&& string) {
