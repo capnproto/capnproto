@@ -297,9 +297,7 @@ public:
   KJ_DISALLOW_COPY(HttpHeaders);
   HttpHeaders(HttpHeaders&& other) noexcept;
   HttpHeaders& operator=(HttpHeaders&& other) noexcept;
-  inline ~HttpHeaders() noexcept {
-    if (acquireLoad(base) != nullptr || acquireLoad(firstDerived) != nullptr) destroyShared();
-  }
+  ~HttpHeaders() noexcept;
   // The moved-from object is left empty.
 
   size_t size() const;
@@ -316,22 +314,23 @@ public:
   // Creates a shallow clone of the HttpHeaders. The returned object references the same strings
   // as the original, owning none of them.
 
+  class Shared;
+  // A set that nothing can change any more, held by an atomic reference count, for sets to be
+  // derived from. See share() and derive().
+
+  kj::Arc<const Shared> share() &&;
+  // Moves this set into a Shared one. Sets derived from it refer to it rather than copying it and
+  // keep it alive, and since it can't change, they and it may be used on any threads.
+
   HttpHeaders derive() const;
-  // Returns a set that starts out with this one's contents, like cloneShallow(), but refers to
-  // this set rather than copying it. It keeps only the changes made to it, so making one and
-  // changing a few headers costs those changes rather than a copy of every header. Use it to pass
-  // on a set with a few headers added, replaced or removed.
+  // Returns a set that starts out with this one's contents but keeps only the changes made to it,
+  // so making one and changing a few headers costs those changes rather than a copy of every
+  // header. Use it to pass on a set with a few headers added, replaced or removed.
   //
-  // This set may still change, move or be destroyed while the result exists. Before it changes
-  // or goes away, it gives each set derived from it a copy of what that set sees through it,
-  // strings included, so the result keeps the contents it started with plus its own changes. So
-  // the result needs this set's strings, owned or not, only for as long as this set does. Deriving
-  // from a derived set refers to the same original set, and copies the changes made so far along
-  // with the strings they refer to.
-  //
-  // Sets related by derive() may be used on different threads. Changing, moving or destroying
-  // this set writes to the sets derived from it, so it must not happen while another thread is
-  // using one of them, except to move or destroy it.
+  // This is cheap only for a set that is itself derived from a Shared one (see Shared::derive()):
+  // the result refers to the same Shared set and copies the changes made so far, along with the
+  // strings they refer to. Any other set may change or go away while the result exists, so the
+  // result is a copy of it, as from clone(). To derive cheaply from a set you own, share() it.
 
   bool isWebSocket() const;
   // Convenience method that checks for the presence of the header `Upgrade: websocket`.
@@ -541,8 +540,7 @@ private:
 
   bool unindexedFromBase = false;
   // In a set made by derive(): its unindexed headers are `base`'s followed by `unindexedHeaders`.
-  // Set until something needs to change `base`'s part, which then goes first in
-  // `unindexedHeaders` (see `inheritedUnindexed`).
+  // Set until something needs to change `base`'s part.
 
   static constexpr uint SET_BITS = 256;
   uint64_t setBits[SET_BITS / 64] = {};
@@ -551,15 +549,13 @@ private:
   // in id order.
 
   const HttpHeaders* base = nullptr;
-  // The set this one was made from by derive(), or null. `base` never has a base of its own:
-  // deriving from a derived set refers to the same `base` and copies the changes.
+  // The set this one was made from by derive(), or null: a Shared set's, which `shared` keeps
+  // alive. `base` never has a base of its own: deriving from a derived set refers to the same
+  // `base` and copies the changes.
 
-  mutable HttpHeaders* firstDerived = nullptr;
-  // The first of the sets made from this one by derive(), which form a list through each one's
-  // `nextDerived`. A set with a `base` has none of its own. The list and the `base` pointers into
-  // it change only under the lock for the base's address (see http.c++), so that a set and its
-  // base may be moved or destroyed on different threads at once. Kept here, where hot fields
-  // don't move with it.
+  void* reserved = nullptr;
+  // Unused. Keeps the fields after it where they were, so this change shows only the cost of
+  // the new mechanism.
 
   IndexedHeader inlineIndexed[INLINE_INDEXED];
   kj::Vector<IndexedHeader> spilledIndexed;
@@ -570,13 +566,9 @@ private:
   };
   kj::Vector<Header> unindexedHeaders;
 
-  HttpHeaders* nextDerived = nullptr;
-  HttpHeaders** prevDerived = nullptr;
-  // This set's place in its base's list: the next set, and where the pointer to this one is.
-
-  uint inheritedUnindexed = 0;
-  // In a set made by derive(): how many of the first `unindexedHeaders` are copies of `base`'s,
-  // which refer to its strings. absorbBase() copies those strings if `base` changes or goes away.
+  kj::Maybe<kj::Arc<const Shared>> shared;
+  // In a set made by derive(): keeps `base`, and whatever this set's changes refer to in it,
+  // alive.
 
   kj::ArrayPtr<const IndexedHeader> indexed() const {
     return spilled ? spilledIndexed.asPtr() : kj::arrayPtr(inlineIndexed, inlineCount);
@@ -605,29 +597,10 @@ private:
   void takeIndexed(HttpHeaders& other);
   // Replaces this object's indexed headers with `other`'s, leaving `other` with none.
 
-  template <typename T>
-  static T* acquireLoad(T* const& field) {
-    // Pairs with the release stores of the list pointers, so that whatever a thread did to a set
-    // before unlinking or detaching it happens before another thread sees it gone. Not through
-    // kj::atomicLoad(), whose volatile access keeps the compiler from folding it into the
-    // surrounding code.
-#if defined(_MSC_VER) && !defined(__clang__)
-    return kj::atomicLoad(&field, kj::AtomicMemoryOrder::ACQUIRE);
-#else
-    return __atomic_load_n(&field, __ATOMIC_ACQUIRE);
-#endif
-  }
-  void prepareToChange();
-  // Detaches the sets derived from this one, if any, since they must not see the change.
-  void detachDerived();
-  void absorbBase();
-  // In a set with a base: copies in what it sees through the base, strings included, leaving it
-  // independent of the base.
-  void destroyShared();
   void releaseBase();
-  // Unlinks this set from its base, if it has one.
+  // Drops this set's base, if it has one.
   void takeFrom(HttpHeaders& other);
-  // Moves `other`'s contents and links into this set, which must have neither, nor any strings.
+  // Moves `other`'s contents into this set, which must have none.
   void materializeUnindexed();
 
   template <typename Func>
@@ -1660,9 +1633,22 @@ inline kj::StringPtr HttpHeaderTable::idToString(HttpHeaderId id) const {
   return namesById[id.id];
 }
 
-inline void HttpHeaders::prepareToChange() {
-  if (KJ_UNLIKELY(acquireLoad(firstDerived) != nullptr)) detachDerived();
-}
+class HttpHeaders::Shared final: public kj::AtomicRefcounted {
+  // See HttpHeaders::share().
+public:
+  explicit Shared(HttpHeaders&& headers): headers(kj::mv(headers)) {}
+
+  const HttpHeaders& get() const { return headers; }
+
+  HttpHeaders derive() const;
+  // Returns a set that starts out with these headers and keeps only the changes made to it,
+  // keeping this set alive. Safe on any thread, any number of times.
+
+private:
+  HttpHeaders headers;
+};
+
+inline HttpHeaders::~HttpHeaders() noexcept {}
 
 inline uint HttpHeaders::popCount64(uint64_t x) {
 #if defined(_MSC_VER) && !defined(__clang__)
@@ -1720,7 +1706,6 @@ inline kj::Maybe<kj::StringPtr> HttpHeaders::get(HttpHeaderId id) const {
 
 inline void HttpHeaders::unset(HttpHeaderId id) {
   id.requireFrom(*table);
-  prepareToChange();
   unsetIndexed(id.id);
 }
 
