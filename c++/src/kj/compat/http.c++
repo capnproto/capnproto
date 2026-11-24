@@ -377,17 +377,17 @@ kj::ArrayPtr<const char> KJ_STRINGIFY(const HttpMethod& method) {
   return method.name();
 }
 
-static kj::Maybe<HttpMethod> consumeKnownHttpMethod(const char*& ptr, const char* end) {
-  // Matches a method listed in KJ_HTTP_FOR_EACH_METHOD at the start of [ptr, end). Only checks
-  // that the text begins with the method name; the caller must check what follows.
+static kj::Maybe<HttpMethod> consumeKnownHttpMethod(kj::ArrayPtr<const char>& text) {
+  // Matches a method listed in KJ_HTTP_FOR_EACH_METHOD at the start of `text`, and on success
+  // removes its name from the front of `text`. Only checks that the text begins with the method
+  // name; the caller must check what follows.
 
-  const char* p = ptr;
-  auto next = [&]() -> char { return p < end ? *p++ : '\0'; };
+  size_t i = 0;
+  auto next = [&]() -> char { return i < text.size() ? text[i++] : '\0'; };
 
 #define EXPECT_REST(prefix, suffix) \
-  if (size_t(end - p) >= sizeof(#suffix) - 1 && \
-      memcmp(p, #suffix, sizeof(#suffix) - 1) == 0) { \
-    ptr = p + (sizeof(#suffix) - 1); \
+  if (text.slice(i).startsWith(#suffix ""_kj)) { \
+    text = text.slice(i + sizeof(#suffix) - 1); \
     return HttpMethod::prefix##suffix; \
   } else { \
     return kj::none; \
@@ -467,30 +467,30 @@ static kj::Maybe<HttpMethod> consumeKnownHttpMethod(const char*& ptr, const char
 #undef EXPECT_REST
 }
 
-kj::Maybe<HttpMethod> HttpMethod::consumeOther(const char*& ptr, const char* end) {
+kj::Maybe<HttpMethod> HttpMethod::consumeOther(kj::ArrayPtr<const char>& text) {
   // Like consumeKnownHttpMethod(), the caller must check what follows the name.
 
-  const char* p = ptr;
-  while (p < end && HTTP_METHOD_CHARS.contains(*p)) {
-    if (p - ptr == MAX_NAME_SIZE) return kj::none;  // Too long; don't scan the rest.
-    ++p;
+  size_t size = 0;
+  while (size < text.size() && HTTP_METHOD_CHARS.contains(text[size])) {
+    if (size == MAX_NAME_SIZE) return kj::none;  // Too long; don't scan the rest.
+    ++size;
   }
-  if (p == ptr) return kj::none;
+  if (size == 0) return kj::none;
 
-  HttpMethod result(kj::arrayPtr(ptr, p));
-  ptr = p;
+  HttpMethod result(text.first(size));
+  text = text.slice(size);
   return result;
 }
 
 kj::Maybe<HttpMethod> HttpMethod::tryParse(kj::ArrayPtr<const char> name) {
-  const char* p = name.begin();
-  KJ_IF_SOME(known, consumeKnownHttpMethod(p, name.end())) {
-    if (p == name.end()) return known;
+  auto rest = name;
+  KJ_IF_SOME(known, consumeKnownHttpMethod(rest)) {
+    if (rest.size() == 0) return known;
   }
 
-  p = name.begin();
-  KJ_IF_SOME(other, consumeOther(p, name.end())) {
-    if (p == name.end()) return other;
+  rest = name;
+  KJ_IF_SOME(other, consumeOther(rest)) {
+    if (rest.size() == 0) return other;
   }
 
   return kj::none;
@@ -505,38 +505,30 @@ HttpMethod HttpMethod::parse(kj::ArrayPtr<const char> name) {
   KJ_FAIL_REQUIRE("invalid HTTP method", kj::encodeCEscape(prefix.asBytes()));
 }
 
-kj::Maybe<HttpMethod> consumeHttpMethod(char*& ptr, const char* end, bool allowOtherMethods) {
-  // Consumes the method at the start of a request line, which ends at `end`. On success, `ptr` is
-  // left pointing at the first character after the method name, which the caller must check.
+kj::Maybe<HttpMethod> consumeHttpMethod(kj::ArrayPtr<const char>& text, bool allowOtherMethods) {
+  // Consumes the method at the start of a request line. On success, `text` is left starting at the
+  // first character after the method name, which the caller must check.
 
-  const char* p = ptr;
-  KJ_IF_SOME(known, consumeKnownHttpMethod(p, end)) {
+  auto rest = text;
+  KJ_IF_SOME(known, consumeKnownHttpMethod(rest)) {
     // Not a prefix of a longer name, such as "GETX".
-    if (p == end || !HTTP_METHOD_CHARS.contains(*p)) {
-      ptr += p - ptr;
+    if (rest.size() == 0 || !HTTP_METHOD_CHARS.contains(rest[0])) {
+      text = rest;
       return known;
     }
   }
 
-  if (allowOtherMethods) {
-    p = ptr;
-    KJ_IF_SOME(other, HttpMethod::consumeOther(p, end)) {
-      ptr += p - ptr;
-      return other;
-    }
-  }
+  if (allowOtherMethods) return HttpMethod::consumeOther(text);
 
   return kj::none;
 }
 
 kj::Maybe<HttpMethod> tryParseHttpMethod(kj::StringPtr name) {
-  const char* ptr = name.begin();
-  auto result = consumeKnownHttpMethod(ptr, name.end());
-  if (ptr == name.end()) {
-    return result;
-  } else {
-    return kj::none;
+  kj::ArrayPtr<const char> rest = name;
+  KJ_IF_SOME(method, consumeKnownHttpMethod(rest)) {
+    if (rest.size() == 0) return method;
   }
+  return kj::none;
 }
 
 // =======================================================================================
@@ -1128,7 +1120,9 @@ HttpHeaders::RequestConnectOrProtocolError HttpHeaders::tryParseRequestOrConnect
 
   HttpHeaders::RequestConnectOrProtocolError result;
 
-  KJ_IF_SOME(method, consumeHttpMethod(ptr, end, allowOtherMethods)) {
+  kj::ArrayPtr<const char> rest(ptr, end);
+  KJ_IF_SOME(method, consumeHttpMethod(rest, allowOtherMethods)) {
+    ptr += rest.begin() - ptr;
     if (*ptr != ' ' && *ptr != '\t') {
       return ProtocolError { 501, "Not Implemented",
           "Unrecognized request method.", content };
