@@ -31,6 +31,7 @@
 #include "io.h"
 #include "miniposix.h"
 #include <stdlib.h>
+#include <stdio.h>
 #include <signal.h>
 #include <string.h>
 #include "time.h"
@@ -236,6 +237,10 @@ public:
       return "no tests were declared";
     }
 
+    KJ_IF_SOME(problem, initSharding()) {
+      return kj::mv(problem);
+    }
+
     // Find the common path prefix of all filenames, so we can strip it off.
     ArrayPtr<const char> commonPrefix = StringPtr(testCasesHead->file);
     for (TestCase* testCase = testCasesHead; testCase != nullptr; testCase = testCase->next) {
@@ -255,8 +260,9 @@ public:
     // Run the testts.
     uint passCount = 0;
     uint failCount = 0;
+    uint selectedCount = 0;
     for (TestCase* testCase = testCasesHead; testCase != nullptr; testCase = testCase->next) {
-      if (!hasFilter || testCase->matchedFilter) {
+      if ((!hasFilter || testCase->matchedFilter) && selectedCount++ % shardCount == shardIndex) {
         auto name = kj::str(testCase->file + commonPrefix.size(), ':', testCase->line,
                             ": ", testCase->description);
 
@@ -299,6 +305,44 @@ private:
   bool useColor;
   bool hasFilter = false;
   bool listOnly = false;
+
+  uint shardIndex = 0;
+  uint shardCount = 1;
+  // Under test sharding, this process runs every `shardCount`th selected test case, starting at
+  // the `shardIndex`th, so that cases declared next to each other, which tend to cost about the
+  // same, land on different shards.
+
+  kj::Maybe<kj::String> initSharding() {
+    // Reads the sharding protocol of Bazel's test runner: TEST_TOTAL_SHARDS and TEST_SHARD_INDEX
+    // say which share of the test cases to run, and touching TEST_SHARD_STATUS_FILE tells Bazel
+    // that the test honored them. Returns an error message if the variables are invalid.
+
+    const char* total = getenv("TEST_TOTAL_SHARDS");
+    const char* index = getenv("TEST_SHARD_INDEX");
+    if (total == nullptr || index == nullptr) return kj::none;
+
+    KJ_IF_SOME(t, StringPtr(total).tryParseAs<uint>()) {
+      shardCount = t;
+    } else {
+      return kj::str("invalid TEST_TOTAL_SHARDS: ", total);
+    }
+    KJ_IF_SOME(i, StringPtr(index).tryParseAs<uint>()) {
+      shardIndex = i;
+    } else {
+      return kj::str("invalid TEST_SHARD_INDEX: ", index);
+    }
+    if (shardCount == 0 || shardIndex >= shardCount) {
+      return kj::str("TEST_SHARD_INDEX ", index, " is out of range for TEST_TOTAL_SHARDS ", total);
+    }
+
+    const char* statusFile = getenv("TEST_SHARD_STATUS_FILE");
+    if (statusFile != nullptr) {
+      FILE* f = fopen(statusFile, "w");
+      if (f == nullptr) return kj::str("can't write TEST_SHARD_STATUS_FILE: ", statusFile);
+      fclose(f);
+    }
+    return kj::none;
+  }
 
   enum Color {
     RED,
