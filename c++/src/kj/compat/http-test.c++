@@ -1161,8 +1161,8 @@ KJ_TEST("HttpHeaders assigned to while its strings own a set derived from the sa
 }
 
 KJ_TEST("HttpHeaders frees the strings of a set detached many times") {
-  // Each detach after the set owns more strings keeps the strings shared before alive, which
-  // forms a chain as long as the number of detaches. Freeing it mustn't take that much stack.
+  // Each detach must leave the derived set independent, not linked to what earlier detaches
+  // left, so that freeing them takes no more stack however many there were.
   HttpHeaderTable::Builder builder;
   auto id = builder.add("X-H");
   auto table = builder.build();
@@ -1181,11 +1181,62 @@ KJ_TEST("HttpHeaders frees the strings of a set detached many times") {
   KJ_EXPECT(KJ_ASSERT_NONNULL(first.get(id)) == "0");
   KJ_EXPECT(KJ_ASSERT_NONNULL(last.get(id)) == kj::str(TIMES - 1));
 
-  // The base goes first, so the whole chain is freed with `last`, apart from what `first` keeps.
   base = nullptr;
   KJ_EXPECT(KJ_ASSERT_NONNULL(last.get(id)) == kj::str(TIMES - 1));
   last = HttpHeaders(*table);
   KJ_EXPECT(KJ_ASSERT_NONNULL(first.get(id)) == "0");
+}
+
+KJ_TEST("HttpHeaders frees a derived set that its base owns") {
+  // A detached set copies the strings it sees rather than sharing its base's, since an array the
+  // base owns may own the derived set, and sharing would then make a cycle that nothing frees.
+  HttpHeaderTable::Builder builder;
+  auto id = builder.add("X-H");
+  auto table = builder.build();
+
+  struct Counted {
+    uint& count;
+    explicit Counted(uint& count): count(count) {}
+    ~Counted() noexcept(false) { ++count; }
+  };
+  auto ownSelfDerived = [&](HttpHeaders& base, uint& destroyed) {
+    base.takeOwnership(
+        kj::heapArray<char>(1).attach(base.derive(), kj::heap<Counted>(destroyed)));
+  };
+
+  {
+    // Destroyed with the derived set still attached.
+    uint destroyed = 0;
+    {
+      HttpHeaders base(*table);
+      base.set(id, kj::str("b"));
+      ownSelfDerived(base, destroyed);
+    }
+    KJ_EXPECT(destroyed == 1);
+  }
+
+  {
+    // Changed first, then destroyed.
+    uint destroyed = 0;
+    {
+      HttpHeaders base(*table);
+      base.set(id, kj::str("b"));
+      ownSelfDerived(base, destroyed);
+      base.set(id, kj::str("c"));
+      KJ_EXPECT(destroyed == 0);
+    }
+    KJ_EXPECT(destroyed == 1);
+  }
+
+  {
+    // Assigned to.
+    uint destroyed = 0;
+    HttpHeaders base(*table);
+    base.set(id, kj::str("b"));
+    ownSelfDerived(base, destroyed);
+    base = HttpHeaders(*table);
+    KJ_EXPECT(destroyed == 1);
+  }
 }
 
 KJ_TEST("HttpHeaders derived sets can move and be destroyed on other threads while their base moves") {

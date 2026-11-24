@@ -775,111 +775,6 @@ void releaseStore(T*& field, T* value) {
 
 }  // namespace
 
-struct HttpHeaders::SharedStrings {
-  // Strings owned jointly by several sets, which all may refer to them: those a set owned when it
-  // was detached from the sets derived from it. Never changed once made, and kept alive by
-  // reference counts. A node may also keep up to two earlier nodes alive, so that a set detached
-  // many times holds one node rather than one per detach. Such a chain is freed in a loop rather
-  // than recursively, however long it is.
-
-  uint refcount = 1;
-  SharedStrings* earlier[2] = {nullptr, nullptr};
-  SharedStrings* nextToFree = nullptr;
-  kj::Vector<kj::Array<char>> strings;
-
-  static SharedStrings* addRef(SharedStrings* node) {
-    kj::atomicAddFetch(&node->refcount, 1u, kj::AtomicMemoryOrder::RELAXED);
-    return node;
-  }
-
-  static void release(SharedStrings* node) {
-    if (node == nullptr) return;
-    if (kj::atomicSubFetch(&node->refcount, 1u, kj::AtomicMemoryOrder::ACQUIRE_RELEASE) != 0) {
-      return;
-    }
-    // Freeing a node releases the nodes it keeps alive, and its strings may own sets that release
-    // more. Each is queued here and freed by the outermost call on this thread.
-    static thread_local SharedStrings* toFree = nullptr;
-    static thread_local bool freeing = false;
-    node->nextToFree = toFree;
-    toFree = node;
-    if (freeing) return;
-    freeing = true;
-    KJ_DEFER(freeing = false);
-    while (toFree != nullptr) {
-      auto next = toFree;
-      toFree = next->nextToFree;
-      release(next->earlier[0]);
-      release(next->earlier[1]);
-      delete next;
-    }
-  }
-
-  class Holder final: public kj::ArrayDisposer {
-    // Disposes of an entry of `ownedStrings` made by hold().
-    void disposeImpl(void* firstElement, size_t, size_t, size_t, void (*)(void*)) const override {
-      release(reinterpret_cast<SharedStrings*>(firstElement));
-    }
-  };
-  static const Holder holder;
-
-  static kj::Array<char> hold(SharedStrings* node) {
-    // An entry for `ownedStrings` that owns one reference to `node`. It's empty, and points at
-    // `node` only so that of() can find it again.
-    return kj::Array<char>(reinterpret_cast<char*>(node), 0, holder);
-  }
-
-  static SharedStrings* of(const kj::Array<char>& entry) {
-    return reinterpret_cast<SharedStrings*>(const_cast<char*>(entry.begin()));
-  }
-};
-
-const HttpHeaders::SharedStrings::Holder HttpHeaders::SharedStrings::holder =
-    HttpHeaders::SharedStrings::Holder();
-
-HttpHeaders::SharedStrings* HttpHeaders::shareStrings() {
-  size_t first = sharesStrings ? 1 : 0;
-  SharedStrings* previous = sharesStrings ? SharedStrings::of(ownedStrings[0]) : nullptr;
-  if (ownedStrings.size() == first) {
-    // Nothing owned since the last time: the strings already shared are all there is.
-    return previous;
-  }
-
-  auto node = new SharedStrings;
-  if (previous != nullptr) node->earlier[0] = SharedStrings::addRef(previous);
-  node->strings.reserve(ownedStrings.size() - first);
-  for (size_t i = first; i < ownedStrings.size(); i++) {
-    node->strings.add(kj::mv(ownedStrings[i]));
-  }
-  // Releases this set's reference to `previous`, which `node` now holds instead.
-  ownedStrings.clear();
-  ownedStrings.add(SharedStrings::hold(node));
-  sharesStrings = true;
-  return node;
-}
-
-void HttpHeaders::holdStrings(SharedStrings* shared) {
-  if (!sharesStrings) {
-    ownedStrings.add(SharedStrings::hold(SharedStrings::addRef(shared)));
-    if (ownedStrings.size() > 1) {
-      // To the front. Each slot it moves into was emptied first, so nothing is freed.
-      auto entry = kj::mv(ownedStrings.back());
-      ownedStrings.back() = kj::mv(ownedStrings[0]);
-      ownedStrings[0] = kj::mv(entry);
-    }
-    sharesStrings = true;
-    return;
-  }
-
-  // One node holds both what this set already shared and `shared`. Replacing the old entry
-  // releases a reference that `merged` holds too, so nothing is freed.
-  auto& entry = ownedStrings[0];
-  auto merged = new SharedStrings;
-  merged->earlier[0] = SharedStrings::addRef(SharedStrings::of(entry));
-  merged->earlier[1] = SharedStrings::addRef(shared);
-  entry = SharedStrings::hold(merged);
-}
-
 HttpHeaders::HttpHeaders(HttpHeaders&& other) noexcept
     : table(other.table) {
   takeFrom(other);
@@ -893,7 +788,6 @@ HttpHeaders& HttpHeaders::operator=(HttpHeaders&& other) noexcept {
     // The strings this set owned are freed once the move is done, not during it: takeFrom() may
     // hold a lock, and an array given to takeOwnership() may own a set that takes the same one.
     auto oldStrings = kj::mv(ownedStrings);
-    sharesStrings = false;
     takeFrom(other);
   }
   return *this;
@@ -902,8 +796,6 @@ HttpHeaders& HttpHeaders::operator=(HttpHeaders&& other) noexcept {
 void HttpHeaders::takeFrom(HttpHeaders& other) {
   auto move = [&]() {
     ownedStrings = kj::mv(other.ownedStrings);
-    sharesStrings = other.sharesStrings;
-    other.sharesStrings = false;
     unindexedHeaders = kj::mv(other.unindexedHeaders);
     takeIndexed(other);
   };
@@ -948,12 +840,7 @@ void HttpHeaders::takeFrom(HttpHeaders& other) {
 }
 
 void HttpHeaders::detachDerived() {
-  // Each derived set gets a copy of what it sees through this one, and a share of the strings
-  // this one owns, since those copies may refer to them. The strings this one adds later are its
-  // own again. Sharing them comes first, since it may free something, which mustn't happen under
-  // the lock.
-  auto shared = shareStrings();
-
+  // Each derived set gets a copy of what it sees through this one, strings included.
   DerivedLockGuard guard(this);
   auto derived = firstDerived;
   if (derived == nullptr) return;
@@ -961,7 +848,6 @@ void HttpHeaders::detachDerived() {
   while (derived != nullptr) {
     auto next = derived->nextDerived;
     derived->absorbBase();
-    if (shared != nullptr) derived->holdStrings(shared);
     derived->nextDerived = nullptr;
     derived->prevDerived = nullptr;
     // Last: once a derived set's thread sees this, it may go ahead and destroy it.
@@ -972,26 +858,56 @@ void HttpHeaders::detachDerived() {
 }
 
 void HttpHeaders::absorbBase() {
-  if (indexed().size() == 0) {
-    // Nothing of its own: the base's entries, which are all values since it has no base, are
-    // exactly what it sees.
-    spilled = false;
-    spilledIndexed.clear();
-    copyOwnFrom(*base);
-  } else {
-    kj::Vector<IndexedHeader> merged(base->indexed().size() + indexed().size());
-    forEachIndexed([&](uint id, kj::StringPtr value) {
-      merged.add(IndexedHeader { id, static_cast<uint32_t>(value.size()), value.begin() });
-    });
-    inlineCount = 0;
-    spilled = false;
-    spilledIndexed.clear();
-    kj::memzero(setBits);
-    for (auto& header: merged) {
-      putOwn(header.id, header.value, header.size);
+  // Copies the strings rather than sharing them with the base: an array the base owns may own
+  // this set, so sharing could make a cycle that nothing frees. Allocates, but frees nothing, since
+  // it runs under the base's lock.
+  auto& from = *base;
+  auto fromBase = [&](uint id) { return findOwn(id) == nullptr; };
+  size_t total = 0;
+  forEachIndexed([&](uint id, kj::StringPtr value) {
+    if (fromBase(id)) total += value.size() + 1;
+  });
+  if (unindexedFromBase) {
+    for (auto& header: from.unindexedHeaders) {
+      total += header.name.size() + header.value.size() + 2;
     }
   }
-  materializeUnindexed();
+
+  auto storage = kj::heapArray<char>(total);
+  char* pos = storage.begin();
+  auto copy = [&](kj::StringPtr str) {
+    memcpy(pos, str.begin(), str.size());
+    pos[str.size()] = '\0';
+    kj::StringPtr copied(pos, str.size());
+    pos += str.size() + 1;
+    return copied;
+  };
+
+  kj::Vector<IndexedHeader> merged(from.indexed().size() + indexed().size());
+  forEachIndexed([&](uint id, kj::StringPtr value) {
+    if (fromBase(id)) value = copy(value);
+    merged.add(IndexedHeader { id, static_cast<uint32_t>(value.size()), value.begin() });
+  });
+  inlineCount = 0;
+  spilled = false;
+  spilledIndexed.clear();
+  kj::memzero(setBits);
+  for (auto& header: merged) {
+    putOwn(header.id, header.value, header.size);
+  }
+
+  if (unindexedFromBase) {
+    kj::Vector<Header> all(from.unindexedHeaders.size() + unindexedHeaders.size());
+    for (auto& header: from.unindexedHeaders) {
+      all.add(Header { copy(header.name), copy(header.value) });
+    }
+    all.addAll(unindexedHeaders);
+    unindexedHeaders = kj::mv(all);
+    unindexedFromBase = false;
+  }
+
+  KJ_ASSERT(pos == storage.end());
+  if (total > 0) ownedStrings.add(kj::mv(storage));
 }
 
 void HttpHeaders::destroyShared() {
@@ -1449,16 +1365,10 @@ void HttpHeaders::takeOwnership(kj::Array<char>&& chars) {
 void HttpHeaders::takeOwnership(HttpHeaders&& otherHeaders) {
   // Sets derived from `otherHeaders` may refer to its strings, and this one could go away first.
   otherHeaders.prepareToChange();
-  size_t first = 0;
-  if (otherHeaders.sharesStrings) {
-    holdStrings(SharedStrings::of(otherHeaders.ownedStrings[0]));
-    first = 1;
-  }
-  for (size_t i = first; i < otherHeaders.ownedStrings.size(); i++) {
-    ownedStrings.add(kj::mv(otherHeaders.ownedStrings[i]));
+  for (auto& str: otherHeaders.ownedStrings) {
+    ownedStrings.add(kj::mv(str));
   }
   otherHeaders.ownedStrings.clear();
-  otherHeaders.sharesStrings = false;
 }
 
 // -----------------------------------------------------------------------------

@@ -323,12 +323,11 @@ public:
   // on a set with a few headers added, replaced or removed.
   //
   // This set may still change, move or be destroyed while the result exists. Before it changes
-  // or goes away, it gives each set derived from it a copy of what that set sees through it, so
-  // the result keeps the contents it started with plus its own changes. The copy refers to the
-  // same strings, and this set's own strings are kept alive for it, so as with cloneShallow(),
-  // only strings that this set refers to without owning must outlive the result. Deriving from a
-  // derived set refers to the same original set, and copies the changes made so far along with
-  // the strings they refer to.
+  // or goes away, it gives each set derived from it a copy of what that set sees through it,
+  // strings included, so the result keeps the contents it started with plus its own changes. So
+  // the result needs this set's strings, owned or not, only for as long as this set does. Deriving
+  // from a derived set refers to the same original set, and copies the changes made so far along
+  // with the strings they refer to.
   //
   // Sets related by derive() may be used on different threads. Changing, moving or destroying
   // this set writes to the sets derived from it, so it must not happen while another thread is
@@ -544,10 +543,6 @@ private:
   // In a set made by derive(): its unindexed headers are `base`'s followed by `unindexedHeaders`.
   // Set until something needs to change `base`'s part.
 
-  bool sharesStrings = false;
-  // Whether `ownedStrings[0]` holds a reference to strings this set owns jointly with others,
-  // after it or its base was detached from sets derived from it (see detachDerived()).
-
   static constexpr uint SET_BITS = 256;
   uint64_t setBits[SET_BITS / 64] = {};
   // Which ids below SET_BITS have an entry (tombstones included). Looking up one without is a bit
@@ -621,19 +616,13 @@ private:
   // Detaches the sets derived from this one, if any, since they must not see the change.
   void detachDerived();
   void absorbBase();
-  // In a set with a base: copies in what it sees through the base, leaving it independent of the
-  // base's entries, apart from the strings they refer to.
+  // In a set with a base: copies in what it sees through the base, strings included, leaving it
+  // independent of the base.
   void destroyShared();
   void releaseBase();
   // Unlinks this set from its base, if it has one.
   void takeFrom(HttpHeaders& other);
   // Moves `other`'s contents and links into this set, which must have neither, nor any strings.
-  struct SharedStrings;
-  SharedStrings* shareStrings();
-  // Moves the strings this set owns where others can hold them too, and returns them, or null if
-  // it owns none.
-  void holdStrings(SharedStrings* shared);
-  // Keeps `shared` alive as long as this set. Frees nothing, so may be called under a lock.
   void materializeUnindexed();
 
   template <typename Func>
