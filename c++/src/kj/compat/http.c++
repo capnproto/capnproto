@@ -711,231 +711,21 @@ HttpHeaders::HttpHeaders(const HttpHeaderTable& table)
       "HttpHeaderTable that wasn't fully built yet at the time of construction");
 }
 
-namespace {
-
-// The lists of sets made by derive() change under one of these locks, chosen by the base's
-// address. They're global rather than in the base so that they outlive it: a derived set being
-// destroyed on one thread must lock its base's list without knowing whether another thread is
-// destroying the base at the same time. Each is held only for a few pointer updates, or for
-// detaching the sets derived from one base, so a spinlock does.
-struct alignas(64) DerivedLock {
-  bool held = false;
-};
-DerivedLock derivedLocks[64];
-
-DerivedLock& derivedLockFor(const void* base) {
-  uint64_t bits = reinterpret_cast<uintptr_t>(base);
-  return derivedLocks[(bits * 0x9e3779b97f4a7c15ull) >> 58];
-}
-
-void acquire(DerivedLock& lock) {
-  while (kj::atomicExchange(&lock.held, true, kj::AtomicMemoryOrder::ACQUIRE)) {
-    while (kj::atomicLoad(&lock.held, kj::AtomicMemoryOrder::RELAXED)) {}
-  }
-}
-
-void release(DerivedLock& lock) {
-  kj::atomicStore(&lock.held, false, kj::AtomicMemoryOrder::RELEASE);
-}
-
-class DerivedLockGuard {
-public:
-  explicit DerivedLockGuard(const void* base): first(derivedLockFor(base)), second(nullptr) {
-    acquire(first);
-  }
-  DerivedLockGuard(const void* a, const void* b)
-      : first(derivedLockFor(a)), second(&derivedLockFor(b)) {
-    // Both, in address order so that two threads never wait on each other.
-    if (second == &first) {
-      second = nullptr;
-      acquire(first);
-    } else if (second < &first) {
-      acquire(*second);
-      acquire(first);
-    } else {
-      acquire(first);
-      acquire(*second);
-    }
-  }
-  ~DerivedLockGuard() noexcept {
-    release(first);
-    if (second != nullptr) release(*second);
-  }
-  KJ_DISALLOW_COPY_AND_MOVE(DerivedLockGuard);
-
-private:
-  DerivedLock& first;
-  DerivedLock* second;
-};
-
-template <typename T>
-void releaseStore(T*& field, T* value) {
-  kj::atomicStore(&field, value, kj::AtomicMemoryOrder::RELEASE);
-}
-
-}  // namespace
-
 HttpHeaders::HttpHeaders(HttpHeaders&& other) noexcept
-    : table(other.table) {
-  takeFrom(other);
+    : table(other.table),
+      ownedStrings(kj::mv(other.ownedStrings)),
+      unindexedHeaders(kj::mv(other.unindexedHeaders)) {
+  takeIndexed(other);
 }
 
 HttpHeaders& HttpHeaders::operator=(HttpHeaders&& other) noexcept {
   if (this != &other) {
-    prepareToChange();
-    releaseBase();
     table = other.table;
-    // The strings this set owned are freed once the move is done, not during it: takeFrom() may
-    // hold a lock, and an array given to takeOwnership() may own a set that takes the same one.
-    auto oldStrings = kj::mv(ownedStrings);
-    takeFrom(other);
-  }
-  return *this;
-}
-
-void HttpHeaders::takeFrom(HttpHeaders& other) {
-  auto move = [&]() {
     ownedStrings = kj::mv(other.ownedStrings);
     unindexedHeaders = kj::mv(other.unindexedHeaders);
     takeIndexed(other);
-  };
-
-  for (;;) {
-    auto otherBase = acquireLoad(other.base);
-    if (otherBase == nullptr) break;
-    // `other` is derived: take its place in its base's list. Under the lock, since its base may
-    // be detaching it on another thread.
-    DerivedLockGuard guard(otherBase);
-    // Detached, or its base moved, meanwhile. Read atomically: if the base moved again since,
-    // `other.base` may be changing under a different lock.
-    if (acquireLoad(other.base) != otherBase) continue;
-    move();
-    releaseStore(base, otherBase);
-    releaseStore(other.base, static_cast<const HttpHeaders*>(nullptr));
-    nextDerived = other.nextDerived;
-    prevDerived = other.prevDerived;
-    other.nextDerived = nullptr;
-    other.prevDerived = nullptr;
-    if (nextDerived != nullptr) nextDerived->prevDerived = &nextDerived;
-    releaseStore(*prevDerived, this);
-    return;
   }
-
-  if (acquireLoad(other.firstDerived) != nullptr) {
-    // `other` has derived sets: they follow it here.
-    DerivedLockGuard guard(&other, this);
-    move();
-    firstDerived = other.firstDerived;
-    other.firstDerived = nullptr;
-    if (firstDerived != nullptr) {
-      firstDerived->prevDerived = &firstDerived;
-      for (auto derived = firstDerived; derived != nullptr; derived = derived->nextDerived) {
-        releaseStore(derived->base, static_cast<const HttpHeaders*>(this));
-      }
-    }
-    return;
-  }
-
-  move();
-}
-
-void HttpHeaders::detachDerived() {
-  // Each derived set gets a copy of what it sees through this one, strings included.
-  DerivedLockGuard guard(this);
-  auto derived = firstDerived;
-  if (derived == nullptr) return;
-
-  while (derived != nullptr) {
-    auto next = derived->nextDerived;
-    derived->absorbBase();
-    derived->nextDerived = nullptr;
-    derived->prevDerived = nullptr;
-    // Last: once a derived set's thread sees this, it may go ahead and destroy it.
-    releaseStore(derived->base, static_cast<const HttpHeaders*>(nullptr));
-    derived = next;
-  }
-  releaseStore(firstDerived, static_cast<HttpHeaders*>(nullptr));
-}
-
-void HttpHeaders::absorbBase() {
-  // Copies the strings rather than sharing them with the base: an array the base owns may own
-  // this set, so sharing could make a cycle that nothing frees. Allocates, but frees nothing that
-  // might own a set, since it runs under the base's lock.
-  materializeUnindexed();
-  auto inherited = unindexedHeaders.first(inheritedUnindexed);
-
-  auto& from = *base;
-  auto fromBase = [&](uint id) { return findOwn(id) == nullptr; };
-  size_t total = 0;
-  forEachIndexed([&](uint id, kj::StringPtr value) {
-    if (fromBase(id)) total += value.size() + 1;
-  });
-  for (auto& header: inherited) {
-    total += header.name.size() + header.value.size() + 2;
-  }
-
-  auto storage = kj::heapArray<char>(total);
-  char* pos = storage.begin();
-  auto copy = [&](kj::StringPtr str) {
-    memcpy(pos, str.begin(), str.size());
-    pos[str.size()] = '\0';
-    kj::StringPtr copied(pos, str.size());
-    pos += str.size() + 1;
-    return copied;
-  };
-
-  kj::Vector<IndexedHeader> merged(from.indexed().size() + indexed().size());
-  forEachIndexed([&](uint id, kj::StringPtr value) {
-    if (fromBase(id)) value = copy(value);
-    merged.add(IndexedHeader { id, static_cast<uint32_t>(value.size()), value.begin() });
-  });
-  inlineCount = 0;
-  spilled = false;
-  spilledIndexed.clear();
-  kj::memzero(setBits);
-  for (auto& header: merged) {
-    putOwn(header.id, header.value, header.size);
-  }
-
-  for (auto& header: inherited) {
-    header = Header { copy(header.name), copy(header.value) };
-  }
-  inheritedUnindexed = 0;
-
-  KJ_ASSERT(pos == storage.end());
-  if (total > 0) ownedStrings.add(kj::mv(storage));
-}
-
-void HttpHeaders::destroyShared() {
-  // The rest of the destructor, for sets that are, or are derived from, a base.
-  if (acquireLoad(firstDerived) != nullptr) detachDerived();
-  releaseBase();
-}
-
-const HttpHeaders::IndexedHeader* HttpHeaders::findIndexed(uint id) const {
-  auto header = findOwn(id);
-  if (header != nullptr) {
-    return header->value == nullptr ? nullptr : header;
-  }
-  return base == nullptr ? nullptr : base->findOwn(id);
-}
-
-void HttpHeaders::releaseBase() {
-  for (;;) {
-    auto current = acquireLoad(base);
-    if (current == nullptr) break;
-    DerivedLockGuard guard(current);
-    // Detached, or its base moved, meanwhile. Atomically, as in takeFrom().
-    if (acquireLoad(base) != current) continue;
-    if (nextDerived != nullptr) nextDerived->prevDerived = prevDerived;
-    releaseStore(*prevDerived, nextDerived);
-    nextDerived = nullptr;
-    prevDerived = nullptr;
-    releaseStore(base, static_cast<const HttpHeaders*>(nullptr));
-    break;
-  }
-  unindexedFromBase = false;
-  inheritedUnindexed = 0;
+  return *this;
 }
 
 void HttpHeaders::takeIndexed(HttpHeaders& other) {
@@ -950,18 +740,13 @@ void HttpHeaders::takeIndexed(HttpHeaders& other) {
   for (auto i: kj::indices(setBits)) {
     setBits[i] = other.setBits[i];
   }
-  unindexedFromBase = other.unindexedFromBase;
-  inheritedUnindexed = other.inheritedUnindexed;
 
   other.inlineCount = 0;
   other.spilled = false;
   kj::memzero(other.setBits);
-  other.unindexedFromBase = false;
-  other.inheritedUnindexed = 0;
 }
 
-void HttpHeaders::copyOwnFrom(const HttpHeaders& other) {
-  // Copies `other`'s own entries over this set's, which must have none.
+void HttpHeaders::copyIndexedFrom(const HttpHeaders& other) {
   auto entries = other.indexed();
   if (entries.size() <= INLINE_INDEXED) {
     if (entries.size() > 0) {
@@ -979,8 +764,8 @@ void HttpHeaders::copyOwnFrom(const HttpHeaders& other) {
   }
 }
 
-void HttpHeaders::putOwn(uint id, const char* value, uint32_t size) {
-  // Sets this set's own entry for `id`, keeping the entries in id order.
+void HttpHeaders::putIndexed(uint id, const char* value, uint32_t size) {
+  // Sets the entry for `id`, keeping the entries in id order.
   IndexedHeader header { id, size, value };
   size_t at;
   if (id < SET_BITS) {
@@ -1026,12 +811,12 @@ void HttpHeaders::putOwn(uint id, const char* value, uint32_t size) {
   *moved = header;
 }
 
-void HttpHeaders::appendOwn(uint id, kj::StringPtr value) {
+void HttpHeaders::appendIndexed(uint id, kj::StringPtr value) {
   // Callers add in id order, so this always lands at the end.
-  putOwn(id, value.begin(), static_cast<uint32_t>(value.size()));
+  putIndexed(id, value.begin(), static_cast<uint32_t>(value.size()));
 }
 
-void HttpHeaders::eraseOwn(size_t index) {
+void HttpHeaders::eraseIndexed(size_t index) {
   auto all = indexedMut();
   uint id = all[index].id;
   if (id < SET_BITS) {
@@ -1054,39 +839,17 @@ void HttpHeaders::setIndexed(uint id, kj::StringPtr value) {
   }
   KJ_REQUIRE(static_cast<uint32_t>(value.size()) == value.size(), "HTTP header value too long",
       value.size());
-  putOwn(id, value.begin(), static_cast<uint32_t>(value.size()));
+  putIndexed(id, value.begin(), static_cast<uint32_t>(value.size()));
 }
 
 void HttpHeaders::unsetIndexed(uint id) {
-  if (base != nullptr && base->findOwn(id) != nullptr) {
-    // Hide `base`'s value.
-    putOwn(id, nullptr, 0);
-    return;
-  }
-  auto header = findOwn(id);
+  auto header = findIndexed(id);
   if (header != nullptr) {
-    eraseOwn(header - indexed().begin());
+    eraseIndexed(header - indexed().begin());
   }
-}
-
-void HttpHeaders::materializeUnindexed() {
-  // Takes a copy of `base`'s unindexed headers, so that they can be changed. The copies still refer
-  // to `base`'s strings, so they're kept first and counted, for absorbBase() to copy those strings
-  // if `base` changes or goes away first.
-  if (!unindexedFromBase) return;
-  KJ_DASSERT(inheritedUnindexed == 0);
-  auto& from = base->unindexedHeaders;
-  kj::Vector<Header> all(from.size() + unindexedHeaders.size());
-  all.addAll(from);
-  all.addAll(unindexedHeaders);
-  unindexedHeaders = kj::mv(all);
-  inheritedUnindexed = from.size();
-  unindexedFromBase = false;
 }
 
 void HttpHeaders::clear() {
-  prepareToChange();
-  releaseBase();
   inlineCount = 0;
   spilled = false;
   spilledIndexed.clear();
@@ -1096,25 +859,7 @@ void HttpHeaders::clear() {
 }
 
 size_t HttpHeaders::size() const {
-  size_t result = unindexedHeaders.size();
-  if (unindexedFromBase) {
-    result += base->unindexedHeaders.size();
-  }
-  if (base == nullptr) {
-    return result + indexed().size();
-  }
-
-  result += base->indexed().size();
-  for (auto& header: indexed()) {
-    bool inBase = base->findOwn(header.id) != nullptr;
-    if (header.value == nullptr) {
-      // A tombstone always hides one of base's.
-      --result;
-    } else if (!inBase) {
-      ++result;
-    }
-  }
-  return result;
+  return indexed().size() + unindexedHeaders.size();
 }
 
 HttpHeaders HttpHeaders::clone() const {
@@ -1143,7 +888,7 @@ HttpHeaders HttpHeaders::clone() const {
   };
 
   forEachIndexed([&](uint id, kj::StringPtr value) {
-    result.appendOwn(id, copy(value));
+    result.appendIndexed(id, copy(value));
   });
   result.unindexedHeaders.reserve(unindexedCount);
   forEachUnindexed([&](const Header& header) {
@@ -1159,88 +904,13 @@ HttpHeaders HttpHeaders::clone() const {
 HttpHeaders HttpHeaders::cloneShallow() const {
   HttpHeaders result(*table);
 
-  if (base == nullptr) {
-    result.copyOwnFrom(*this);
-  } else {
-    forEachIndexed([&](uint id, kj::StringPtr value) {
-      result.appendOwn(id, value);
-    });
-  }
-
-  size_t unindexedCount = unindexedHeaders.size() +
-      (unindexedFromBase ? base->unindexedHeaders.size() : 0);
-  if (unindexedCount > 0) {
-    result.unindexedHeaders.reserve(unindexedCount);
-    forEachUnindexed([&](const Header& header) {
-      result.unindexedHeaders.add(header);
-    });
+  result.copyIndexedFrom(*this);
+  if (unindexedHeaders.size() > 0) {
+    result.unindexedHeaders.reserve(unindexedHeaders.size());
+    result.unindexedHeaders.addAll(unindexedHeaders);
   }
 
   return result;
-}
-
-HttpHeaders HttpHeaders::derive() const {
-  HttpHeaders result(*table);
-
-  const HttpHeaders* root = this;
-  if (base == nullptr) {
-    result.unindexedFromBase = true;
-  } else {
-    // Refer to the same set this one does, with a copy of the changes made to this one.
-    root = base;
-    result.copyOwnFrom(*this);
-    result.unindexedFromBase = unindexedFromBase;
-    if (unindexedHeaders.size() > 0) {
-      result.unindexedHeaders.reserve(unindexedHeaders.size());
-      result.unindexedHeaders.addAll(unindexedHeaders);
-    }
-    // This set may own some of the strings its changes refer to, and may go away first.
-    result.copyChangedStrings();
-  }
-
-  {
-    // Link the result into `root`'s list. derive() is const, so other threads may be doing the
-    // same. The lock is released before returning, since moving the result takes it too.
-    DerivedLockGuard guard(root);
-    releaseStore(result.base, root);
-    result.prevDerived = &root->firstDerived;
-    result.nextDerived = root->firstDerived;
-    if (result.nextDerived != nullptr) result.nextDerived->prevDerived = &result.nextDerived;
-    releaseStore(root->firstDerived, &result);
-  }
-  return result;
-}
-
-void HttpHeaders::copyChangedStrings() {
-  // Points this set's own entries at copies of their strings, in one allocation that it owns.
-  size_t total = 0;
-  for (auto& header: indexed()) {
-    if (header.value != nullptr) total += header.size + 1;
-  }
-  for (auto& header: unindexedHeaders) {
-    total += header.name.size() + header.value.size() + 2;
-  }
-  if (total == 0) return;
-
-  auto storage = kj::heapArray<char>(total);
-  char* pos = storage.begin();
-  auto copy = [&](const char* str, size_t size) {
-    memcpy(pos, str, size);
-    pos[size] = '\0';
-    const char* copied = pos;
-    pos += size + 1;
-    return copied;
-  };
-  for (auto& header: indexedMut()) {
-    if (header.value != nullptr) header.value = copy(header.value, header.size);
-  }
-  for (auto& header: unindexedHeaders) {
-    header.name = kj::StringPtr(copy(header.name.begin(), header.name.size()), header.name.size());
-    header.value =
-        kj::StringPtr(copy(header.value.begin(), header.value.size()), header.value.size());
-  }
-  KJ_ASSERT(pos == storage.end());
-  ownedStrings.add(kj::mv(storage));
 }
 
 kj::StringPtr HttpHeaders::cloneToOwn(kj::StringPtr str) {
@@ -1271,7 +941,6 @@ void HttpHeaders::set(HttpHeaderId id, kj::StringPtr value) {
 void HttpHeaders::setPtr(HttpHeaderId id, kj::StringPtr value) {
   id.requireFrom(*table);
   requireValidHeaderValue(value, id);
-  prepareToChange();
 
   setIndexed(id.id, value);
 }
@@ -1308,7 +977,6 @@ void HttpHeaders::add(kj::String&& name, kj::String&& value) {
 }
 
 void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
-  prepareToChange();
   KJ_IF_SOME(id, table->stringToId(name)) {
     auto existing = findIndexed(id.id);
     if (existing == nullptr) {
@@ -1337,32 +1005,19 @@ void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
 }
 
 void HttpHeaders::unset(kj::StringPtr name) {
-  prepareToChange();
   KJ_IF_SOME(id, table->stringToId(name)) {
     unsetIndexed(id.id);
   }
 
   // Duplicate Set-Cookie headers are kept unindexed even though the name may be indexed, so look
   // there too.
-  bool found = false;
-  forEachUnindexed([&](const Header& header) {
-    if (headerNamesEqual(header.name, name)) found = true;
-  });
-  if (!found) return;
-
-  materializeUnindexed();
-  // Removing entries keeps the rest in order, so those from `base` stay first.
   size_t kept = 0;
-  size_t inheritedKept = 0;
   for (auto i: kj::indices(unindexedHeaders)) {
-    auto header = unindexedHeaders[i];
-    if (!headerNamesEqual(header.name, name)) {
-      if (i < inheritedUnindexed) inheritedKept++;
-      unindexedHeaders[kept++] = header;
+    if (!headerNamesEqual(unindexedHeaders[i].name, name)) {
+      unindexedHeaders[kept++] = unindexedHeaders[i];
     }
   }
   unindexedHeaders.truncate(kept);
-  inheritedUnindexed = inheritedKept;
 }
 
 void HttpHeaders::takeOwnership(kj::String&& string) {
@@ -1372,8 +1027,6 @@ void HttpHeaders::takeOwnership(kj::Array<char>&& chars) {
   ownedStrings.add(kj::mv(chars));
 }
 void HttpHeaders::takeOwnership(HttpHeaders&& otherHeaders) {
-  // Sets derived from `otherHeaders` may refer to its strings, and this one could go away first.
-  otherHeaders.prepareToChange();
   for (auto& str: otherHeaders.ownedStrings) {
     ownedStrings.add(kj::mv(str));
   }

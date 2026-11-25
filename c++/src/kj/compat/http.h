@@ -41,7 +41,6 @@
 #include <kj/sticky-flag.h>
 #include <kj/async-io.h>
 #include <kj/debug.h>
-#include <kj/atomic.h>
 
 KJ_BEGIN_HEADER
 
@@ -297,9 +296,6 @@ public:
   KJ_DISALLOW_COPY(HttpHeaders);
   HttpHeaders(HttpHeaders&& other) noexcept;
   HttpHeaders& operator=(HttpHeaders&& other) noexcept;
-  inline ~HttpHeaders() noexcept {
-    if (acquireLoad(base) != nullptr || acquireLoad(firstDerived) != nullptr) destroyShared();
-  }
   // The moved-from object is left empty.
 
   size_t size() const;
@@ -315,23 +311,6 @@ public:
   HttpHeaders cloneShallow() const;
   // Creates a shallow clone of the HttpHeaders. The returned object references the same strings
   // as the original, owning none of them.
-
-  HttpHeaders derive() const;
-  // Returns a set that starts out with this one's contents, like cloneShallow(), but refers to
-  // this set rather than copying it. It keeps only the changes made to it, so making one and
-  // changing a few headers costs those changes rather than a copy of every header. Use it to pass
-  // on a set with a few headers added, replaced or removed.
-  //
-  // This set may still change, move or be destroyed while the result exists. Before it changes
-  // or goes away, it gives each set derived from it a copy of what that set sees through it,
-  // strings included, so the result keeps the contents it started with plus its own changes. So
-  // the result needs this set's strings, owned or not, only for as long as this set does. Deriving
-  // from a derived set refers to the same original set, and copies the changes made so far along
-  // with the strings they refer to.
-  //
-  // Sets related by derive() may be used on different threads. Changing, moving or destroying
-  // this set writes to the sets derived from it, so it must not happen while another thread is
-  // using one of them, except to move or destroy it.
 
   bool isWebSocket() const;
   // Convenience method that checks for the presence of the header `Upgrade: websocket`.
@@ -521,7 +500,7 @@ private:
     // costs nothing until a header is set.
     uint32_t id;
     uint32_t size;      // Not counting the NUL.
-    const char* value;  // NUL-terminated. Null marks a header removed from `base` (a tombstone).
+    const char* value;  // NUL-terminated.
 
     kj::StringPtr get() const { return kj::StringPtr(value, size); }
   };
@@ -532,34 +511,14 @@ private:
   // A table may have hundreds of ids while a message sets a few of them, so a header set holds
   // only what is set rather than a slot per id. An empty value is not kept: kj treats it as unset.
   // The entries of `inlineIndexed` past `inlineCount` are uninitialized and never read.
-  //
-  // In a set made by derive(), these are only the changes made to it since: values that replace
-  // or add to `base`'s, and tombstones for headers removed from `base`.
-  static constexpr uint INLINE_INDEXED = 12;
+  static constexpr uint INLINE_INDEXED = 24;
   uint inlineCount = 0;
   bool spilled = false;
 
-  bool unindexedFromBase = false;
-  // In a set made by derive(): its unindexed headers are `base`'s followed by `unindexedHeaders`.
-  // Set until something needs to change `base`'s part, which then goes first in
-  // `unindexedHeaders` (see `inheritedUnindexed`).
-
   static constexpr uint SET_BITS = 256;
   uint64_t setBits[SET_BITS / 64] = {};
-  // Which ids below SET_BITS have an entry (tombstones included). Looking up one without is a bit
-  // test, and the entry of one with is found by counting the bits below it, since the entries are
-  // in id order.
-
-  const HttpHeaders* base = nullptr;
-  // The set this one was made from by derive(), or null. `base` never has a base of its own:
-  // deriving from a derived set refers to the same `base` and copies the changes.
-
-  mutable HttpHeaders* firstDerived = nullptr;
-  // The first of the sets made from this one by derive(), which form a list through each one's
-  // `nextDerived`. A set with a `base` has none of its own. The list and the `base` pointers into
-  // it change only under the lock for the base's address (see http.c++), so that a set and its
-  // base may be moved or destroyed on different threads at once. Kept here, where hot fields
-  // don't move with it.
+  // Which ids below SET_BITS have an entry. Looking up one without is a bit test, and the entry
+  // of one with is found by counting the bits below it, since the entries are in id order.
 
   IndexedHeader inlineIndexed[INLINE_INDEXED];
   kj::Vector<IndexedHeader> spilledIndexed;
@@ -569,14 +528,6 @@ private:
     kj::StringPtr value;
   };
   kj::Vector<Header> unindexedHeaders;
-
-  HttpHeaders* nextDerived = nullptr;
-  HttpHeaders** prevDerived = nullptr;
-  // This set's place in its base's list: the next set, and where the pointer to this one is.
-
-  uint inheritedUnindexed = 0;
-  // In a set made by derive(): how many of the first `unindexedHeaders` are copies of `base`'s,
-  // which refer to its strings. absorbBase() copies those strings if `base` changes or goes away.
 
   kj::ArrayPtr<const IndexedHeader> indexed() const {
     return spilled ? spilledIndexed.asPtr() : kj::arrayPtr(inlineIndexed, inlineCount);
@@ -588,47 +539,19 @@ private:
   uint countBelow(uint id) const;
   // The number of entries with an id less than `id`, which must be at most SET_BITS.
 
-  const IndexedHeader* findOwn(uint id) const;
-  // This set's own entry for `id`, which may be a tombstone, or null.
   const IndexedHeader* findIndexed(uint id) const;
-  // The value of `id` as seen through `base`: never a tombstone.
+  // The entry for `id`, or null.
 
-  void putOwn(uint id, const char* value, uint32_t size);
-  void eraseOwn(size_t index);
-  void appendOwn(uint id, kj::StringPtr value);
+  void putIndexed(uint id, const char* value, uint32_t size);
+  void eraseIndexed(size_t index);
+  void appendIndexed(uint id, kj::StringPtr value);
   // Adds an entry after all the others; `id` must be larger than theirs.
-  void copyOwnFrom(const HttpHeaders& other);
-  void copyChangedStrings();
-  // Gives this set's own entries copies of the strings they refer to, owned by this set.
+  void copyIndexedFrom(const HttpHeaders& other);
+  // Copies `other`'s entries into this set, which must have none.
   void setIndexed(uint id, kj::StringPtr value);
   void unsetIndexed(uint id);
   void takeIndexed(HttpHeaders& other);
   // Replaces this object's indexed headers with `other`'s, leaving `other` with none.
-
-  template <typename T>
-  static T* acquireLoad(T* const& field) {
-    // Pairs with the release stores of the list pointers, so that whatever a thread did to a set
-    // before unlinking or detaching it happens before another thread sees it gone. Not through
-    // kj::atomicLoad(), whose volatile access keeps the compiler from folding it into the
-    // surrounding code.
-#if defined(_MSC_VER) && !defined(__clang__)
-    return kj::atomicLoad(&field, kj::AtomicMemoryOrder::ACQUIRE);
-#else
-    return __atomic_load_n(&field, __ATOMIC_ACQUIRE);
-#endif
-  }
-  void prepareToChange();
-  // Detaches the sets derived from this one, if any, since they must not see the change.
-  void detachDerived();
-  void absorbBase();
-  // In a set with a base: copies in what it sees through the base, strings included, leaving it
-  // independent of the base.
-  void destroyShared();
-  void releaseBase();
-  // Unlinks this set from its base, if it has one.
-  void takeFrom(HttpHeaders& other);
-  // Moves `other`'s contents and links into this set, which must have neither, nor any strings.
-  void materializeUnindexed();
 
   template <typename Func>
   void forEachIndexed(Func&& func) const;
@@ -1660,10 +1583,6 @@ inline kj::StringPtr HttpHeaderTable::idToString(HttpHeaderId id) const {
   return namesById[id.id];
 }
 
-inline void HttpHeaders::prepareToChange() {
-  if (KJ_UNLIKELY(acquireLoad(firstDerived) != nullptr)) detachDerived();
-}
-
 inline uint HttpHeaders::popCount64(uint64_t x) {
 #if defined(_MSC_VER) && !defined(__clang__)
   return kj::popCount(static_cast<uint>(x)) + kj::popCount(static_cast<uint>(x >> 32));
@@ -1685,7 +1604,7 @@ inline uint HttpHeaders::countBelow(uint id) const {
          popCount64(setBits[2] & mask(2)) + popCount64(setBits[3] & mask(3));
 }
 
-inline const HttpHeaders::IndexedHeader* HttpHeaders::findOwn(uint id) const {
+inline const HttpHeaders::IndexedHeader* HttpHeaders::findIndexed(uint id) const {
   auto all = indexed();
   if (id < SET_BITS) {
     if ((setBits[id / 64] & (uint64_t(1) << (id % 64))) == 0) return nullptr;
@@ -1703,7 +1622,7 @@ inline const HttpHeaders::IndexedHeader* HttpHeaders::findOwn(uint id) const {
 inline kj::Maybe<kj::StringPtr> HttpHeaders::get(HttpHeaderId id) const {
   id.requireFrom(*table);
   const IndexedHeader* header;
-  if (id.id < 128 && base == nullptr) {
+  if (id.id < 128) {
     // The common case, inline: the entry's position is the number of bits set below its own.
     uint word = id.id / 64;
     uint64_t bit = uint64_t(1) << (id.id % 64);
@@ -1720,45 +1639,18 @@ inline kj::Maybe<kj::StringPtr> HttpHeaders::get(HttpHeaderId id) const {
 
 inline void HttpHeaders::unset(HttpHeaderId id) {
   id.requireFrom(*table);
-  prepareToChange();
   unsetIndexed(id.id);
 }
 
 template <typename Func>
 inline void HttpHeaders::forEachIndexed(Func&& func) const {
-  auto own = indexed();
-  if (base == nullptr) {
-    for (auto& header: own) {
-      func(static_cast<uint>(header.id), header.get());
-    }
-    return;
-  }
-
-  // Merge `base`'s entries with this set's changes; both are in id order.
-  auto theirs = base->indexed();
-  auto a = theirs.begin();
-  auto b = own.begin();
-  while (a != theirs.end() || b != own.end()) {
-    if (b == own.end() || (a != theirs.end() && a->id < b->id)) {
-      func(static_cast<uint>(a->id), a->get());
-      ++a;
-    } else {
-      if (a != theirs.end() && a->id == b->id) ++a;
-      if (b->value != nullptr) {
-        func(static_cast<uint>(b->id), b->get());
-      }
-      ++b;
-    }
+  for (auto& header: indexed()) {
+    func(static_cast<uint>(header.id), header.get());
   }
 }
 
 template <typename Func>
 inline void HttpHeaders::forEachUnindexed(Func&& func) const {
-  if (unindexedFromBase) {
-    for (auto& header: base->unindexedHeaders) {
-      func(header);
-    }
-  }
   for (auto& header: unindexedHeaders) {
     func(header);
   }
