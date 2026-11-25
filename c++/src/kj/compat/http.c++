@@ -725,13 +725,14 @@ HttpHeaders& HttpHeaders::operator=(HttpHeaders&& other) noexcept {
 }
 
 void HttpHeaders::takeFrom(HttpHeaders& other) {
-  ownedStrings = kj::mv(other.ownedStrings);
+  // This set's old entries may refer to its old strings and its old Shared set, so they go first.
   unindexedHeaders = kj::mv(other.unindexedHeaders);
   takeIndexed(other);
   base = other.base;
   other.base = nullptr;
   shared = kj::mv(other.shared);
   other.shared = kj::none;
+  ownedStrings = kj::mv(other.ownedStrings);
 }
 
 const HttpHeaders::IndexedHeader* HttpHeaders::findIndexed(uint id) const {
@@ -890,13 +891,14 @@ void HttpHeaders::materializeUnindexed() {
 }
 
 void HttpHeaders::clear() {
-  releaseBase();
   inlineCount = 0;
   spilled = false;
   spilledIndexed.clear();
   kj::memzero(setBits);
 
   unindexedHeaders.clear();
+  // Last, since the entries cleared above may refer into the Shared set.
+  releaseBase();
 }
 
 size_t HttpHeaders::size() const {

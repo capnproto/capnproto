@@ -553,9 +553,10 @@ private:
   // alive. `base` never has a base of its own: deriving from a derived set refers to the same
   // `base` and copies the changes.
 
-  void* reserved = nullptr;
-  // Unused. Keeps the fields after it where they were, so this change shows only the cost of
-  // the new mechanism.
+  kj::Maybe<kj::Arc<const Shared>> shared;
+  // In a set made by derive(): keeps `base`, and whatever this set's changes refer to in it,
+  // alive. Declared before the entries that refer into it, so that it outlives them. Takes the
+  // place of the old `firstDerived`, so the fields after it keep their offsets.
 
   IndexedHeader inlineIndexed[INLINE_INDEXED];
   kj::Vector<IndexedHeader> spilledIndexed;
@@ -565,10 +566,6 @@ private:
     kj::StringPtr value;
   };
   kj::Vector<Header> unindexedHeaders;
-
-  kj::Maybe<kj::Arc<const Shared>> shared;
-  // In a set made by derive(): keeps `base`, and whatever this set's changes refer to in it,
-  // alive.
 
   kj::ArrayPtr<const IndexedHeader> indexed() const {
     return spilled ? spilledIndexed.asPtr() : kj::arrayPtr(inlineIndexed, inlineCount);
