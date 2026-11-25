@@ -3437,6 +3437,55 @@ KJ_TEST("embargo when a tail call back to the caller returns a capability hosted
   KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
 }
 
+KJ_TEST("embargo when a tail call back to the caller is forwarded to a third vat") {
+  // x calls y.tailEcho(via = x's import of z's bootstrap, cap = an object in x). y tail-calls
+  // `via.echo(cap)` back to x, which forwards the call to z, and z echoes x's object. So x's
+  // question resolves, through `Return.takeFromOtherQuestion`, to x's own object. A call x
+  // already made on the pipelined result went to y, back to x, on to z, and back to x again, so a
+  // later call must not reach x's object ahead of it.
+  RpcFuzzState state;
+  TestContext context;
+  context.network.handoffDisabled = true;
+  auto& ws = context.waitScope;
+
+  context.initVat("y", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto& z = context.initVat("z", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto& x = context.initVat("x", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto yRoot = x.connect<test::TestRpcFuzz>("y");
+  auto zRoot = x.connect<test::TestRpcFuzz>("z");
+  test::TestRpcFuzz::Client xObject = kj::heap<RpcFuzzObject>(state);
+
+  // Make sure the connections are up.
+  fuzzSeq(yRoot, 100, 0).wait(ws);
+  fuzzSeq(zRoot, 101, 0).wait(ws);
+
+  // Hold z's messages to x from z's `Return` for the forwarded echo onwards, so that z's
+  // forwarding of call 0 back to x is still in flight when x makes call 1.
+  auto& zToX = KJ_ASSERT_NONNULL(z.vatNetwork.getConnectionTo(x.vatNetwork));
+  zToX.blockAfter([](rpc::Message::Reader message) {
+    return message.isReturn() && message.getReturn().isResults() &&
+        message.getReturn().getResults().getCapTable().size() > 0;
+  });
+
+  auto request = yRoot.tailEchoRequest();
+  request.setVia(zRoot);
+  request.setCap(xObject);
+  auto promise = request.send();
+  auto pipelined = promise.getCap();
+
+  auto call0 = fuzzSeq(pipelined, 1, 0);
+  ws.poll();
+  auto call1 = fuzzSeq(pipelined, 1, 1);
+  ws.poll();
+
+  zToX.unblock();
+  call0.wait(ws);
+  call1.wait(ws);
+  promise.wait(ws);
+
+  KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
+}
+
 // =======================================================================================
 // Randomized test of call ordering and completion.
 //
