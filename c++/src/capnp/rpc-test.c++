@@ -3090,6 +3090,109 @@ KJ_TEST("WindowFlowController: destroying with blocked senders fulfills them") {
 
 
 // =======================================================================================
+// Proxy topology: alice -> proxy -> carol, where the proxy's bootstrap is carol's bootstrap, so
+// every call alice makes is forwarded by the proxy's RpcSystem from one of its connections to
+// another. Three-party handoff is disabled so that capabilities alice passes along really do
+// come back to the proxy, rather than being handed off directly between alice and carol.
+
+struct ProxyContext {
+  TestContext context;
+  int carolCallCount = 0;
+  int carolHandleCount = 0;
+  TestContext::Vat& carol;
+  kj::Own<kj::PromiseFulfiller<Capability::Client>> proxyBootstrapFulfiller;
+  TestContext::Vat& proxy;
+
+  ProxyContext(): ProxyContext(kj::newPromiseAndFulfiller<Capability::Client>()) {}
+
+  explicit ProxyContext(kj::PromiseFulfillerPair<Capability::Client> paf)
+      : carol(context.initVat("carol", test::TestInterface::Client(
+            kj::heap<TestInterfaceImpl>(carolCallCount, carolHandleCount)))),
+        proxyBootstrapFulfiller(kj::mv(paf.fulfiller)),
+        proxy(context.initVat("proxy", Capability::Client(kj::mv(paf.promise)))) {
+    context.network.handoffDisabled = true;
+    proxyBootstrapFulfiller->fulfill(proxy.connect<Capability>("carol"));
+  }
+
+  test::TestMoreStuff::Client moreStuff() {
+    return context.alice.connect<test::TestInterface>("proxy")
+        .getTestMoreStuffRequest().send().getCap();
+  }
+};
+
+KJ_TEST("embargo through a proxy") {
+  ProxyContext ctx;
+  auto& ws = ctx.context.waitScope;
+
+  auto client = ctx.moreStuff();
+  auto cap = test::TestCallOrder::Client(kj::heap<TestCallOrderImpl>());
+
+  auto earlyCall = client.getCallSequenceRequest().send();
+
+  auto echoRequest = client.echoRequest();
+  echoRequest.setCap(cap);
+  auto echo = echoRequest.send();
+  auto pipeline = echo.getCap();
+
+  auto call0 = getCallSequence(pipeline, 0);
+  auto call1 = getCallSequence(pipeline, 1);
+  earlyCall.wait(ws);
+  auto call2 = getCallSequence(pipeline, 2);
+  auto resolved = echo.wait(ws).getCap();
+  auto call3 = getCallSequence(pipeline, 3);
+  auto call4 = getCallSequence(pipeline, 4);
+  auto call5 = getCallSequence(pipeline, 5);
+
+  KJ_EXPECT(call0.wait(ws).getN() == 0);
+  KJ_EXPECT(call1.wait(ws).getN() == 1);
+  KJ_EXPECT(call2.wait(ws).getN() == 2);
+  KJ_EXPECT(call3.wait(ws).getN() == 3);
+  KJ_EXPECT(call4.wait(ws).getN() == 4);
+  KJ_EXPECT(call5.wait(ws).getN() == 5);
+}
+
+KJ_TEST("embargo through a proxy when the promise resolves to another connection") {
+  // Carol echoes a capability that alice passed in through the proxy. When carol's `Return`
+  // reaches the proxy, the proxy's promise for the echoed capability resolves to its import from
+  // alice, on a different connection than the promise. Calls the proxy already sent to carol on
+  // the promise are still being reflected back through the proxy, so later calls must not be
+  // sent straight to alice ahead of them.
+  ProxyContext ctx;
+  auto& ws = ctx.context.waitScope;
+
+  auto client = ctx.moreStuff();
+  auto cap = test::TestCallOrder::Client(kj::heap<TestCallOrderImpl>());
+
+  // Make sure the proxy -> carol connection exists and the moreStuff cap has resolved.
+  client.getCallSequenceRequest().send().wait(ws);
+
+  // Hold everything carol sends to the proxy after the echo's `Return`, so that carol's
+  // reflection of call0 is still in flight when alice makes her next call.
+  auto& carolToProxy = KJ_ASSERT_NONNULL(
+      ctx.carol.vatNetwork.getConnectionTo(ctx.proxy.vatNetwork));
+  carolToProxy.blockAfter([](rpc::Message::Reader message) {
+    return message.isReturn() && message.getReturn().isResults() &&
+        message.getReturn().getResults().getCapTable().size() > 0;
+  });
+
+  auto echoRequest = client.echoRequest();
+  echoRequest.setCap(cap);
+  auto echo = echoRequest.send();
+  auto pipeline = echo.getCap();
+
+  auto call0 = getCallSequence(pipeline, 0);
+  ws.poll();
+
+  auto call1 = getCallSequence(pipeline, 1);
+  ws.poll();
+
+  carolToProxy.unblock();
+
+  KJ_EXPECT(call0.wait(ws).getN() == 0);
+  KJ_EXPECT(call1.wait(ws).getN() == 1);
+}
+
+// =======================================================================================
 // Objects for the randomized test below.
 
 struct RpcFuzzState;

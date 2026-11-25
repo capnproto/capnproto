@@ -1496,8 +1496,17 @@ private:
           // calls our way in the meantime.
           needsEmbargo = rpcReplacement.promiseResolvedToThis(receivedCall);
         } else {
-          // Resolved to a thard-party capability. The three-party handoff mechanism takes care
-          // of embargoing this.
+          // We resolved to a capability on a different connection. The peer can only have
+          // described it as `receiverHosted` or `receiverAnswer`, meaning one of our own exports
+          // or answers, which we in turn forward to that other connection. (A
+          // `ThirdPartyCapDescriptor` produces a `DeferredThirdPartyClient` on this connection,
+          // which is handled above.)
+          //
+          // So, as far as the peer is concerned, the promise now points back to us, and calls we
+          // made on it earlier are on their way back to us to be forwarded to the other
+          // connection. That's the same situation as resolving to a local capability: if we
+          // made any calls, new calls must wait behind an embargo so they don't overtake those.
+          needsEmbargo = receivedCall;
         }
       } else {
         if (replacement->isNull() || replacement->isError()) {
@@ -1535,10 +1544,10 @@ private:
       }
 
       if (needsEmbargo && connectionState->connection.is<Connected>()) {
-        // The new capability is hosted locally, not on the remote machine.  And, we had made calls
-        // to the promise.  We need to make sure those calls echo back to us before we allow new
-        // calls to go directly to the local capability, so we need to set a local embargo and send
-        // a `Disembargo` to echo through the peer.
+        // The new capability is not hosted by the peer: it's local, or on another connection that
+        // we forward to. And, we had made calls to the promise.  We need to make sure those calls
+        // echo back to us before we allow new calls to go directly to the new capability, so we
+        // need to set a local embargo and send a `Disembargo` to echo through the peer.
 
         auto message = connectionState->connection.get<Connected>().connection->newOutgoingMessage(
             messageSizeHint<rpc::Disembargo>() + MESSAGE_TARGET_SIZE_HINT);
