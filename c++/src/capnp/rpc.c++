@@ -3017,8 +3017,10 @@ private:
         if (noPromisePipelining) {
           pipeline = getDisabledPipeline();
         } else {
-          pipeline = kj::refcounted<RpcPipeline>(*connectionState, kj::addRef(*questionRef),
-                                                 /*willResolve =*/ true);
+          auto ownPipeline = kj::refcounted<RpcPipeline>(
+              *connectionState, kj::addRef(*questionRef), /*willResolve =*/ true);
+          rpcPipeline = kj::addRef(*ownPipeline);
+          pipeline = kj::mv(ownPipeline);
         }
 
         auto appPromise = toPromise(kj::mv(questionRef)).then(
