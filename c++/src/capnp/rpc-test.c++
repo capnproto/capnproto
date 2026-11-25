@@ -34,6 +34,7 @@
 #include <kj/miniposix.h>
 #include <kj/time.h>
 #include <kj/list.h>
+#include <stdlib.h>
 #include <deque>
 
 namespace capnp {
@@ -241,6 +242,7 @@ public:
 
   bool forwardingEnabled = false;
   bool handoffDisabled = false;
+  bool dumpMessages = false;
   uint forwardCount = 0;
   uint deniedForwardCount = 0;
 
@@ -330,6 +332,8 @@ public:
       blockAfterPredicate = kj::mv(predicate);
     }
 
+    bool isBlocked() { return currentBlockFulfiller != kj::none; }
+
     void unblock() {
       // Allow blocked messages to proceed.
       KJ_REQUIRE_NONNULL(currentBlockFulfiller)->fulfill();
@@ -390,8 +394,9 @@ public:
 
         ++connection.vat.sent;
 
-        // Uncomment to get a debug dump.
-//        connection.dumper.dump(message.getRoot<rpc::Message>());
+        if (connection.vat.network.dumpMessages) {
+          connection.dumper.dump(message.getRoot<rpc::Message>());
+        }
 
         auto incomingMessage = kj::rc<IncomingRpcMessageImpl>(messageToFlatArray(message));
 
@@ -3430,6 +3435,360 @@ KJ_TEST("embargo when a tail call back to the caller returns a capability hosted
   promise.wait(ws);
 
   KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
+}
+
+// =======================================================================================
+// Randomized test of call ordering and completion.
+//
+// Each run sets up a few vats that each serve a `TestRpcFuzz` object, then performs a random
+// sequence of operations from the vats: ordered calls, echoes (some of which only return once a
+// call made on their pipeline arrives), tail calls through another capability, hold/getHeld,
+// new objects, dropping references, and blocking or unblocking connections. Three-party handoff
+// and forwarding are switched on or off at random. Every object checks that calls made through
+// any one reference arrive in the order they were sent. At the end, every connection is
+// unblocked, and every call must have completed without an error.
+//
+// Runs are deterministic given their seed. Set CAPNP_RPC_FUZZ_SEED to start from a given seed,
+// CAPNP_RPC_FUZZ_RUNS to change the number of runs, CAPNP_RPC_FUZZ_STEPS to change the number
+// of operations per run, and CAPNP_RPC_FUZZ_DUMP=1 to dump every message sent. A run's first N
+// operations don't depend on the number of steps, so lowering it shrinks a failing run.
+
+class SplitMix64 {
+public:
+  explicit SplitMix64(uint64_t seed): state(seed) {}
+
+  uint64_t next() {
+    uint64_t z = (state += 0x9e3779b97f4a7c15ull);
+    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ull;
+    z = (z ^ (z >> 27)) * 0x94d049bb133111ebull;
+    return z ^ (z >> 31);
+  }
+
+  uint below(uint n) { return next() % n; }
+  bool chance(uint percent) { return below(100) < percent; }
+
+private:
+  uint64_t state;
+};
+
+class RpcFuzzRun {
+public:
+  explicit RpcFuzzRun(uint64_t seed): rng(seed) {}
+
+  bool run(uint steps, bool dump);
+  // Returns false if the run failed.
+
+private:
+  struct Handle {
+    // A reference held by the test in one vat. Calls made through it must arrive in order.
+    uint64_t id;
+    test::TestRpcFuzz::Client cap;
+    bool delayed = false;
+    bool fromHeld = false;
+    // Derived from a `getHeld()` result. Such capabilities are never passed to `hold()`, since
+    // `hold(getHeld())` sent through two different references to the same object can run in
+    // either order, and when `hold()` runs first, the held promise resolves to itself.
+    uint32_t nextSeq = 0;
+  };
+
+  struct FuzzVat {
+    kj::StringPtr name;
+    TestContext::Vat& vat;
+    kj::Vector<Handle> handles;
+  };
+
+  struct CallRecord {
+    kj::String description;
+    bool done = false;
+    kj::Maybe<kj::Exception> error;
+  };
+
+  SplitMix64 rng;
+  RpcFuzzState state;
+  TestContext context;
+  kj::Vector<FuzzVat> vats;
+  kj::Vector<kj::String> log;
+  kj::Vector<kj::Own<CallRecord>> calls;
+  kj::Vector<kj::Promise<void>> tasks;
+  uint64_t nextHandleId = 1;
+
+  static constexpr uint MAX_HANDLES_PER_VAT = 32;
+
+  uint pick(FuzzVat& vat) { return rng.below(vat.handles.size()); }
+
+  void addHandle(FuzzVat& vat, uint64_t id, test::TestRpcFuzz::Client cap,
+                 bool delayed = false, bool fromHeld = false) {
+    vat.handles.add(Handle { id, kj::mv(cap), delayed, fromHeld });
+  }
+
+  template <typename Promise>
+  CallRecord& track(kj::String description, Promise&& promise) {
+    log.add(kj::str(description));
+    auto& record = *calls.add(kj::heap<CallRecord>(CallRecord { kj::mv(description) }));
+    tasks.add(kj::mv(promise).then([&record](auto&&) {
+      record.done = true;
+    }, [&record](kj::Exception&& e) {
+      record.done = true;
+      record.error = kj::mv(e);
+    }).eagerlyEvaluate(nullptr));
+    return record;
+  }
+
+  void trackCap(FuzzVat& vat, uint64_t id, bool delayed, bool fromHeld, kj::String description,
+                RemotePromise<test::TestRpcFuzz::CapResult>&& promise) {
+    // Keeps the pipelined capability as handle `id`, and sometimes the final result as another.
+    addHandle(vat, id, promise.getCap(), delayed, fromHeld);
+    bool keepResult = rng.chance(30);
+    uint64_t resultId = nextHandleId++;
+    log.add(kj::str(description));
+    auto& record = *calls.add(kj::heap<CallRecord>(CallRecord { kj::mv(description) }));
+    tasks.add(promise.then([this, &vat, &record, keepResult, resultId, fromHeld](
+        Response<test::TestRpcFuzz::CapResult>&& response) {
+      record.done = true;
+      if (keepResult) {
+        log.add(kj::str(vat.name, ": handle ", resultId, " = result of ", record.description));
+        addHandle(vat, resultId, response.getCap(), false, fromHeld);
+      }
+    }, [&record](kj::Exception&& e) {
+      record.done = true;
+      record.error = kj::mv(e);
+    }).eagerlyEvaluate(nullptr));
+  }
+
+  void callSeq(FuzzVat& vat, uint index) {
+    auto& handle = vat.handles[index];
+    auto request = handle.cap.seqRequest();
+    request.setHandle(handle.id);
+    request.setSeq(handle.nextSeq++);
+    track(kj::str(vat.name, ": call ", request.getSeq(), " on handle ", handle.id),
+          request.send());
+  }
+
+  void echo(FuzzVat& vat) {
+    auto& target = vat.handles[pick(vat)];
+    auto& cap = vat.handles[pick(vat)];
+    bool delayed = rng.chance(30);
+    uint64_t id = nextHandleId++;
+    auto request = target.cap.echoRequest();
+    request.setCap(cap.cap);
+    request.setDelayed(delayed);
+    request.setReleaseHandle(id);
+    auto description = kj::str(vat.name, ": handle ", id, " = echo(handle ", cap.id,
+                               ") on handle ", target.id, delayed ? " (delayed)" : "");
+    trackCap(vat, id, delayed, cap.fromHeld, kj::mv(description), request.send());
+  }
+
+  void tailEcho(FuzzVat& vat) {
+    auto& target = vat.handles[pick(vat)];
+    auto& via = vat.handles[pick(vat)];
+    auto& cap = vat.handles[pick(vat)];
+    bool delayed = rng.chance(30);
+    uint64_t id = nextHandleId++;
+    auto request = target.cap.tailEchoRequest();
+    request.setVia(via.cap);
+    request.setCap(cap.cap);
+    request.setDelayed(delayed);
+    request.setReleaseHandle(id);
+    auto description = kj::str(vat.name, ": handle ", id, " = tailEcho(via handle ", via.id,
+                               ", handle ", cap.id, ") on handle ", target.id,
+                               delayed ? " (delayed)" : "");
+    trackCap(vat, id, delayed, cap.fromHeld, kj::mv(description), request.send());
+  }
+
+  void hold(FuzzVat& vat) {
+    auto& target = vat.handles[pick(vat)];
+    auto& cap = vat.handles[pick(vat)];
+    if (cap.fromHeld) return;
+    auto request = target.cap.holdRequest();
+    request.setCap(cap.cap);
+    track(kj::str(vat.name, ": hold(handle ", cap.id, ") on handle ", target.id),
+          request.send());
+  }
+
+  void getHeld(FuzzVat& vat) {
+    auto& target = vat.handles[pick(vat)];
+    uint64_t id = nextHandleId++;
+    auto description = kj::str(vat.name, ": handle ", id, " = getHeld() on handle ", target.id);
+    trackCap(vat, id, false, true, kj::mv(description), target.cap.getHeldRequest().send());
+  }
+
+  void newObject(FuzzVat& vat) {
+    auto& target = vat.handles[pick(vat)];
+    uint64_t id = nextHandleId++;
+    auto description = kj::str(vat.name, ": handle ", id, " = newObject() on handle ",
+                               target.id);
+    trackCap(vat, id, false, false, kj::mv(description), target.cap.newObjectRequest().send());
+  }
+
+  void drop(FuzzVat& vat) {
+    if (vat.handles.size() <= 2) return;
+    uint index = pick(vat);
+    auto& handle = vat.handles[index];
+    if (handle.delayed && handle.nextSeq == 0) {
+      // Release the delayed echo first so that it can complete.
+      callSeq(vat, index);
+    }
+    log.add(kj::str(vat.name, ": drop handle ", handle.id));
+    if (index != vat.handles.size() - 1) {
+      vat.handles[index] = kj::mv(vat.handles.back());
+    }
+    vat.handles.removeLast();
+  }
+
+  void toggleBlock() {
+    auto& a = vats[rng.below(vats.size())];
+    auto& b = vats[rng.below(vats.size())];
+    if (&a == &b) return;
+    KJ_IF_SOME(connection, a.vat.vatNetwork.getConnectionTo(b.vat.vatNetwork)) {
+      if (connection.isBlocked()) {
+        log.add(kj::str("unblock ", a.name, " -> ", b.name));
+        connection.unblock();
+      } else {
+        log.add(kj::str("block ", a.name, " -> ", b.name));
+        connection.block();
+      }
+    }
+  }
+
+  void step() {
+    auto& vat = vats[rng.below(vats.size())];
+    if (vat.handles.size() > MAX_HANDLES_PER_VAT) {
+      drop(vat);
+      return;
+    }
+
+    uint op = rng.below(100);
+    if (op < 35) {
+      callSeq(vat, pick(vat));
+    } else if (op < 47) {
+      echo(vat);
+    } else if (op < 55) {
+      tailEcho(vat);
+    } else if (op < 61) {
+      hold(vat);
+    } else if (op < 67) {
+      getHeld(vat);
+    } else if (op < 72) {
+      newObject(vat);
+    } else if (op < 80) {
+      drop(vat);
+    } else if (op < 94) {
+      toggleBlock();
+    } else {
+      context.waitScope.poll();
+    }
+  }
+
+  void settle() {
+    // Unblock everything, release every delayed echo, and let everything run.
+    for (auto& a: vats) {
+      for (auto& b: vats) {
+        if (&a == &b) continue;
+        KJ_IF_SOME(connection, a.vat.vatNetwork.getConnectionTo(b.vat.vatNetwork)) {
+          if (connection.isBlocked()) connection.unblock();
+        }
+      }
+    }
+    for (auto& vat: vats) {
+      for (auto i: kj::indices(vat.handles)) {
+        if (vat.handles[i].delayed && vat.handles[i].nextSeq == 0) callSeq(vat, i);
+      }
+    }
+    for (uint i = 0; i < 4; i++) context.waitScope.poll();
+  }
+
+  bool check() {
+    bool ok = true;
+    uint stuck = 0;
+    for (auto& call: calls) {
+      KJ_IF_SOME(e, call->error) {
+        KJ_FAIL_EXPECT("call failed", call->description, e);
+        ok = false;
+      } else if (!call->done) {
+        if (stuck++ < 10) KJ_FAIL_EXPECT("call never completed", call->description);
+        ok = false;
+      }
+    }
+    if (stuck > 10) KJ_FAIL_EXPECT("more calls never completed", stuck - 10);
+    for (auto& violation: state.violations) {
+      KJ_FAIL_EXPECT("call arrived out of order", violation);
+      ok = false;
+    }
+    return ok;
+  }
+
+  void cleanUp() {
+    // Break reference cycles through held capabilities so everything can be freed.
+    kj::Vector<test::TestRpcFuzz::Client> dropped;
+    for (auto& object: state.objects) {
+      KJ_IF_SOME(h, object.takeHeld()) dropped.add(kj::mv(h));
+    }
+    dropped.clear();
+    for (auto& vat: vats) vat.handles.clear();
+    tasks.clear();
+    context.waitScope.poll();
+  }
+};
+
+bool RpcFuzzRun::run(uint steps, bool dump) {
+  static const char* const NAMES[] = { "fuzz0", "fuzz1", "fuzz2", "fuzz3" };
+
+  context.network.dumpMessages = dump;
+  context.network.handoffDisabled = rng.chance(50);
+  context.network.forwardingEnabled = rng.chance(30);
+  uint vatCount = 2 + rng.below(3);
+  log.add(kj::str(vatCount, " vats, handoff ",
+                  context.network.handoffDisabled ? "disabled" : "enabled", ", forwarding ",
+                  context.network.forwardingEnabled ? "enabled" : "disabled"));
+
+  vats.reserve(vatCount);
+  for (auto i: kj::zeroTo(vatCount)) {
+    auto& vat = context.initVat(NAMES[i],
+        test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+    vats.add(FuzzVat { NAMES[i], vat, {} });
+  }
+  for (auto& vat: vats) {
+    addHandle(vat, nextHandleId++, test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+    for (auto& other: vats) {
+      if (&other == &vat) continue;
+      uint64_t id = nextHandleId++;
+      log.add(kj::str(vat.name, ": handle ", id, " = bootstrap of ", other.name));
+      addHandle(vat, id, vat.vat.connect<test::TestRpcFuzz>(other.name));
+    }
+  }
+
+  for (uint i = 0; i < steps; i++) {
+    step();
+    for (uint yields = rng.below(3); yields > 0; yields--) {
+      kj::yield().wait(context.waitScope);
+    }
+  }
+
+  settle();
+  bool ok = check();
+  if (!ok) {
+    KJ_LOG(WARNING, "operations in the failed run", kj::strArray(log, "\n"));
+  }
+  cleanUp();
+  return ok;
+}
+
+uint64_t rpcFuzzEnv(const char* name, uint64_t defaultValue) {
+  const char* value = getenv(name);
+  return value == nullptr ? defaultValue : strtoull(value, nullptr, 0);
+}
+
+KJ_TEST("randomized call ordering and completion") {
+  uint64_t firstSeed = rpcFuzzEnv("CAPNP_RPC_FUZZ_SEED", 1);
+  uint64_t runs = rpcFuzzEnv("CAPNP_RPC_FUZZ_RUNS", 100);
+  bool dump = rpcFuzzEnv("CAPNP_RPC_FUZZ_DUMP", 0) != 0;
+  uint steps = rpcFuzzEnv("CAPNP_RPC_FUZZ_STEPS", 150);
+
+  for (uint64_t seed = firstSeed; seed < firstSeed + runs; seed++) {
+    KJ_CONTEXT(seed);
+    RpcFuzzRun run(seed);
+    if (!run.run(steps, dump)) break;
+  }
 }
 
 }  // namespace
