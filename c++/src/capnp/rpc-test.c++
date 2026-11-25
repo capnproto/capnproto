@@ -3193,6 +3193,71 @@ KJ_TEST("embargo through a proxy when the promise resolves to another connection
 }
 
 // =======================================================================================
+// Tail call that the callee's vat forwards straight back to the caller's vat, where the final
+// callee only completes after a call made on its pipeline arrives.
+
+class SignalingCallOrder final: public test::TestCallOrder::Server {
+public:
+  SignalingCallOrder(kj::Own<kj::PromiseFulfiller<void>> fulfiller)
+      : fulfiller(kj::mv(fulfiller)) {}
+
+  kj::Promise<void> getCallSequence(GetCallSequenceContext context) override {
+    context.getResults().setN(count++);
+    fulfiller->fulfill();
+    return kj::READY_NOW;
+  }
+
+private:
+  kj::Own<kj::PromiseFulfiller<void>> fulfiller;
+  uint count = 0;
+};
+
+class PipelineDependentTailCallee final: public test::TestTailCallee::Server {
+public:
+  kj::Promise<void> foo(FooContext context) override {
+    auto paf = kj::newPromiseAndFulfiller<void>();
+    test::TestCallOrder::Client c = kj::heap<SignalingCallOrder>(kj::mv(paf.fulfiller));
+
+    PipelineBuilder<test::TestTailCallee::TailResult> pipeline;
+    pipeline.setC(c);
+    context.setPipeline(pipeline.build());
+
+    uint32_t i = context.getParams().getI();
+    return paf.promise.then([context, c = kj::mv(c), i]() mutable {
+      auto results = context.getResults();
+      results.setI(i);
+      results.setT("done");
+      results.setC(kj::mv(c));
+    });
+  }
+};
+
+KJ_TEST("tail call back to caller completes when it waits for a pipelined call") {
+  TestContext context;
+
+  auto caller = context.connect().getTestTailCallerRequest().send().getCap();
+  test::TestTailCallee::Client callee(kj::heap<PipelineDependentTailCallee>());
+
+  auto request = caller.fooRequest();
+  request.setI(789);
+  request.setCallee(callee);
+  auto promise = request.send();
+
+  // Let the server tail-call back to us and send its Return(takeFromOtherQuestion).
+  context.waitScope.poll();
+
+  auto dependentCall = promise.getC().getCallSequenceRequest().send();
+
+  bool done = false;
+  auto finished = promise.then([&](auto&&) { done = true; }).eagerlyEvaluate(nullptr);
+  for (uint i = 0; i < 64 && !done; i++) context.waitScope.poll();
+  KJ_EXPECT(done, "tail call never completed: the pipelined call never reached the callee");
+  if (done) {
+    KJ_EXPECT(dependentCall.wait(context.waitScope).getN() == 0);
+  }
+}
+
+// =======================================================================================
 // Objects for the randomized test below.
 
 struct RpcFuzzState;
