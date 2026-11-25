@@ -1022,6 +1022,9 @@ private:
     // over time, and need to know that earlier calls may still be on their way along the old
     // route.
 
+    virtual kj::Maybe<RpcClient&> getEmbargoWrapped() { return kj::none; }
+    // If this is a `RequireEmbargoWrapper`, the client it wraps.
+
     struct WriteDescriptorResult {
       kj::Maybe<ExportId> exportId;
       // If writing the descriptor adds a new export to the export table, or increments the refcount
@@ -2223,6 +2226,10 @@ private:
       return inner->getFd();
     }
 
+    kj::Maybe<RpcClient&> getEmbargoWrapped() override {
+      return *inner;
+    }
+
     bool promiseResolvedToThis(bool receivedCall) override {
       if (inner->getResolved() == kj::none) {
         inner->promiseResolvedToThis(receivedCall);
@@ -2984,7 +2991,7 @@ private:
         ClientHook* ptr = entry.value.get();
         for (;;) {
           if (ptr == returned.get()) break;
-          KJ_IF_SOME(r, ptr->getResolved()) {
+          KJ_IF_SOME(r, connectionState->getNextInIdentityChain(*ptr)) {
             ptr = &r;
           } else {
             break;
@@ -3107,6 +3114,19 @@ private:
 
   bool isSameNetwork(ClientHook& hook) {
     return hook.isBrand(brand.get());
+  }
+
+  kj::Maybe<ClientHook&> getNextInIdentityChain(ClientHook& hook) {
+    // Like `hook.getResolved()`, but a `RequireEmbargoWrapper` leads to the client it wraps. Use
+    // this to check whether a client is, or has resolved to, a particular object. The wrapper
+    // forwards everything to the client it wraps, so it stands for that object, but its
+    // `getResolved()` skips straight to whatever that client resolved to.
+    KJ_IF_SOME(rpcClient, unwrapIfSameNetwork(hook)) {
+      KJ_IF_SOME(wrapped, rpcClient.getEmbargoWrapped()) {
+        return wrapped;
+      }
+    }
+    return hook.getResolved();
   }
 
   kj::Maybe<RpcRequest&> unwrapIfSameNetwork(RequestHook& hook) {
@@ -3275,10 +3295,12 @@ private:
     // will resolve to the same network capability forever, *even if* that network capability is
     // itself a promise which later resolves to somewhere else.
   public:
-    PostReturnRpcPipeline(kj::Own<PipelineHook> inner,
+    PostReturnRpcPipeline(RpcConnectionState& connectionState,
+                          kj::Own<PipelineHook> inner,
                           RpcServerResponseImpl& response,
                           kj::Own<RpcCallContext> context)
-        : inner(kj::mv(inner)), response(response), context(kj::mv(context)) {}
+        : connectionState(kj::addRef(connectionState)), inner(kj::mv(inner)), response(response),
+          context(kj::mv(context)) {}
 
     kj::Own<PipelineHook> addRef() override {
       return kj::addRef(*this);
@@ -3287,30 +3309,37 @@ private:
     kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
       auto resolved = response.getResolutionAtReturnTime(ops);
       auto original = inner->getPipelinedCap(ops);
-      return getResolutionAtReturnTime(kj::mv(original), kj::mv(resolved));
+      return getResolutionAtReturnTime(*connectionState, kj::mv(original), kj::mv(resolved));
     }
 
     kj::Own<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) override {
       auto resolved = response.getResolutionAtReturnTime(ops);
       auto original = inner->getPipelinedCap(kj::mv(ops));
-      return getResolutionAtReturnTime(kj::mv(original), kj::mv(resolved));
+      return getResolutionAtReturnTime(*connectionState, kj::mv(original), kj::mv(resolved));
     }
 
   private:
+    kj::Own<RpcConnectionState> connectionState;
     kj::Own<PipelineHook> inner;
     RpcServerResponseImpl& response;
     kj::Own<RpcCallContext> context;  // owns `response`
 
-    static kj::Own<ClientHook> getResolutionAtReturnTime(
+    static kj::Own<ClientHook> getResolutionAtReturnTime(RpcConnectionState& connectionState,
         kj::Own<ClientHook> original, RpcServerResponseImpl::Resolution resolution) {
       // Wait for `original` to resolve to `resolution.returnedCap`, then return
       // `resolution.unwrapped`.
+      //
+      // The pipeline may hand out a `RequireEmbargoWrapper` where the results hold the client it
+      // wraps: for instance, if the results came from a tail call back to us that handed over our
+      // own answer's results, `RpcPipeline` wraps the capabilities it resolves to through that
+      // answer's pipeline, but the results themselves aren't wrapped. The wrapper stands for the
+      // same object, so look through it.
 
       ClientHook* ptr = original.get();
       for (;;) {
         if (ptr == resolution.returnedCap.get()) {
           return kj::mv(resolution.unwrapped);
-        } else KJ_IF_SOME(r, ptr->getResolved()) {
+        } else KJ_IF_SOME(r, connectionState.getNextInIdentityChain(*ptr)) {
           ptr = &r;
         } else {
           break;
@@ -3319,9 +3348,9 @@ private:
 
       KJ_IF_SOME(p, ptr->whenMoreResolved()) {
         return newLocalPromiseClient(p.then(
-            [original = kj::mv(original), resolution = kj::mv(resolution)]
-            (kj::Own<ClientHook> r) mutable {
-          return getResolutionAtReturnTime(kj::mv(r), kj::mv(resolution));
+            [connectionState = kj::addRef(connectionState), original = kj::mv(original),
+             resolution = kj::mv(resolution)](kj::Own<ClientHook> r) mutable {
+          return getResolutionAtReturnTime(*connectionState, kj::mv(r), kj::mv(resolution));
         }));
       } else if (ptr->isError() || ptr->isNull()) {
         // This is already a broken capability, the error probably explains what went wrong. In
@@ -3479,7 +3508,7 @@ private:
           // consistent with whatever the result caps resolved to as of the time the return was sent.
           answer.pipeline = answer.pipeline.map([&](kj::Own<PipelineHook>& inner) {
             return kj::refcounted<PostReturnRpcPipeline>(
-                kj::mv(inner), responseImpl, kj::addRef(*this));
+                *connectionState, kj::mv(inner), responseImpl, kj::addRef(*this));
           });
         }
       }
