@@ -3914,11 +3914,10 @@ KJ_TEST("pipelined call after returning results that a tail call back to us hand
   // for x's import of a promise in y. y has resolved that promise to x's bootstrap, but x doesn't
   // know yet, so the call goes to y as question Q, and y tail-calls back to x's bootstrap. Q
   // resolves, through `Return.takeFromOtherQuestion`, to x's import of y's bootstrap, and x returns
-  // that to p. Call 0, which p pipelines before Q resolves, gets x a capability from Q's pipeline,
-  // which resolves to the import wrapped to require an embargo. Call 1 reaches x through the same
-  // pipeline after x has sent its `Return`, so x must see that the wrapper stands for the import
-  // it returned. Unlike when x forwards a call straight to y, the local promise in between keeps
-  // x from returning the pipelined capability in place of the import.
+  // that to p. Call 0 is the first call p pipelines, and it reaches x through the pipeline after x
+  // has sent its `Return`. Q's pipeline gives x the import wrapped to require an embargo, so x must
+  // see that the wrapper stands for the import it returned. (Had p pipelined a call before x
+  // returned, x would have returned the capability that call went to, which hasn't settled yet.)
   RpcFuzzState state;
   TestContext context;
   context.network.handoffDisabled = true;
@@ -3957,7 +3956,7 @@ KJ_TEST("pipelined call after returning results that a tail call back to us hand
   auto forwarder = xRoot.getHeldRequest().send().wait(ws).getCap();
 
   // Resolve y's promise to x's bootstrap, but hold y's messages to x, so that x keeps sending
-  // calls on the promise to y, and call 0 reaches x while Q is still waiting.
+  // calls on the promise to y.
   auto& yToX = KJ_ASSERT_NONNULL(y.vatNetwork.getConnectionTo(x.vatNetwork));
   yToX.block();
   paf.fulfiller->fulfill(kj::cp(xRootAtY));
@@ -3965,23 +3964,20 @@ KJ_TEST("pipelined call after returning results that a tail call back to us hand
 
   auto promise = forwarder.tailEchoRequest().send();
   auto pipelined = promise.getCap();
-
-  auto call0 = fuzzSeq(pipelined, 1, 0);
   ws.poll();
 
-  // Hold x's messages to p, including its `Return`, so that call 1 is still addressed to the
+  // Hold x's messages to p, including its `Return`, so that call 0 is still addressed to the
   // answer when it reaches x.
   auto& xToP = KJ_ASSERT_NONNULL(x.vatNetwork.getConnectionTo(p.vatNetwork));
   xToP.block();
   yToX.unblock();
   ws.poll();
 
-  auto call1 = fuzzSeq(pipelined, 1, 1);
+  auto call0 = fuzzSeq(pipelined, 1, 0);
   ws.poll();
 
   xToP.unblock();
   call0.wait(ws);
-  call1.wait(ws);
   promise.wait(ws);
 
   KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
@@ -3989,6 +3985,66 @@ KJ_TEST("pipelined call after returning results that a tail call back to us hand
   // The forwarder's `via` now resolves to x's bootstrap, which holds the forwarder. Break that
   // cycle so that the objects are freed.
   xLocalRoot.holdRequest().send().wait(ws);
+}
+
+KJ_TEST("embargo when a tail call through a local promise returns before pipelined calls arrive") {
+  // Like "embargo when a forwarded tail call returns before calls pipelined on it arrive", but y's
+  // tail call goes through a local promise for its import of z's bootstrap, so y's answer
+  // pipelines calls on a pipeline that only reaches the call's `RpcPipeline` later. y forwards
+  // call 0 to z, and z echoes y's bootstrap, so y embargoes its pipelined capability. y returns
+  // to x right away, and a later call must not go straight to y's bootstrap ahead of call 0.
+  RpcFuzzState state;
+  TestContext context;
+  context.network.handoffDisabled = true;
+  auto& ws = context.waitScope;
+
+  auto& z = context.initVat("z", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  test::TestRpcFuzz::Client yLocalRoot = kj::heap<RpcFuzzObject>(state);
+  auto& y = context.initVat("y", yLocalRoot);
+  auto& x = context.initVat("x", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto yRoot = x.connect<test::TestRpcFuzz>("y");
+  auto zRootFromY = y.connect<test::TestRpcFuzz>("z");
+
+  // Make sure the connections are up.
+  fuzzSeq(yRoot, 100, 0).wait(ws);
+  fuzzSeq(zRootFromY, 101, 0).wait(ws);
+
+  // Give x an object in y that tail-calls through a local promise for y's import of z's bootstrap.
+  {
+    auto request = yLocalRoot.holdRequest();
+    request.setCap(kj::heap<TailEchoThroughLocalPromise>(
+        kj::Promise<test::TestRpcFuzz::Client>(kj::cp(zRootFromY)), yLocalRoot));
+    request.send().wait(ws);
+  }
+  auto forwarder = yRoot.getHeldRequest().send().wait(ws).getCap();
+
+  // Hold y's messages to z after the forwarded echo, so that z returns before call 0 reaches it,
+  // and call 0 is still on its way when x makes call 1.
+  auto& yToZ = KJ_ASSERT_NONNULL(y.vatNetwork.getConnectionTo(z.vatNetwork));
+  yToZ.blockAfter([](rpc::Message::Reader message) {
+    return message.isCall() &&
+        message.getCall().getInterfaceId() == typeId<test::TestRpcFuzz>() &&
+        message.getCall().getMethodId() == 1;
+  });
+
+  auto promise = forwarder.tailEchoRequest().send();
+  auto pipelined = promise.getCap();
+
+  auto call0 = fuzzSeq(pipelined, 1, 0);
+  ws.poll();
+  auto call1 = fuzzSeq(pipelined, 1, 1);
+  ws.poll();
+
+  yToZ.unblock();
+  call0.wait(ws);
+  call1.wait(ws);
+  promise.wait(ws);
+
+  KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
+
+  // y's bootstrap holds the forwarder, which holds y's bootstrap. Break that cycle so that the
+  // objects are freed.
+  yLocalRoot.holdRequest().send().wait(ws);
 }
 
 KJ_TEST("promise resolves through receiverAnswer to our resolved promise from another vat") {
