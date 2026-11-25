@@ -971,9 +971,11 @@ KJ_TEST("HttpHeaders match a model under random changes") {
       KJ_ASSERT(shallow.toString() == shallowModel.toString(), round);
       KJ_ASSERT(base.toString() == baseModel.toString(), round);
 
-      // A deep copy doesn't need the strings the original refers to.
+      // A deep copy doesn't need the strings the original refers to. (Drop every set that refers
+      // to `pool` first: debug builds check that no pointer into a string outlives it.)
       auto deepModel = baseModel.copy();
       base = HttpHeaders(*table);
+      shallow = HttpHeaders(*table);
       pool.clear();
       KJ_ASSERT(deep.toString() == deepModel.toString(), round);
       auto moved = kj::mv(deep);
