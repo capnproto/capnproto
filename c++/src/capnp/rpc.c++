@@ -1401,6 +1401,21 @@ private:
       return connectionState->writeTarget(*cap, target);
     }
 
+    WriteThirdPartyDescriptorResult writeThirdPartyDescriptor(
+        VatNetworkBase::Connection& provider, VatNetworkBase::Connection& recipient,
+        AnyPointer::Builder contact) override {
+      // Hand off the client we currently forward calls to, as `writeDescriptor()` does. The
+      // `Provide` targets that client, and the recipient's `Disembargo` follows calls sent through
+      // the vine to it. If the vine were this promise, calls sent through it after we resolve
+      // elsewhere would take a different route, and the `Disembargo` could overtake them.
+      KJ_IF_SOME(rpcCap, connectionState->unwrapIfSameConnection(*cap)) {
+        return rpcCap.writeThirdPartyDescriptor(provider, recipient, contact);
+      } else {
+        // We've resolved to something that isn't on our connection. Describe that instead.
+        return cap->addRef();
+      }
+    }
+
     void adoptFlowController(kj::Own<RpcFlowController> flowController) override {
       KJ_IF_SOME(rpcCap, connectionState->unwrapIfSameConnection(*cap)) {
         // Pass the flow controller on to our inner cap.
