@@ -2549,6 +2549,7 @@ private:
           QuestionId questionId;
           auto& question = other.questions.next(questionId);
           question.isAwaitingReturn = true;
+          question.vine = kj::mv(vine);
           auto questionRef = kj::refcounted<QuestionRef>(other, questionId);
           question.selfRef = *questionRef;
 
@@ -2568,9 +2569,10 @@ private:
             acceptMsg->send();
           }
 
-          // Arrange to drop the vine as soon as the Accept completes, which lets the introducer
-          // know that it can finish out the Provide.
-          questionRef->setDropWhenDone(kj::mv(vine));
+          // The question holds the vine, and drops it when the Accept returns, which lets the
+          // introducer know that it can finish out the Provide. (Not when the question is
+          // canceled: calls pipelined on the Accept may still be on their way to the host, and
+          // if the introducer finished the Provide first, the host couldn't match the Accept.)
 
           // We have not create an RpcPipeline just to fetch its root object, because RpcPipeline
           // is what QuestionRef knows how to fulfill.
