@@ -334,6 +334,14 @@ public:
       currentBlockFulfiller = kj::none;
     }
 
+    class IncomingRpcMessageImpl;
+
+    void deliverInOrder(uint64_t sequence, kj::Rc<IncomingRpcMessageImpl> message);
+    // Passes a sent message to the partner once every message sent before it has been passed.
+    // Messages usually become ready in the order they were sent, but not always: unblock() called
+    // from outside the event loop lets messages sent while blocked run ahead of ones sent just
+    // before block() that are still waiting for their turn.
+
     void disconnect(kj::Exception&& exception) {
       messageQueue.rejectAll(exception.clone());
       networkException = kj::mv(exception);
@@ -400,11 +408,10 @@ public:
         }
 
         auto connectionPtr = &connection;
+        uint64_t sequence = connection.nextSendSequence++;
         connection.tasks->add(blocker.then(
-            [connectionPtr,message=kj::mv(incomingMessage)]() mutable {
-          KJ_IF_SOME(p, connectionPtr->partner) {
-            p.messageQueue.push(kj::Own<IncomingRpcMessage>(message.toOwn()));
-          }
+            [connectionPtr,sequence,message=kj::mv(incomingMessage)]() mutable {
+          connectionPtr->deliverInOrder(sequence, kj::mv(message));
         }));
       }
 
@@ -567,6 +574,10 @@ public:
 
     kj::Maybe<kj::Exception> networkException;
 
+    uint64_t nextSendSequence = 0;
+    uint64_t nextDeliverSequence = 0;
+    kj::HashMap<uint64_t, kj::Rc<IncomingRpcMessageImpl>> readyMessages;
+
     kj::ProducerConsumerQueue<kj::Maybe<kj::Own<IncomingRpcMessage>>> messageQueue;
     kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> fulfillOnEnd;
 
@@ -644,6 +655,22 @@ private:
     });
   }
 };
+
+void TestVat::ConnectionImpl::deliverInOrder(
+    uint64_t sequence, kj::Rc<IncomingRpcMessageImpl> message) {
+  readyMessages.insert(sequence, kj::mv(message));
+  for (;;) {
+    KJ_IF_SOME(ready, readyMessages.find(nextDeliverSequence)) {
+      KJ_IF_SOME(p, partner) {
+        p.messageQueue.push(kj::Own<IncomingRpcMessage>(kj::mv(ready).toOwn()));
+      }
+      readyMessages.erase(nextDeliverSequence);
+      ++nextDeliverSequence;
+    } else {
+      break;
+    }
+  }
+}
 
 TestNetwork::~TestNetwork() noexcept(false) {}
 
