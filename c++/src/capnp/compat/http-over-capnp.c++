@@ -34,24 +34,46 @@ using kj::byte;
 // Every method in KJ_HTTP_FOR_EACH_REQUEST_METHOD has a capnp enumerant of the same name; a missing
 // one fails to compile. CONNECT has none, because a request call can't carry it.
 
-capnp::HttpMethod httpMethodToCapnp(kj::HttpMethod method) {
-  switch (method) {
-#define CASE(m) case kj::HttpMethod::m: return capnp::HttpMethod::m;
+capnp::HttpMethod httpMethodToCapnp(const kj::HttpMethod& method) {
+  switch (method.known()) {
+#define CASE(m) case kj::HttpMethod::Known::m: return capnp::HttpMethod::m;
     KJ_HTTP_FOR_EACH_REQUEST_METHOD(CASE)
 #undef CASE
-    case kj::HttpMethod::CONNECT:
+    case kj::HttpMethod::Known::CONNECT:
       KJ_FAIL_REQUIRE("use connect() for CONNECT requests");
+    case kj::HttpMethod::Known::OTHER:
+      return capnp::HttpMethod::OTHER;
   }
   KJ_UNREACHABLE;
 }
 
-kj::HttpMethod httpMethodFromCapnp(capnp::HttpMethod method) {
+kj::HttpMethod httpMethodFromCapnp(capnp::HttpMethod method, capnp::Text::Reader methodName) {
   switch (method) {
 #define CASE(m) case capnp::HttpMethod::m: return kj::HttpMethod::m;
     KJ_HTTP_FOR_EACH_REQUEST_METHOD(CASE)
 #undef CASE
+    case capnp::HttpMethod::OTHER: {
+      auto result = kj::HttpMethod::parse(methodName);
+      KJ_REQUIRE(result != kj::HttpMethod::CONNECT, "use connect() for CONNECT requests");
+      return result;
+    }
   }
   KJ_FAIL_REQUIRE("unknown method", method);
+}
+
+void setHttpMethod(capnp::HttpRequest::Builder request, const kj::HttpMethod& method) {
+  auto capnpMethod = httpMethodToCapnp(method);
+  request.setMethod(capnpMethod);
+  if (capnpMethod == capnp::HttpMethod::OTHER) {
+    auto name = method.name();
+    request.initMethodName(name.size()).asArray().copyFrom(name);
+  } else if (request.hasMethodName()) {
+    request.disownMethodName();
+  }
+}
+
+kj::HttpMethod getHttpMethod(capnp::HttpRequest::Reader request) {
+  return httpMethodFromCapnp(request.getMethod(), request.getMethodName());
 }
 
 // =======================================================================================
@@ -582,7 +604,7 @@ public:
     auto rpcRequest = inner.requestRequest();
 
     auto metadata = rpcRequest.initRequest();
-    metadata.setMethod(httpMethodToCapnp(method));
+    setHttpMethod(metadata, method);
     metadata.setUrl(url);
     metadata.adoptHeaders(factory.headersToCapnp(
         headers, Orphanage::getForMessageContaining(metadata)));
@@ -799,7 +821,7 @@ public:
                           capnp::HttpRequest::Reader request,
                           capnp::HttpService::ClientRequestContext::Client clientContext)
       : factory(factory),
-        method(httpMethodFromCapnp(request.getMethod())),
+        method(getHttpMethod(request)),
         url(request.getUrl()),
         headers(factory.capnpToKj(request.getHeaders())),
         clientContext(kj::mv(clientContext)) {
