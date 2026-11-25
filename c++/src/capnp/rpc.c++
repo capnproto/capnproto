@@ -3005,7 +3005,7 @@ private:
         ClientHook* ptr = entry.value.get();
         for (;;) {
           if (ptr == returned.get()) break;
-          KJ_IF_SOME(r, ptr->getResolved()) {
+          KJ_IF_SOME(r, connectionState->getNextInIdentityChain(*ptr)) {
             ptr = &r;
           } else {
             break;
