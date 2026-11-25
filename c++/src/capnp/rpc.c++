@@ -2511,6 +2511,14 @@ private:
     }
 
     RemotePromise<AnyPointer> send() override {
+      kj::Maybe<kj::Own<RpcPipeline>> rpcPipeline;
+      return send(rpcPipeline);
+    }
+
+    RemotePromise<AnyPointer> send(kj::Maybe<kj::Own<RpcPipeline>>& rpcPipeline) {
+      // Like `send()`, but also sets `rpcPipeline` to the returned promise's pipeline if it is an
+      // `RpcPipeline`.
+
       if (!connectionState->connection.is<Connected>()) {
         // Connection is broken.
         // TODO(bug): Seems like we should check for redirect before this?
@@ -2541,8 +2549,10 @@ private:
           auto forkedPromise = sendResult.promise.fork();
 
           // The pipeline must get notified of resolution before the app does to maintain ordering.
-          pipeline = kj::refcounted<RpcPipeline>(
+          auto ownPipeline = kj::refcounted<RpcPipeline>(
               *connectionState, kj::mv(sendResult.questionRef), forkedPromise.addBranch());
+          rpcPipeline = kj::addRef(*ownPipeline);
+          pipeline = kj::mv(ownPipeline);
 
           sendResult.promise = forkedPromise.addBranch();
         }
@@ -2879,6 +2889,51 @@ private:
       })->addRef();
     }
 
+    void substituteUnsettledCaps(AnyPointer::Reader results,
+                                 kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> capTable) {
+      // `results` are the results of this pipeline's call, and `capTable` is the cap table of a
+      // copy of them that we're about to send on as the results of another call. Calls pipelined
+      // on that other call were forwarded to this pipeline, so they may not have reached the
+      // capabilities in `results` yet: for instance, a pipelined capability may still be behind
+      // an embargo. Calls made directly on the capabilities in the copy could overtake them.
+      //
+      // So, wherever a pipelined capability that we handed out hasn't resolved to the capability
+      // in `results` yet, replace that capability in `capTable` with the pipelined one, so that
+      // later calls queue up behind the earlier ones.
+
+      for (auto& entry: clientMap) {
+        kj::Own<ClientHook> returned;
+        if (kj::runCatchingExceptions([&]() {
+          returned = results.getPipelinedCap(entry.key);
+        }) != kj::none) {
+          // The pipelined capability will be broken in the same way, so ordering doesn't matter.
+          continue;
+        }
+
+        ClientHook* ptr = entry.value.get();
+        for (;;) {
+          if (ptr == returned.get()) break;
+          KJ_IF_SOME(r, ptr->getResolved()) {
+            ptr = &r;
+          } else {
+            break;
+          }
+        }
+        if (ptr == returned.get()) {
+          // Already resolved, so calls made on it went straight to `returned`.
+          continue;
+        }
+
+        for (auto& slot: capTable) {
+          KJ_IF_SOME(cap, slot) {
+            if (cap.get() == returned.get()) {
+              slot = entry.value->addRef();
+            }
+          }
+        }
+      }
+    }
+
   private:
     kj::Own<RpcConnectionState> connectionState;
     kj::Maybe<kj::ForkedPromise<kj::Own<RpcResponse>>> redirectLater;
@@ -2996,6 +3051,9 @@ private:
   class RpcServerResponse {
   public:
     virtual AnyPointer::Builder getResultsBuilder() = 0;
+
+    virtual kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getCapTable() = 0;
+    // The capabilities in the results, which may be replaced before the results are sent.
   };
 
   class RpcServerResponseImpl final: public RpcServerResponse {
@@ -3009,6 +3067,10 @@ private:
 
     AnyPointer::Builder getResultsBuilder() override {
       return capTable.imbue(payload.getContent());
+    }
+
+    kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getCapTable() override {
+      return capTable.getTable();
     }
 
     inline bool hasCapabilities() {
@@ -3079,6 +3141,13 @@ private:
 
     AnyPointer::Builder getResultsBuilder() override {
       return message.getRoot<AnyPointer>();
+    }
+
+    kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getCapTable() override {
+      // These results only come back to us through `Return.takeFromOtherQuestion`, and then
+      // pipelined capabilities resolve through the answer's pipeline (see `TakenRpcResponse`), so
+      // there's nothing to replace.
+      return nullptr;
     }
 
     AnyPointer::Reader getResults() override {
@@ -3454,14 +3523,30 @@ private:
         };
       }
 
-      auto promise = request->send();
+      kj::Maybe<kj::Own<RpcPipeline>> rpcPipeline;
+      RemotePromise<AnyPointer> promise = nullptr;
+      KJ_IF_SOME(rpcRequest, connectionState->unwrapIfSameNetwork(*request)) {
+        promise = rpcRequest.send(rpcPipeline);
+      } else {
+        promise = request->send();
+      }
 
       // Wait for response.
-      auto voidPromise = promise.then([this](Response<AnyPointer>&& tailResponse) {
+      auto voidPromise = promise.then([this, rpcPipeline = kj::mv(rpcPipeline)](
+          Response<AnyPointer>&& tailResponse) mutable {
         // Copy the response.
         // TODO(perf):  It would be nice if we could somehow make the response get built in-place
         //   but requires some refactoring.
         getResults(tailResponse.targetSize()).set(tailResponse);
+
+        KJ_IF_SOME(pipeline, rpcPipeline) {
+          // Calls pipelined on our answer went to the tail call's pipeline, which may not have
+          // delivered them to the returned capabilities yet. Return the pipelined capabilities
+          // in their place where needed, so that calls the caller makes on the results don't
+          // overtake those.
+          pipeline->substituteUnsettledCaps(
+              tailResponse, KJ_ASSERT_NONNULL(response)->getCapTable());
+        }
       });
 
       return { kj::mv(voidPromise), PipelineHook::from(kj::mv(promise)) };

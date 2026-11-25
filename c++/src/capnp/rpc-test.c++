@@ -3394,6 +3394,64 @@ kj::Promise<void> RpcFuzzObject::newObject(NewObjectContext context) {
   return request.send().ignoreResult();
 }
 
+KJ_TEST("embargo when a forwarded tail call returns before calls pipelined on it arrive") {
+  // x calls y.tailEcho(via = y's import of z's bootstrap, cap = y's bootstrap). y tail-calls
+  // `via.echo(cap)` on to z, and z echoes y's bootstrap. y forwarded call 0, which x pipelined on
+  // the result, to z, so when z's response arrives, y embargoes its pipelined capability until
+  // z has reflected call 0 back. y returns to x right away, though, and the results it copies
+  // from z's response name y's bootstrap directly. A later call must not go straight to it
+  // ahead of call 0.
+  RpcFuzzState state;
+  TestContext context;
+  context.network.handoffDisabled = true;
+  auto& ws = context.waitScope;
+
+  test::TestRpcFuzz::Client yObject = kj::heap<RpcFuzzObject>(state);
+  auto& z = context.initVat("z", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto& y = context.initVat("y", yObject);
+  auto& x = context.initVat("x", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto yRoot = x.connect<test::TestRpcFuzz>("y");
+  auto zRootFromY = y.connect<test::TestRpcFuzz>("z");
+
+  // Make sure the connections are up, and have y hold its import of z's bootstrap so that x can
+  // fetch it.
+  fuzzSeq(yRoot, 100, 0).wait(ws);
+  fuzzSeq(zRootFromY, 101, 0).wait(ws);
+  {
+    auto request = yObject.holdRequest();
+    request.setCap(zRootFromY);
+    request.send().wait(ws);
+  }
+  auto via = yRoot.getHeldRequest().send().wait(ws).getCap();
+
+  // Hold y's messages to z after the forwarded echo, so that z returns before call 0 reaches it,
+  // and call 0 is still on its way when x makes call 1.
+  auto& yToZ = KJ_ASSERT_NONNULL(y.vatNetwork.getConnectionTo(z.vatNetwork));
+  yToZ.blockAfter([](rpc::Message::Reader message) {
+    return message.isCall() &&
+        message.getCall().getInterfaceId() == typeId<test::TestRpcFuzz>() &&
+        message.getCall().getMethodId() == 1;
+  });
+
+  auto request = yRoot.tailEchoRequest();
+  request.setVia(via);
+  request.setCap(yRoot);
+  auto promise = request.send();
+  auto pipelined = promise.getCap();
+
+  auto call0 = fuzzSeq(pipelined, 1, 0);
+  ws.poll();
+  auto call1 = fuzzSeq(pipelined, 1, 1);
+  ws.poll();
+
+  yToZ.unblock();
+  call0.wait(ws);
+  call1.wait(ws);
+  promise.wait(ws);
+
+  KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
+}
+
 // Randomized test of call ordering and completion.
 //
 // Each run sets up a few vats that each serve a `TestRpcFuzz` object, then performs a random
