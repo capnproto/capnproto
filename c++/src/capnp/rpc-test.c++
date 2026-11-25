@@ -3564,9 +3564,10 @@ private:
     auto& handle = vat.handles[index];
     auto request = handle.cap.seqRequest();
     request.setHandle(handle.id);
-    request.setSeq(handle.nextSeq++);
-    track(kj::str(vat.name, ": call ", request.getSeq(), " on handle ", handle.id),
-          request.send());
+    uint seq = handle.nextSeq++;
+    request.setSeq(seq);
+    // Build the description before sending, since sending invalidates the request.
+    track(kj::str(vat.name, ": call ", seq, " on handle ", handle.id), request.send());
   }
 
   void echo(FuzzVat& vat) {
