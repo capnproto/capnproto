@@ -3452,6 +3452,9 @@ KJ_TEST("embargo when a tail call back to the caller returns a capability hosted
 // CAPNP_RPC_FUZZ_RUNS to change the number of runs, CAPNP_RPC_FUZZ_STEPS to change the number
 // of operations per run, and CAPNP_RPC_FUZZ_DUMP=1 to dump every message sent. A run's first N
 // operations don't depend on the number of steps, so lowering it shrinks a failing run.
+//
+// By default only a few runs happen, to keep this a small test. Sweep many more seeds after
+// changing anything that affects ordering.
 
 class SplitMix64 {
 public:
@@ -3786,7 +3789,7 @@ uint64_t rpcFuzzEnv(const char* name, uint64_t defaultValue) {
 
 KJ_TEST("randomized call ordering and completion") {
   uint64_t firstSeed = rpcFuzzEnv("CAPNP_RPC_FUZZ_SEED", 1);
-  uint64_t runs = rpcFuzzEnv("CAPNP_RPC_FUZZ_RUNS", 100);
+  uint64_t runs = rpcFuzzEnv("CAPNP_RPC_FUZZ_RUNS", 20);
   bool dump = rpcFuzzEnv("CAPNP_RPC_FUZZ_DUMP", 0) != 0;
   uint steps = rpcFuzzEnv("CAPNP_RPC_FUZZ_STEPS", 150);
 
