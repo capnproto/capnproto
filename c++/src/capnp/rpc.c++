@@ -1015,6 +1015,13 @@ private:
     // underlying hook but returns true for promiseResolvedToThis(). All other implementations
     // return false.
 
+    virtual void promiseOnOtherConnectionResolvedToThis() {}
+    // Called when an RPC promise on a different connection, which had received calls, resolved to
+    // this client. The promise applies an embargo of its own, which ensures those calls reach this
+    // client's vat before any new ones, but some RpcClient derivatives route calls differently
+    // over time, and need to know that earlier calls may still be on their way along the old
+    // route.
+
     struct WriteDescriptorResult {
       kj::Maybe<ExportId> exportId;
       // If writing the descriptor adds a new export to the export table, or increments the refcount
@@ -1519,6 +1526,9 @@ private:
           // connection. That's the same situation as resolving to a local capability: if we
           // made any calls, new calls must wait behind an embargo so they don't overtake those.
           needsEmbargo = receivedCall;
+          if (receivedCall) {
+            rpcReplacement.promiseOnOtherConnectionResolvedToThis();
+          }
         }
       } else {
         if (replacement->isNull() || replacement->isError()) {
@@ -1640,6 +1650,18 @@ private:
         }
       }
       return false;
+    }
+
+    void promiseOnOtherConnectionResolvedToThis() override {
+      // This happens when the peer on that connection named, with `receiverHosted`, an export of
+      // ours that forwards a three-party handoff, and `receiveCap()` wrapped the export's vine in
+      // a new `DeferredThirdPartyClient`. The calls made on the promise went to the peer, which
+      // reflected them back to the export, and so on along the vine. If we accept the capability,
+      // calls will go straight to its host instead, so we need an embargo to keep them from
+      // overtaking the ones still travelling along the vine.
+      if (state.is<Deferred>()) {
+        needEmbargo = true;
+      }
     }
 
     WriteDescriptorResult writeDescriptor(rpc::CapDescriptor::Builder descriptor,
