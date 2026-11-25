@@ -3722,6 +3722,69 @@ KJ_TEST("embargo when a pipelined capability resolves to a reflected three-party
   KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
 }
 
+KJ_TEST("pipelined call after a forwarded call returns what a tail call back to us handed over") {
+  // p calls x's proxy of y's bootstrap: tailEcho(via = x's bootstrap, cap = that same proxy). x
+  // forwards the call to y as question Q, and y tail-calls back to x's bootstrap, which echoes x's
+  // import of y's bootstrap, so Q resolves, through `Return.takeFromOtherQuestion`, to that import.
+  // x then returns the import to p. Call 0, which p pipelines before Q resolves, gets x a
+  // capability from Q's pipeline, which resolves to the import wrapped to require an embargo.
+  // Call 1 reaches x through the same pipeline after x has sent its `Return`, so x must see that
+  // the wrapper stands for the import it returned.
+  RpcFuzzState state;
+  TestContext context;
+  context.network.handoffDisabled = true;
+  auto& ws = context.waitScope;
+
+  auto& y = context.initVat("y", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  test::TestRpcFuzz::Client xLocalRoot = kj::heap<RpcFuzzObject>(state);
+  auto& x = context.initVat("x", xLocalRoot);
+  auto& p = context.initVat("p", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto yRoot = x.connect<test::TestRpcFuzz>("y");
+  auto xRoot = p.connect<test::TestRpcFuzz>("x");
+
+  // Make sure the connections are up.
+  fuzzSeq(yRoot, 100, 0).wait(ws);
+  fuzzSeq(xRoot, 101, 0).wait(ws);
+
+  // Give p x's proxy of y's bootstrap.
+  {
+    auto request = xLocalRoot.holdRequest();
+    request.setCap(yRoot);
+    request.send().wait(ws);
+  }
+  auto proxiedY = xRoot.getHeldRequest().send().wait(ws).getCap();
+
+  // Hold y's messages to x, so that call 0 reaches x while Q is still waiting.
+  auto& yToX = KJ_ASSERT_NONNULL(y.vatNetwork.getConnectionTo(x.vatNetwork));
+  yToX.block();
+
+  auto request = proxiedY.tailEchoRequest();
+  request.setVia(xRoot);
+  request.setCap(proxiedY);
+  auto promise = request.send();
+  auto pipelined = promise.getCap();
+
+  auto call0 = fuzzSeq(pipelined, 1, 0);
+  ws.poll();
+
+  // Hold x's messages to p, including its `Return`, so that call 1 is still addressed to the
+  // answer when it reaches x.
+  auto& xToP = KJ_ASSERT_NONNULL(x.vatNetwork.getConnectionTo(p.vatNetwork));
+  xToP.block();
+  yToX.unblock();
+  ws.poll();
+
+  auto call1 = fuzzSeq(pipelined, 1, 1);
+  ws.poll();
+
+  xToP.unblock();
+  call0.wait(ws);
+  call1.wait(ws);
+  promise.wait(ws);
+
+  KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
+}
+
 // =======================================================================================
 // Randomized test of call ordering and completion.
 //
