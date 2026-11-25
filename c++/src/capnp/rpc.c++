@@ -2190,7 +2190,15 @@ private:
     }
 
     bool promiseResolvedToThis(bool receivedCall) override {
-      inner->promiseResolvedToThis(receivedCall);
+      if (inner->getResolved() == kj::none) {
+        inner->promiseResolvedToThis(receivedCall);
+      } else {
+        // `inner` is one of our own promises, named by the peer through `receiverHosted` or
+        // `receiverAnswer`, and it has already resolved: the export or answer pointing at it
+        // simply hasn't been updated yet. That's fine (the rule that a promise must not resolve
+        // to an already-resolved promise only applies to `senderPromise`), and there's nothing
+        // to propagate, since `receivedCall` only matters to a promise that has yet to resolve.
+      }
 
       // This is the one thing we don't pass through. The reason for RequireEmbargoWrapper's
       // existence: to force the embargo that otherwise would be skipped, by returning true here.
@@ -2851,9 +2859,24 @@ private:
 
           KJ_IF_SOME(r, redirectLater) {
             auto resolutionPromise = r.addBranch().then(
-                [ops = kj::heapArray(ops.asPtr())](kj::Own<RpcResponse>&& response) {
-                  return response->getResults().getPipelinedCap(kj::mv(ops));
-                });
+                [connectionState = kj::addRef(*connectionState), ops = kj::heapArray(ops.asPtr())](
+                    kj::Own<RpcResponse>&& response) mutable -> kj::Own<ClientHook> {
+              auto cap = response->getResults().getPipelinedCap(kj::mv(ops));
+              if (response->isRedirectedToSelf()) {
+                // The peer tail-called back to us and handed us the results of our own answer,
+                // so calls we made on this pipelined capability went to the peer and are being
+                // forwarded back to us. If the result is a capability hosted by the peer, new
+                // calls sent straight to it could overtake those, just like when the peer names
+                // one of our capabilities with `receiverHosted`. Wrap it the same way, so that
+                // the promise resolving to it applies an embargo. (Since we produced the result
+                // ourselves, it may also be one of our promises that has already resolved.)
+                KJ_IF_SOME(rpcClient, connectionState->unwrapIfSameConnection(*cap)) {
+                  return kj::refcounted<RequireEmbargoWrapper>(
+                      *connectionState, kj::addRef(rpcClient));
+                }
+              }
+              return kj::mv(cap);
+            });
 
             return kj::HashMap<kj::Array<PipelineOp>, kj::Own<ClientHook>>::Entry {
               kj::mv(ops),
@@ -2913,6 +2936,10 @@ private:
   public:
     virtual AnyPointer::Reader getResults() = 0;
     virtual kj::Own<RpcResponse> addRef() = 0;
+
+    virtual bool isRedirectedToSelf() { return false; }
+    // True if these are results we produced ourselves, for a call the peer made with
+    // `sendResultsTo.yourself` and then handed back to us with `Return.takeFromOtherQuestion`.
   };
 
   class RpcResponseImpl final: public RpcResponse, public kj::Refcounted {
@@ -3088,6 +3115,8 @@ private:
     kj::Own<RpcResponse> addRef() override {
       return kj::addRef(*this);
     }
+
+    bool isRedirectedToSelf() override { return true; }
 
   private:
     MallocMessageBuilder message;

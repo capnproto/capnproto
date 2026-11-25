@@ -33,6 +33,7 @@
 #include <kj/map.h>
 #include <kj/miniposix.h>
 #include <kj/time.h>
+#include <kj/list.h>
 #include <deque>
 
 namespace capnp {
@@ -212,6 +213,7 @@ public:
     dumper.addSchema(Schema::from<test::TestCallOrder>());
     dumper.addSchema(Schema::from<test::TestTailCallee>());
     dumper.addSchema(Schema::from<test::TestTailCaller>());
+    dumper.addSchema(Schema::from<test::TestRpcFuzz>());
     dumper.addSchema(Schema::from<test::TestMoreStuff>());
   }
   ~TestNetwork() noexcept(false);
@@ -3248,6 +3250,186 @@ KJ_TEST("tail call back to caller completes when it waits for a pipelined call")
   if (done) {
     KJ_EXPECT(dependentCall.wait(context.waitScope).getN() == 0);
   }
+}
+
+// =======================================================================================
+// `TestRpcFuzz` objects check that the calls made through each reference reach them in the order
+// they were sent.
+
+struct RpcFuzzState;
+
+class RpcFuzzObject final: public test::TestRpcFuzz::Server {
+public:
+  explicit RpcFuzzObject(RpcFuzzState& state);
+  ~RpcFuzzObject() noexcept(false);
+
+  kj::Maybe<test::TestRpcFuzz::Client> takeHeld() {
+    auto result = kj::mv(held);
+    held = kj::none;
+    return result;
+  }
+
+  kj::Promise<void> seq(SeqContext context) override;
+  kj::Promise<void> echo(EchoContext context) override;
+  kj::Promise<void> tailEcho(TailEchoContext context) override;
+  kj::Promise<void> hold(HoldContext context) override;
+  kj::Promise<void> getHeld(GetHeldContext context) override;
+  kj::Promise<void> newObject(NewObjectContext context) override;
+
+private:
+  RpcFuzzState& state;
+  kj::HashMap<uint64_t, uint32_t> nextSeq;
+  kj::Maybe<test::TestRpcFuzz::Client> held;
+  kj::ListLink<RpcFuzzObject> link;
+
+  friend struct RpcFuzzState;
+};
+
+struct RpcFuzzState {
+  kj::List<RpcFuzzObject, &RpcFuzzObject::link> objects;
+  kj::HashMap<uint64_t, kj::Vector<kj::Own<kj::PromiseFulfiller<void>>>> releaseWaiters;
+  kj::HashSet<uint64_t> released;
+  kj::Vector<kj::String> violations;
+
+  void signal(uint64_t handle) {
+    // A `seq` call made through `handle` arrived.
+    if (released.contains(handle)) return;
+    released.insert(handle);
+    KJ_IF_SOME(waiters, releaseWaiters.find(handle)) {
+      auto fulfillers = kj::mv(waiters);
+      releaseWaiters.erase(handle);
+      for (auto& fulfiller: fulfillers) fulfiller->fulfill();
+    }
+  }
+
+  kj::Promise<void> whenReleased(uint64_t handle) {
+    if (released.contains(handle)) return kj::READY_NOW;
+    auto paf = kj::newPromiseAndFulfiller<void>();
+    releaseWaiters.findOrCreate(handle, [&]() -> decltype(releaseWaiters)::Entry {
+      return {handle, {}};
+    }).add(kj::mv(paf.fulfiller));
+    return kj::mv(paf.promise);
+  }
+};
+
+RpcFuzzObject::RpcFuzzObject(RpcFuzzState& state): state(state) {
+  state.objects.add(*this);
+}
+
+RpcFuzzObject::~RpcFuzzObject() noexcept(false) {
+  state.objects.remove(*this);
+}
+
+kj::Promise<void> RpcFuzzObject::seq(SeqContext context) {
+  auto params = context.getParams();
+  uint64_t handle = params.getHandle();
+  uint32_t seq = params.getSeq();
+  auto& expected = nextSeq.findOrCreate(handle, [&]() -> decltype(nextSeq)::Entry {
+    return {handle, 0};
+  });
+  if (seq != expected) {
+    state.violations.add(kj::str("call ", seq, " on handle ", handle,
+                                 " arrived when call ", expected, " was expected"));
+  }
+  expected = seq + 1;
+  state.signal(handle);
+  return kj::READY_NOW;
+}
+
+kj::Promise<void> RpcFuzzObject::echo(EchoContext context) {
+  auto params = context.getParams();
+  auto cap = params.getCap();
+  if (!params.getDelayed()) {
+    context.getResults().setCap(kj::mv(cap));
+    return kj::READY_NOW;
+  }
+
+  PipelineBuilder<test::TestRpcFuzz::CapResult> pipeline;
+  pipeline.setCap(cap);
+  context.setPipeline(pipeline.build());
+  return state.whenReleased(params.getReleaseHandle())
+      .then([context, cap = kj::mv(cap)]() mutable {
+    context.getResults().setCap(kj::mv(cap));
+  });
+}
+
+kj::Promise<void> RpcFuzzObject::tailEcho(TailEchoContext context) {
+  auto params = context.getParams();
+  auto request = params.getVia().echoRequest();
+  request.setCap(params.getCap());
+  request.setDelayed(params.getDelayed());
+  request.setReleaseHandle(params.getReleaseHandle());
+  return context.tailCall(kj::mv(request));
+}
+
+kj::Promise<void> RpcFuzzObject::hold(HoldContext context) {
+  held = context.getParams().getCap();
+  return kj::READY_NOW;
+}
+
+kj::Promise<void> RpcFuzzObject::getHeld(GetHeldContext context) {
+  KJ_IF_SOME(h, held) {
+    context.getResults().setCap(h);
+  } else {
+    context.getResults().setCap(test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  }
+  return kj::READY_NOW;
+}
+
+kj::Promise<void> RpcFuzzObject::newObject(NewObjectContext context) {
+  context.getResults().setCap(test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  return kj::READY_NOW;
+}
+
+kj::Promise<void> fuzzSeq(test::TestRpcFuzz::Client& cap, uint64_t handle, uint32_t seq) {
+  auto request = cap.seqRequest();
+  request.setHandle(handle);
+  request.setSeq(seq);
+  return request.send().ignoreResult();
+}
+
+KJ_TEST("embargo when a tail call back to the caller returns a capability hosted by the callee") {
+  // x calls y.tailEcho(via = an object in x, cap = y's bootstrap). y tail-calls back to x's
+  // object, which echoes y's bootstrap, so x's question resolves, through
+  // `Return.takeFromOtherQuestion`, to x's import of y's bootstrap. A call x already made on the
+  // pipelined result went to y, back to x, and then to y's bootstrap, so a later call must not
+  // go straight to y's bootstrap ahead of it.
+  RpcFuzzState state;
+  TestContext context;
+  auto& ws = context.waitScope;
+
+  auto& y = context.initVat("y", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto& x = context.initVat("x", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto yRoot = x.connect<test::TestRpcFuzz>("y");
+  test::TestRpcFuzz::Client xObject = kj::heap<RpcFuzzObject>(state);
+
+  // Make sure the connection is up.
+  fuzzSeq(yRoot, 100, 0).wait(ws);
+
+  // Hold y's messages to x from the `Return` that hands x the tail call's results onwards, so
+  // that y's forwarding of call 0 back to x is still in flight when x makes call 1.
+  auto& yToX = KJ_ASSERT_NONNULL(y.vatNetwork.getConnectionTo(x.vatNetwork));
+  yToX.blockAfter([](rpc::Message::Reader message) {
+    return message.isReturn() && message.getReturn().isTakeFromOtherQuestion();
+  });
+
+  auto request = yRoot.tailEchoRequest();
+  request.setVia(xObject);
+  request.setCap(yRoot);
+  auto promise = request.send();
+  auto pipelined = promise.getCap();
+
+  auto call0 = fuzzSeq(pipelined, 1, 0);
+  ws.poll();
+  auto call1 = fuzzSeq(pipelined, 1, 1);
+  ws.poll();
+
+  yToX.unblock();
+  call0.wait(ws);
+  call1.wait(ws);
+  promise.wait(ws);
+
+  KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
 }
 
 }  // namespace
