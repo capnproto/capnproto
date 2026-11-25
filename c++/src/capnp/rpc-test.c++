@@ -3545,6 +3545,65 @@ KJ_TEST("promise resolves to a third-party capability that was already accepted"
   KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
 }
 
+KJ_TEST("dropping a handed-off capability doesn't strand calls pipelined on its Accept") {
+  // x sends z's bootstrap to y, and y echoes it back, so x receives it as a capability that z
+  // hosts and y introduced. x makes call 1 after learning that, so it's pipelined on x's `Accept`
+  // to z, and then x drops the capability before z gets the `Accept`. Dropping the capability
+  // must not release the vine, or y would finish its `Provide` and z couldn't match the `Accept`
+  // to it.
+  RpcFuzzState state;
+  TestContext context;
+  auto& ws = context.waitScope;
+
+  context.initVat("y", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto& z = context.initVat("z", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto& x = context.initVat("x", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto yRoot = x.connect<test::TestRpcFuzz>("y");
+  auto zRoot = x.connect<test::TestRpcFuzz>("z");
+
+  // Make sure the connections are up.
+  fuzzSeq(yRoot, 100, 0).wait(ws);
+  fuzzSeq(zRoot, 101, 0).wait(ws);
+
+  // Let x's two `Provide`s (for handing z's bootstrap to y as `via` and `cap`) through, then hold
+  // everything else that x sends to z, including x's own `Accept`.
+  auto& xToZ = KJ_ASSERT_NONNULL(x.vatNetwork.getConnectionTo(z.vatNetwork));
+  xToZ.blockAfter([provides = 0](rpc::Message::Reader message) mutable {
+    return message.isProvide() && ++provides == 2;
+  });
+
+  auto request = yRoot.tailEchoRequest();
+  request.setVia(zRoot);
+  request.setCap(zRoot);
+  kj::Maybe<test::TestRpcFuzz::Client> echoed;
+  kj::Promise<void> echoDone = nullptr;
+  {
+    auto promise = request.send();
+    echoed = promise.getCap();
+    echoDone = promise.ignoreResult();
+  }
+
+  // Call 0 goes to y. By the time it's been forwarded, x knows that the echoed capability is
+  // hosted by z, so call 1 is pipelined on x's (embargoed) `Accept`.
+  auto call0 = fuzzSeq(KJ_ASSERT_NONNULL(echoed), 1, 0);
+  ws.poll();
+  KJ_ASSERT(xToZ.isBlocked());
+  auto call1 = fuzzSeq(KJ_ASSERT_NONNULL(echoed), 1, 1);
+  call0.wait(ws);
+  echoDone.wait(ws);
+
+  // Drop the capability while x's `Accept` is still held.
+  echoed = kj::none;
+  ws.poll();
+
+  xToZ.unblock();
+  bool done = false;
+  auto finished = call1.then([&]() { done = true; }).eagerlyEvaluate(nullptr);
+  for (uint i = 0; i < 64 && !done; i++) ws.poll();
+  KJ_EXPECT(done, "call pipelined on the Accept never completed");
+  KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
+}
+
 // =======================================================================================
 // Randomized test of call ordering and completion.
 //
