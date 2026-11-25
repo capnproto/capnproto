@@ -3486,6 +3486,65 @@ KJ_TEST("embargo when a tail call back to the caller is forwarded to a third vat
   KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
 }
 
+KJ_TEST("promise resolves to a third-party capability that was already accepted") {
+  // y calls x.echo(cap = y's import of z's bootstrap), so x gets a third-party capability for
+  // z's object, and the answer's pipeline points to it. A call y pipelines on the answer makes x
+  // accept the capability. Then x calls y.getHeld(), whose result is y's pipelined capability on
+  // that same answer, so x's pipelined promise resolves through `receiverAnswer` to the
+  // third-party capability x has already accepted, while the accept is still in flight.
+  RpcFuzzState state;
+  TestContext context;
+  auto& ws = context.waitScope;
+
+  test::TestRpcFuzz::Client yObject = kj::heap<RpcFuzzObject>(state);
+  auto& y = context.initVat("y", yObject);
+  auto& z = context.initVat("z", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto& x = context.initVat("x", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto xToY = x.connect<test::TestRpcFuzz>("y");
+  auto xToZ = x.connect<test::TestRpcFuzz>("z");
+  auto yToX = y.connect<test::TestRpcFuzz>("x");
+  auto yToZ = y.connect<test::TestRpcFuzz>("z");
+
+  // Make sure the connections are up.
+  fuzzSeq(xToY, 100, 0).wait(ws);
+  fuzzSeq(xToZ, 101, 0).wait(ws);
+  fuzzSeq(yToX, 102, 0).wait(ws);
+  fuzzSeq(yToZ, 103, 0).wait(ws);
+
+  // Hold everything z sends to x, so that x's accept doesn't complete.
+  auto& zToX = KJ_ASSERT_NONNULL(z.vatNetwork.getConnectionTo(x.vatNetwork));
+  zToX.block();
+
+  auto echoRequest = yToX.echoRequest();
+  echoRequest.setCap(yToZ);
+  echoRequest.setDelayed(true);
+  echoRequest.setReleaseHandle(1);
+  auto echo = echoRequest.send();
+  auto echoed = echo.getCap();
+  auto acceptingCall = fuzzSeq(echoed, 2, 0);
+  ws.poll();
+
+  auto holdRequest = yObject.holdRequest();
+  holdRequest.setCap(echoed);
+  holdRequest.send().wait(ws);
+
+  auto held = xToY.getHeldRequest().send();
+  auto heldCap = held.getCap();
+  auto call0 = fuzzSeq(heldCap, 3, 0);
+  ws.poll();
+  auto call1 = fuzzSeq(heldCap, 3, 1);
+  held.wait(ws);
+
+  zToX.unblock();
+  fuzzSeq(xToZ, 1, 0).wait(ws);
+  acceptingCall.wait(ws);
+  call0.wait(ws);
+  call1.wait(ws);
+  echo.wait(ws);
+
+  KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
+}
+
 // =======================================================================================
 // Randomized test of call ordering and completion.
 //
