@@ -2388,8 +2388,11 @@ private:
           return kj::refcounted<PromiseClient>(other, kj::mv(pipeline), kj::mv(promise), kj::none);
         } else {
           // We've been introduced to ourselves. A corresponding `Provide` message will come
-          // directly to us via another connection.
-          return newLocalPromiseClient(doAccept(state, completion, kj::mv(embargoId)));
+          // directly to us via another connection. As with any `Accept`, hold the vine until
+          // we've picked up the capability, since the introducer may finish the `Provide` once
+          // we release it.
+          return newLocalPromiseClient(
+              doAccept(state, completion, kj::mv(embargoId)).attach(kj::mv(vine)));
         }
       }
       KJ_CASE_ONEOF(error, Disconnected) {
