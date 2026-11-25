@@ -3498,6 +3498,8 @@ private:
   };
 
   struct CallRecord {
+    explicit CallRecord(kj::String description): description(kj::mv(description)) {}
+
     kj::String description;
     bool done = false;
     kj::Maybe<kj::Exception> error;
@@ -3524,7 +3526,7 @@ private:
   template <typename Promise>
   CallRecord& track(kj::String description, Promise&& promise) {
     log.add(kj::str(description));
-    auto& record = *calls.add(kj::heap<CallRecord>(CallRecord { kj::mv(description) }));
+    auto& record = *calls.add(kj::heap<CallRecord>(kj::mv(description)));
     tasks.add(kj::mv(promise).then([&record](auto&&) {
       record.done = true;
     }, [&record](kj::Exception&& e) {
@@ -3541,7 +3543,7 @@ private:
     bool keepResult = rng.chance(30);
     uint64_t resultId = nextHandleId++;
     log.add(kj::str(description));
-    auto& record = *calls.add(kj::heap<CallRecord>(CallRecord { kj::mv(description) }));
+    auto& record = *calls.add(kj::heap<CallRecord>(kj::mv(description)));
     tasks.add(promise.then([this, &vat, &record, keepResult, resultId, fromHeld](
         Response<test::TestRpcFuzz::CapResult>&& response) {
       record.done = true;
@@ -3705,11 +3707,15 @@ private:
         KJ_FAIL_EXPECT("call failed", call->description, e);
         ok = false;
       } else if (!call->done) {
-        if (stuck++ < 10) KJ_FAIL_EXPECT("call never completed", call->description);
+        if (stuck++ < 10) {
+          KJ_FAIL_EXPECT("call never completed", call->description);
+        }
         ok = false;
       }
     }
-    if (stuck > 10) KJ_FAIL_EXPECT("more calls never completed", stuck - 10);
+    if (stuck > 10) {
+      KJ_FAIL_EXPECT("more calls never completed", stuck - 10);
+    }
     for (auto& violation: state.violations) {
       KJ_FAIL_EXPECT("call arrived out of order", violation);
       ok = false;
