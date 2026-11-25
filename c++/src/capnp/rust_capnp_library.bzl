@@ -17,7 +17,7 @@ def rust_capnp_library(
         visibility = None,
         target_compatible_with = None,
         capnp_crate = "@crates_vendor//capnp",
-        capnpc_plugin = "@crates_vendor__capnpc-0.27.0//:capnpc-rust__bin",
+        capnpc_plugin = "@crates_vendor__capnpc-0.28.1//:capnpc-rust__bin",
         **kwargs):
     """Define rust capnp library.
 
