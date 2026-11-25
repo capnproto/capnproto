@@ -2713,24 +2713,35 @@ private:
 
     void fulfill(kj::Promise<kj::Own<RpcResponse>>&& promise) {
       // Pipelined caps must get notified of resolution before the app does to maintain ordering.
+      kj::Maybe<kj::Own<PipelineHook>> newPipeline;
       if (waitingPipeline != kj::none || !waitingPromises.empty()) {
         auto fork = promise.fork();
-        auto newPipeline = newLocalPromisePipeline(fork.addBranch()
+        newPipeline = newLocalPromisePipeline(fork.addBranch()
             .then([](kj::Own<RpcResponse> response) {
           AnyPointer::Reader results = response->getResults();
           return newLocalPipeline(kj::mv(response), results);
         }));
         promise = fork.addBranch();
+      }
+      fulfill(kj::mv(promise), kj::mv(newPipeline));
+    }
 
-        callAfterTpaEmbargo([this, newPipeline = kj::mv(newPipeline)]() mutable {
-          for (auto& w: waitingPromises) {
-            w.resolveQuestion(*newPipeline);
-          }
+    void fulfill(kj::Promise<kj::Own<RpcResponse>>&& promise,
+                 kj::Maybe<kj::Own<PipelineHook>> newPipeline) {
+      // Like `fulfill(promise)`, but pipelined caps resolve through `newPipeline`, which must
+      // eventually lead to the same results.
+      KJ_IF_SOME(np, newPipeline) {
+        if (waitingPipeline != kj::none || !waitingPromises.empty()) {
+          callAfterTpaEmbargo([this, pipeline = kj::mv(np)]() mutable {
+            for (auto& w: waitingPromises) {
+              w.resolveQuestion(*pipeline);
+            }
 
-          KJ_IF_SOME(w, waitingPipeline) {
-            w.forward({}, kj::mv(newPipeline));
-          }
-        });
+            KJ_IF_SOME(w, waitingPipeline) {
+              w.forward({}, kj::mv(pipeline));
+            }
+          });
+        }
       }
 
       KJ_IF_SOME(f, fulfiller) {
@@ -3442,14 +3453,6 @@ private:
   public:
     virtual AnyPointer::Reader getResults() = 0;
     virtual kj::Own<RpcResponse> addRef() = 0;
-
-    virtual bool isTakenFromOwnAnswer() { return false; }
-    // True if these are results we produced ourselves, for a call the peer made with
-    // `sendResultsTo.yourself` and then handed back to us with `Return.takeFromOtherQuestion`.
-
-    virtual kj::Maybe<PipelineHook&> getOwnAnswerPipeline() { return kj::none; }
-    // If `isTakenFromOwnAnswer()`, the pipeline of that answer, through which the peer forwarded
-    // the calls pipelined on our question.
   };
 
   class RpcResponseImpl final: public RpcResponse, public kj::Refcounted {
@@ -3640,8 +3643,8 @@ private:
 
     kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getCapTable() override {
       // These results only come back to us through `Return.takeFromOtherQuestion`, and then
-      // pipelined capabilities resolve through the answer's pipeline (see `TakenRpcResponse`), so
-      // there's nothing to replace.
+      // pipelined capabilities resolve through the answer's pipeline (see `TakenAnswerPipeline`),
+      // so there's nothing to replace.
       return nullptr;
     }
 
@@ -3657,30 +3660,45 @@ private:
     MallocMessageBuilder message;
   };
 
-  class TakenRpcResponse final: public RpcResponse, public kj::Refcounted {
-    // Results of one of our answers, which `Return.takeFromOtherQuestion` handed to one of our
-    // questions.
+  class TakenAnswerPipeline final: public PipelineHook, public kj::Refcounted {
+    // The pipeline of one of our own answers, for a call the peer made with
+    // `sendResultsTo.yourself` and then handed back to one of our questions with
+    // `Return.takeFromOtherQuestion`. Calls we pipelined on that question went to the peer, which
+    // forwarded them back to us through this answer's pipeline, so the question's pipelined
+    // capabilities resolve through it too: this is what the peer would have meant by
+    // `receiverAnswer`. (Waiting for the answer's results instead would deadlock if the answer
+    // waits for a pipelined call, and they could resolve to a different place than where the
+    // forwarded calls went.)
+    //
+    // As with `receiverAnswer`, if a pipelined capability is hosted by the peer, new calls sent
+    // straight to it could overtake the ones being forwarded, so it's wrapped so that the promise
+    // resolving to it applies an embargo.
   public:
-    TakenRpcResponse(kj::Own<RpcResponse> inner, kj::Maybe<kj::Own<PipelineHook>> answerPipeline)
-        : inner(kj::mv(inner)), answerPipeline(kj::mv(answerPipeline)) {}
+    TakenAnswerPipeline(RpcConnectionState& connectionState, kj::Own<PipelineHook> inner)
+        : connectionState(kj::addRef(connectionState)), inner(kj::mv(inner)) {}
 
-    AnyPointer::Reader getResults() override {
-      return inner->getResults();
-    }
-
-    kj::Own<RpcResponse> addRef() override {
+    kj::Own<PipelineHook> addRef() override {
       return kj::addRef(*this);
     }
 
-    bool isTakenFromOwnAnswer() override { return true; }
+    kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override {
+      return wrap(inner->getPipelinedCap(ops));
+    }
 
-    kj::Maybe<PipelineHook&> getOwnAnswerPipeline() override {
-      return answerPipeline.map([](kj::Own<PipelineHook>& p) -> PipelineHook& { return *p; });
+    kj::Own<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) override {
+      return wrap(inner->getPipelinedCap(kj::mv(ops)));
     }
 
   private:
-    kj::Own<RpcResponse> inner;
-    kj::Maybe<kj::Own<PipelineHook>> answerPipeline;
+    kj::Own<RpcConnectionState> connectionState;
+    kj::Own<PipelineHook> inner;
+
+    kj::Own<ClientHook> wrap(kj::Own<ClientHook> cap) {
+      KJ_IF_SOME(rpcClient, connectionState->unwrapIfSameConnection(*cap)) {
+        return kj::refcounted<RequireEmbargoWrapper>(*connectionState, kj::addRef(rpcClient));
+      }
+      return cap;
+    }
   };
 
   class PostReturnRpcPipeline final: public PipelineHook, public kj::Refcounted {
@@ -5172,7 +5190,14 @@ private:
           case rpc::Return::TAKE_FROM_OTHER_QUESTION:
             KJ_IF_SOME(answer, answers.find(ret.getTakeFromOtherQuestion())) {
               KJ_IF_SOME(response, answer.task.tryGet<Answer::RedirectedToSelf>()) {
-                questionRef.fulfill(kj::mv(response));
+                KJ_IF_SOME(pipeline, answer.pipeline) {
+                  // Calls pipelined on our question went to the peer, which forwarded them back
+                  // to us through this answer's pipeline, so resolve them through it too.
+                  questionRef.fulfill(kj::mv(response),
+                      kj::refcounted<TakenAnswerPipeline>(*this, pipeline->addRef()));
+                } else {
+                  questionRef.fulfill(kj::mv(response));
+                }
                 answer.task = Answer::Finished();
 
                 KJ_IF_SOME(context, answer.callContext) {
