@@ -1602,30 +1602,30 @@ private:
 
     bool promiseResolvedToThis(bool receivedCall) override {
       if (receivedCall) {
-        // A promise resolved to us, and it had received calls that were pipelined. If we end up
-        // accepting this capability locally, we will need to use an embargo.
-        needEmbargo = true;
-
-        // promiseResolvedToThis() is always called immediately after the resolution capability was
-        // received off the wire, so there should not have been a chance for it to have been
-        // accepted yet. This is good, because we need to make sure we embargo it on accept.
-        //
-        // Note that we know for sure that the resolution message could only have created a new
-        // `DeferredThirdPartyClient` -- not referred to an existing one -- because:
-        // - If the type was `senderHosted` or `senderPromise`, it refers to an import, and we
-        //   never place `DeferredThirdPartyClient` directly on the import table. (Its vine is on
-        //   the import table, but the `DeferredThirdPartyClient` object itself is not.)
-        // - If the type was `receiverHosted` or `receiverAnswer` then promiseResolvedToThis()
-        //   would not have been called on it, because `unwrapIfSameConnection()` would have
-        //   returned kj::none.
-        // - Therefore the only possibility is that the resolve message contained a
-        //   `ThirdPartyCapDescriptor`, which casued a fresh `DeferredThirdPartyClient` to be
-        //   created.
-        //
-        // It's good that this all works out, because otherwise we'd probably need to change the
-        // embargo protocol so that an embargo could be established *after* accepting the
-        // capability.
-        KJ_ASSERT(state.is<Deferred>());
+        KJ_SWITCH_ONEOF(state) {
+          KJ_CASE_ONEOF(deferred, Deferred) {
+            // A promise resolved to us, and it had received calls that were pipelined. If we end
+            // up accepting this capability locally, we will need to use an embargo.
+            needEmbargo = true;
+          }
+          KJ_CASE_ONEOF(cap, kj::Own<ClientHook>) {
+            // We've already accepted the capability, so it's too late to embargo the accept.
+            // Luckily, that can only happen when no such embargo is needed.
+            //
+            // If the resolution message contained a `ThirdPartyCapDescriptor`, it created a fresh
+            // `DeferredThirdPartyClient`, which can't have been accepted yet. We never place a
+            // `DeferredThirdPartyClient` directly on the import table (its vine is on the import
+            // table, but the `DeferredThirdPartyClient` object itself is not), so `senderHosted`
+            // and `senderPromise` can't refer to us.
+            //
+            // That leaves `receiverHosted` and `receiverAnswer`, where the peer names one of our
+            // own exports or answers. The calls the promise received went to the peer, which
+            // forwards them back to us, so they reach this capability through the export or
+            // answer, not through the vine. The resolution is wrapped in a
+            // `RequireEmbargoWrapper`, so the promise embargoes new calls until the forwarded ones
+            // have come back to us, and from here on, both take the same path.
+          }
+        }
       }
       return false;
     }
