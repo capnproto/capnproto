@@ -1641,7 +1641,19 @@ private:
         // If any embargo is needed, it will usually be handled elsewhere. However, whoever is
         // handling it may need to know that a promise that received calls in the past has
         // resolved to it. So, notify it.
-        bool requiresEmbargo = rpcReplacement.promiseResolvedToThis(receivedCall);
+        //
+        // (A capability on another connection can only have been named by the peer through
+        // `receiverHosted` or `receiverAnswer`, as one of our own exports or answers. It may be
+        // one of our promises that has already resolved, since an answer's pipeline keeps
+        // pointing at whatever it pointed at before. That's fine: the rule that a promise must not
+        // resolve to an already-resolved promise only applies to `senderPromise`. And there's
+        // nothing to notify, since `receivedCall` only matters to a promise that has yet to
+        // resolve. `RequireEmbargoWrapper` makes the same exception for our own capabilities on
+        // this connection.)
+        bool requiresEmbargo = false;
+        if (isSameConnection || rpcReplacement.getResolved() == kj::none) {
+          requiresEmbargo = rpcReplacement.promiseResolvedToThis(receivedCall);
+        }
         if (isSameConnection) {
           if (requiresEmbargo && !disembargoHandledElsewhere) {
             // Exception: The remote end may have resolved us to a capability that it *thought*

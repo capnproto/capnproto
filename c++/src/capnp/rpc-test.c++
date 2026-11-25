@@ -3991,6 +3991,70 @@ KJ_TEST("pipelined call after returning results that a tail call back to us hand
   xLocalRoot.holdRequest().send().wait(ws);
 }
 
+KJ_TEST("promise resolves through receiverAnswer to our resolved promise from another vat") {
+  // b calls a's delayed `echo()` with a's promise from c, so the answer's pipeline points to that
+  // promise until the call returns. The promise resolves, and then b resolves a promise it gave
+  // a to its pipelined capability on the echo, i.e. `receiverAnswer` naming a's answer, which
+  // leads a to its already-resolved promise from c. That's not a protocol error: the rule
+  // against resolving to an already-resolved promise only applies to `senderPromise`.
+  RpcFuzzState state;
+  TestContext context;
+  context.network.handoffDisabled = true;
+  auto& ws = context.waitScope;
+
+  test::TestRpcFuzz::Client bObject = kj::heap<RpcFuzzObject>(state);
+  auto& a = context.initVat("a", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto& b = context.initVat("b", bObject);
+  auto& c = context.initVat("c", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto aToB = a.connect<test::TestRpcFuzz>("b");
+  auto aToC = a.connect<test::TestRpcFuzz>("c");
+  auto bToA = b.connect<test::TestRpcFuzz>("a");
+  fuzzSeq(aToB, 100, 0).wait(ws);
+  fuzzSeq(aToC, 101, 0).wait(ws);
+  fuzzSeq(bToA, 102, 0).wait(ws);
+
+  // a gets a promise from c, which doesn't resolve until c->a is unblocked, and gives it to b.
+  auto& cToA = KJ_ASSERT_NONNULL(c.vatNetwork.getConnectionTo(a.vatNetwork));
+  cToA.block();
+  auto fromCRequest = aToC.echoRequest();
+  fromCRequest.setCap(aToC);
+  auto fromC = fromCRequest.send();
+  {
+    auto request = aToB.holdRequest();
+    request.setCap(fromC.getCap());
+    request.send().wait(ws);
+  }
+
+  // b gives a a promise of its own, which an object on a holds.
+  auto paf = kj::newPromiseAndFulfiller<test::TestRpcFuzz::Client>();
+  auto holder = bToA.newObjectRequest().send().getCap();
+  {
+    auto request = holder.holdRequest();
+    request.setCap(test::TestRpcFuzz::Client(kj::mv(paf.promise)));
+    request.send().wait(ws);
+  }
+
+  // b passes a's promise back to a's delayed echo, so that the answer's pipeline points to it.
+  auto echoRequest = bToA.echoRequest();
+  echoRequest.setCap(bObject.getHeldRequest().send().wait(ws).getCap());
+  echoRequest.setDelayed(true);
+  echoRequest.setReleaseHandle(1);
+  auto echo = echoRequest.send();
+  ws.poll();
+
+  // a's promise from c resolves. Then b resolves its promise to its pipelined capability on the
+  // echo.
+  cToA.unblock();
+  fromC.wait(ws);
+  ws.poll();
+  paf.fulfiller->fulfill(echo.getCap());
+
+  fuzzSeq(holder, 2, 0).wait(ws);
+  fuzzSeq(aToC, 1, 0).wait(ws);
+  echo.wait(ws);
+  KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
+}
+
 // Randomized test of call ordering and completion.
 //
 // Each run sets up a few vats that each serve a `TestRpcFuzz` object, then performs a random
