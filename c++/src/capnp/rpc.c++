@@ -561,6 +561,10 @@ public:
 
       // All current questions complete with exceptions.
       questions.forEach([&](QuestionId id, Question& question) {
+        KJ_IF_SOME(vine, question.vine) {
+          clientsToRelease.add(kj::mv(vine));
+        }
+
         KJ_IF_SOME(questionRef, question.selfRef) {
           // QuestionRef still present.
           questionRef.reject(networkException.clone());
@@ -709,6 +713,13 @@ private:
     // * The `Return` message had the `noFinishNeeded` hint.
     // * Our attempt to send the `Call` threw an exception, therefore the peer never even received
     //   the call in the first place and would not expect a `Finish`.
+
+    kj::Maybe<kj::Own<ClientHook>> vine;
+    // If this question is an `Accept`, the vine of the capability being accepted. The introducer
+    // finishes its `Provide` once we drop the vine, so we hold it until the `Accept` returns.
+    // That may be after we've sent `Finish`: calls pipelined on the `Accept` are still on their
+    // way, and they can only be delivered if the host can still match the `Accept` to the
+    // `Provide`.
 
     inline bool operator==(decltype(nullptr)) const {
       return !isAwaitingReturn && selfRef == kj::none;
@@ -2344,6 +2355,7 @@ private:
           QuestionId questionId;
           auto& question = other.questions.next(questionId);
           question.isAwaitingReturn = true;
+          question.vine = kj::mv(vine);
           auto paf = kj::newPromiseAndFulfiller<kj::Promise<kj::Own<RpcResponse>>>();
           auto questionRef = kj::refcounted<QuestionRef>(other, questionId, kj::mv(paf.fulfiller));
           question.selfRef = *questionRef;
@@ -2364,20 +2376,22 @@ private:
             acceptMsg->send();
           }
 
-          // Construct the ClientHook representing all this. We attach the vine to this promise so
-          // that we drop it as soon as the Accept completes, which lets the introducer know that it
-          // can finish out the Provide.
+          // Construct the ClientHook representing all this. (The question holds the vine, and
+          // drops it when the Accept returns, which lets the introducer know that it can finish
+          // out the Provide.)
           kj::Promise<kj::Own<ClientHook>> promise = paf.promise
-              .then([q = kj::addRef(*questionRef), vine = kj::mv(vine)]
-                    (kj::Own<RpcResponse> response) {
+              .then([q = kj::addRef(*questionRef)](kj::Own<RpcResponse> response) {
             return ClientHook::from(response->getResults().getAs<Capability>());
           });
           auto pipeline = kj::refcounted<PipelineClient>(other, kj::mv(questionRef), nullptr);
           return kj::refcounted<PromiseClient>(other, kj::mv(pipeline), kj::mv(promise), kj::none);
         } else {
           // We've been introduced to ourselves. A corresponding `Provide` message will come
-          // directly to us via another connection.
-          return newLocalPromiseClient(doAccept(state, completion, kj::mv(embargoId)));
+          // directly to us via another connection. As with any `Accept`, hold the vine until
+          // we've picked up the capability, since the introducer may finish the `Provide` once
+          // we release it.
+          return newLocalPromiseClient(
+              doAccept(state, completion, kj::mv(embargoId)).attach(kj::mv(vine)));
         }
       }
       KJ_CASE_ONEOF(error, Disconnected) {
@@ -4098,6 +4112,7 @@ private:
     kj::Array<ExportId> exportsToRelease;
     KJ_DEFER(releaseExports(exportsToRelease));
     kj::Maybe<decltype(Answer::task)> promiseToRelease;
+    kj::Maybe<kj::Own<ClientHook>> vineToRelease;
 
     QuestionId questionId = ret.getAnswerId();
     if (questions.isHigh(questionId)) {
@@ -4134,6 +4149,7 @@ private:
     KJ_IF_SOME(question, questions.find(questionId)) {
       KJ_REQUIRE(question.isAwaitingReturn, "Duplicate Return.");
       question.isAwaitingReturn = false;
+      vineToRelease = kj::mv(question.vine);
 
       if (ret.getReleaseParamCaps()) {
         exportsToRelease = kj::mv(question.paramExports);
