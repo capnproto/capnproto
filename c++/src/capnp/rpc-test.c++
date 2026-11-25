@@ -3880,6 +3880,10 @@ KJ_TEST("pipelined call after returning results that a tail call back to us hand
   promise.wait(ws);
 
   KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
+
+  // The forwarder's `via` now resolves to x's bootstrap, which holds the forwarder. Break that
+  // cycle so that the objects are freed.
+  xLocalRoot.holdRequest().send().wait(ws);
 }
 
 KJ_TEST("embargo when a handed-off promise resolves to a third-party capability") {
