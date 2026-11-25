@@ -3226,6 +3226,82 @@ kj::Promise<void> RpcFuzzObject::newObject(NewObjectContext context) {
   return request.send().ignoreResult();
 }
 
+KJ_TEST("embargo when a handed-off promise resolves to a third-party capability") {
+  // y holds P, the capability pipelined on y's call to z's bootstrap, getHeld(), and hands P off
+  // to a: y sends z a `Provide` for P's pipeline and gives a a vine. Then z's `Return` arrives,
+  // handing w's bootstrap off to y, so P resolves to a capability y would accept from w. Call 0,
+  // which a pipelined on P, reaches y only after that. It must keep going the way of y's
+  // `Provide`, through z, rather than wait for y's own `Accept` to w: a's `Disembargo` follows
+  // the vine to the `Provide`, so call 1 would otherwise overtake call 0 on its way to w.
+  RpcFuzzState state;
+  TestContext context;
+  auto& ws = context.waitScope;
+
+  auto& w = context.initVat("w", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  test::TestRpcFuzz::Client zLocalRoot = kj::heap<RpcFuzzObject>(state);
+  auto& z = context.initVat("z", zLocalRoot);
+  test::TestRpcFuzz::Client yLocalRoot = kj::heap<RpcFuzzObject>(state);
+  auto& y = context.initVat("y", yLocalRoot);
+  auto& a = context.initVat("a", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto wRootFromZ = z.connect<test::TestRpcFuzz>("w");
+  auto wRootFromY = y.connect<test::TestRpcFuzz>("w");
+  auto zRootFromY = y.connect<test::TestRpcFuzz>("z");
+  auto zRootFromA = a.connect<test::TestRpcFuzz>("z");
+  auto yRoot = a.connect<test::TestRpcFuzz>("y");
+
+  // Make sure the connections are up.
+  fuzzSeq(wRootFromZ, 100, 0).wait(ws);
+  fuzzSeq(wRootFromY, 101, 0).wait(ws);
+  fuzzSeq(zRootFromY, 102, 0).wait(ws);
+  fuzzSeq(zRootFromA, 103, 0).wait(ws);
+  fuzzSeq(yRoot, 104, 0).wait(ws);
+
+  // z holds w's bootstrap.
+  {
+    auto request = zLocalRoot.holdRequest();
+    request.setCap(wRootFromZ);
+    request.send().wait(ws);
+  }
+
+  // y holds P, which stays unresolved while z's messages to y are held.
+  auto& zToY = KJ_ASSERT_NONNULL(z.vatNetwork.getConnectionTo(y.vatNetwork));
+  zToY.block();
+  auto zHeld = zRootFromY.getHeldRequest().send();
+  {
+    auto request = yLocalRoot.holdRequest();
+    request.setCap(zHeld.getCap());
+    request.send().wait(ws);
+  }
+
+  // a gets P from y. Call 0 waits on its way to y.
+  auto& aToY = KJ_ASSERT_NONNULL(a.vatNetwork.getConnectionTo(y.vatNetwork));
+  aToY.blockAfter([](rpc::Message::Reader message) { return message.isCall(); });
+  auto held = yRoot.getHeldRequest().send();
+  auto pipelined = held.getCap();
+  auto call0 = fuzzSeq(pipelined, 1, 0);
+  ws.poll();
+
+  // P resolves. Anything y sends to w directly waits.
+  auto& yToW = KJ_ASSERT_NONNULL(y.vatNetwork.getConnectionTo(w.vatNetwork));
+  yToW.block();
+  zToY.unblock();
+  ws.poll();
+
+  // Call 0 reaches y, then call 1 goes out through a's `Accept` from z.
+  aToY.unblock();
+  ws.poll();
+  auto call1 = fuzzSeq(pipelined, 1, 1);
+  ws.poll();
+
+  yToW.unblock();
+  call0.wait(ws);
+  call1.wait(ws);
+  held.wait(ws);
+  zHeld.wait(ws);
+
+  KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
+}
+
 // Randomized test of call ordering and completion.
 //
 // Each run sets up a few vats that each serve a `TestRpcFuzz` object, then performs a random
