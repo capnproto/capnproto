@@ -725,6 +725,59 @@ KJ_TEST("HTTP-over-Cap'n Proto WebSocket, with path shortening") {
   runWebSocketTests(*headerTable, factory, factory, waitScope);
 }
 
+KJ_TEST("HTTP-over-Cap'n Proto WebSocket server end can continue elsewhere") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+
+  ByteStreamFactory streamFactory1;
+  ByteStreamFactory streamFactory2;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory clientFactory(streamFactory1, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  HttpOverCapnpFactory serverFactory(streamFactory2, tableBuilder, TEST_PEER_OPTIMIZATION_LEVEL);
+  auto headerTable = tableBuilder.build();
+
+  auto wsPaf = kj::newPromiseAndFulfiller<kj::Own<kj::WebSocket>>();
+  auto donePaf = kj::newPromiseAndFulfiller<void>();
+  auto back = serverFactory.kjToCapnp(kj::heap<WebSocketAccepter>(
+      *headerTable, kj::mv(wsPaf.fulfiller), kj::mv(donePaf.promise)));
+  auto front = clientFactory.capnpToKj(back);
+  auto client = kj::newHttpClient(*front);
+
+  auto resp = client->openWebSocket("/ws", kj::HttpHeaders(*headerTable)).wait(waitScope);
+  KJ_ASSERT(resp.webSocketOrBody.is<kj::Own<kj::WebSocket>>());
+  auto clientWs = kj::mv(resp.webSocketOrBody.get<kj::Own<kj::WebSocket>>());
+  auto serverWs = wsPaf.promise.wait(waitScope);
+
+  // A WebSocket that is not carried over capnp has no downSocket.
+  auto plainPipe = kj::newWebSocketPipe();
+  KJ_EXPECT(HttpOverCapnpFactory::tryGetDownSocket(*plainPipe.ends[0]) == kj::none);
+
+  // The accepted server end exposes the client's downSocket, and a new server end built on it
+  // reaches the same client.
+  auto downSocket = KJ_ASSERT_NONNULL(HttpOverCapnpFactory::tryGetDownSocket(*serverWs));
+  auto moved = HttpOverCapnpFactory::newServerWebSocket(kj::mv(downSocket));
+  KJ_EXPECT(HttpOverCapnpFactory::tryGetDownSocket(*moved.webSocket) != kj::none);
+
+  {
+    auto send = moved.webSocket->send("from the new server"_kj);
+    auto message = clientWs->receive().wait(waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "from the new server");
+    send.wait(waitScope);
+  }
+
+  // Messages sent to the returned upSocket arrive at the new server end.
+  {
+    auto req = moved.upSocket.sendTextRequest();
+    req.setText("to the new server");
+    auto send = req.send();
+    auto message = moved.webSocket->receive().wait(waitScope);
+    KJ_ASSERT(message.is<kj::String>());
+    KJ_EXPECT(message.get<kj::String>() == "to the new server");
+    send.wait(waitScope);
+  }
+}
+
 KJ_TEST("HTTP-over-Cap'n Proto WebSocket reports overload") {
   kj::EventLoop eventLoop;
   kj::WaitScope waitScope(eventLoop);
