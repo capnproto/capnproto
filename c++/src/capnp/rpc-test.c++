@@ -3394,6 +3394,99 @@ kj::Promise<void> RpcFuzzObject::newObject(NewObjectContext context) {
   return request.send().ignoreResult();
 }
 
+KJ_TEST("embargo when a tail call back to the caller returns a capability hosted by the callee") {
+  // x calls y.tailEcho(via = an object in x, cap = y's bootstrap). y tail-calls back to x's
+  // object, which echoes y's bootstrap, so x's question resolves, through
+  // `Return.takeFromOtherQuestion`, to x's import of y's bootstrap. A call x already made on the
+  // pipelined result went to y, back to x, and then to y's bootstrap, so a later call must not
+  // go straight to y's bootstrap ahead of it.
+  RpcFuzzState state;
+  TestContext context;
+  auto& ws = context.waitScope;
+
+  auto& y = context.initVat("y", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto& x = context.initVat("x", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto yRoot = x.connect<test::TestRpcFuzz>("y");
+  test::TestRpcFuzz::Client xObject = kj::heap<RpcFuzzObject>(state);
+
+  // Make sure the connection is up.
+  fuzzSeq(yRoot, 100, 0).wait(ws);
+
+  // Hold y's messages to x from the `Return` that hands x the tail call's results onwards, so
+  // that y's forwarding of call 0 back to x is still in flight when x makes call 1.
+  auto& yToX = KJ_ASSERT_NONNULL(y.vatNetwork.getConnectionTo(x.vatNetwork));
+  yToX.blockAfter([](rpc::Message::Reader message) {
+    return message.isReturn() && message.getReturn().isTakeFromOtherQuestion();
+  });
+
+  auto request = yRoot.tailEchoRequest();
+  request.setVia(xObject);
+  request.setCap(yRoot);
+  auto promise = request.send();
+  auto pipelined = promise.getCap();
+
+  auto call0 = fuzzSeq(pipelined, 1, 0);
+  ws.poll();
+  auto call1 = fuzzSeq(pipelined, 1, 1);
+  ws.poll();
+
+  yToX.unblock();
+  call0.wait(ws);
+  call1.wait(ws);
+  promise.wait(ws);
+
+  KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
+}
+
+KJ_TEST("embargo when a tail call back to the caller is forwarded to a third vat") {
+  // x calls y.tailEcho(via = x's import of z's bootstrap, cap = an object in x). y tail-calls
+  // `via.echo(cap)` back to x, which forwards the call to z, and z echoes x's object. So x's
+  // question resolves, through `Return.takeFromOtherQuestion`, to x's own object. A call x
+  // already made on the pipelined result went to y, back to x, on to z, and back to x again, so a
+  // later call must not reach x's object ahead of it.
+  RpcFuzzState state;
+  TestContext context;
+  context.network.handoffDisabled = true;
+  auto& ws = context.waitScope;
+
+  context.initVat("y", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto& z = context.initVat("z", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto& x = context.initVat("x", test::TestRpcFuzz::Client(kj::heap<RpcFuzzObject>(state)));
+  auto yRoot = x.connect<test::TestRpcFuzz>("y");
+  auto zRoot = x.connect<test::TestRpcFuzz>("z");
+  test::TestRpcFuzz::Client xObject = kj::heap<RpcFuzzObject>(state);
+
+  // Make sure the connections are up.
+  fuzzSeq(yRoot, 100, 0).wait(ws);
+  fuzzSeq(zRoot, 101, 0).wait(ws);
+
+  // Hold z's messages to x from z's `Return` for the forwarded echo onwards, so that z's
+  // forwarding of call 0 back to x is still in flight when x makes call 1.
+  auto& zToX = KJ_ASSERT_NONNULL(z.vatNetwork.getConnectionTo(x.vatNetwork));
+  zToX.blockAfter([](rpc::Message::Reader message) {
+    return message.isReturn() && message.getReturn().isResults() &&
+        message.getReturn().getResults().getCapTable().size() > 0;
+  });
+
+  auto request = yRoot.tailEchoRequest();
+  request.setVia(zRoot);
+  request.setCap(xObject);
+  auto promise = request.send();
+  auto pipelined = promise.getCap();
+
+  auto call0 = fuzzSeq(pipelined, 1, 0);
+  ws.poll();
+  auto call1 = fuzzSeq(pipelined, 1, 1);
+  ws.poll();
+
+  zToX.unblock();
+  call0.wait(ws);
+  call1.wait(ws);
+  promise.wait(ws);
+
+  KJ_EXPECT(state.violations.empty(), kj::strArray(state.violations, "\n"));
+}
+
 // Randomized test of call ordering and completion.
 //
 // Each run sets up a few vats that each serve a `TestRpcFuzz` object, then performs a random
