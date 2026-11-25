@@ -1649,15 +1649,28 @@ private:
         // handling it may need to know that a promise that received calls in the past has
         // resolved to it. So, notify it.
         bool requiresEmbargo = rpcReplacement.promiseResolvedToThis(receivedCall);
-        if (isSameConnection && requiresEmbargo && !disembargoHandledElsewhere) {
-          // Exception: The remote end may have resolved us to a capability that it *thought*
-          // pointed back to us, but that capability itself was a promise which we subsequently
-          // resolved *back* to the remote. In this case, even though we are resolving one promise
-          // to another on the same connection, an embargo is still needed, because the remote end
-          // didn't know that it was resolving back to itself and will be forwarding pipelined
-          // calls our way in the meantime. `RequireEmbargoWrapper` signals this by returning true
-          // from `promiseResolvedToThis()`.
-          needsEmbargo = true;
+        if (isSameConnection) {
+          if (requiresEmbargo && !disembargoHandledElsewhere) {
+            // Exception: The remote end may have resolved us to a capability that it *thought*
+            // pointed back to us, but that capability itself was a promise which we subsequently
+            // resolved *back* to the remote. In this case, even though we are resolving one
+            // promise to another on the same connection, an embargo is still needed, because the
+            // remote end didn't know that it was resolving back to itself and will be forwarding
+            // pipelined calls our way in the meantime. `RequireEmbargoWrapper` signals this by
+            // returning true from `promiseResolvedToThis()`.
+            needsEmbargo = true;
+          }
+        } else {
+          // We resolved to a capability on a different connection. The peer can only have
+          // described it as `receiverHosted` or `receiverAnswer`, meaning one of our own exports
+          // or answers, which we in turn forward to that other connection. (A
+          // `ThirdPartyCapDescriptor` produces a `DeferredThirdPartyClient` on this connection.)
+          //
+          // So, as far as the peer is concerned, the promise now points back to us, and calls we
+          // made on it earlier are on their way back to us to be forwarded to the other
+          // connection. That's the same situation as resolving to a local capability: if we
+          // made any calls, new calls must wait behind an embargo so they don't overtake those.
+          needsEmbargo = receivedCall && !disembargoHandledElsewhere;
         }
       } else {
         if (replacement->isNull() || replacement->isError()) {
