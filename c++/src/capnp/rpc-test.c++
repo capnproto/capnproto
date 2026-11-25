@@ -3536,10 +3536,13 @@ private:
     uint64_t id;
     test::TestRpcFuzz::Client cap;
     bool delayed = false;
-    bool fromHeld = false;
-    // Derived from a `getHeld()` result. Such capabilities are never passed to `hold()`, since
-    // `hold(getHeld())` sent through two different references to the same object can run in
-    // either order, and when `hold()` runs first, the held promise resolves to itself.
+    bool dependsOnHeld = false;
+    // Resolves to, or through, a `getHeld()` result: it is one, or it's the result of a call made
+    // on such a capability or passed one. Such capabilities are never passed to `hold()`. Calls
+    // to `getHeld()` and `hold()` sent through two different references to the same object can
+    // run in either order, so the held capability could otherwise end up depending on its own
+    // resolution. A promise cycle like that never resolves, and calls made on it get forwarded
+    // around it forever.
     uint32_t nextSeq = 0;
   };
 
@@ -3565,14 +3568,22 @@ private:
   kj::Vector<kj::Own<CallRecord>> calls;
   kj::Vector<kj::Promise<void>> tasks;
   uint64_t nextHandleId = 1;
+  bool livelocked = false;
 
   static constexpr uint MAX_HANDLES_PER_VAT = 32;
+  static constexpr uint MAX_POLL_TURNS = 200000;
+
+  void poll() {
+    // Run the event loop until it's idle, but give up on one that never goes idle, so that a
+    // livelock fails the run rather than hanging the test.
+    if (context.waitScope.poll(MAX_POLL_TURNS) >= MAX_POLL_TURNS) livelocked = true;
+  }
 
   uint pick(FuzzVat& vat) { return rng.below(vat.handles.size()); }
 
   void addHandle(FuzzVat& vat, uint64_t id, test::TestRpcFuzz::Client cap,
-                 bool delayed = false, bool fromHeld = false) {
-    vat.handles.add(Handle { id, kj::mv(cap), delayed, fromHeld });
+                 bool delayed = false, bool dependsOnHeld = false) {
+    vat.handles.add(Handle { id, kj::mv(cap), delayed, dependsOnHeld });
   }
 
   template <typename Promise>
@@ -3588,20 +3599,20 @@ private:
     return record;
   }
 
-  void trackCap(FuzzVat& vat, uint64_t id, bool delayed, bool fromHeld, kj::String description,
+  void trackCap(FuzzVat& vat, uint64_t id, bool delayed, bool dependsOnHeld, kj::String description,
                 RemotePromise<test::TestRpcFuzz::CapResult>&& promise) {
     // Keeps the pipelined capability as handle `id`, and sometimes the final result as another.
-    addHandle(vat, id, promise.getCap(), delayed, fromHeld);
+    addHandle(vat, id, promise.getCap(), delayed, dependsOnHeld);
     bool keepResult = rng.chance(30);
     uint64_t resultId = nextHandleId++;
     log.add(kj::str(description));
     auto& record = *calls.add(kj::heap<CallRecord>(kj::mv(description)));
-    tasks.add(promise.then([this, &vat, &record, keepResult, resultId, fromHeld](
+    tasks.add(promise.then([this, &vat, &record, keepResult, resultId, dependsOnHeld](
         Response<test::TestRpcFuzz::CapResult>&& response) {
       record.done = true;
       if (keepResult) {
         log.add(kj::str(vat.name, ": handle ", resultId, " = result of ", record.description));
-        addHandle(vat, resultId, response.getCap(), false, fromHeld);
+        addHandle(vat, resultId, response.getCap(), false, dependsOnHeld);
       }
     }, [&record](kj::Exception&& e) {
       record.done = true;
@@ -3630,7 +3641,8 @@ private:
     request.setReleaseHandle(id);
     auto description = kj::str(vat.name, ": handle ", id, " = echo(handle ", cap.id,
                                ") on handle ", target.id, delayed ? " (delayed)" : "");
-    trackCap(vat, id, delayed, cap.fromHeld, kj::mv(description), request.send());
+    trackCap(vat, id, delayed, target.dependsOnHeld || cap.dependsOnHeld, kj::mv(description),
+             request.send());
   }
 
   void tailEcho(FuzzVat& vat) {
@@ -3647,13 +3659,14 @@ private:
     auto description = kj::str(vat.name, ": handle ", id, " = tailEcho(via handle ", via.id,
                                ", handle ", cap.id, ") on handle ", target.id,
                                delayed ? " (delayed)" : "");
-    trackCap(vat, id, delayed, cap.fromHeld, kj::mv(description), request.send());
+    trackCap(vat, id, delayed, target.dependsOnHeld || via.dependsOnHeld || cap.dependsOnHeld,
+             kj::mv(description), request.send());
   }
 
   void hold(FuzzVat& vat) {
     auto& target = vat.handles[pick(vat)];
     auto& cap = vat.handles[pick(vat)];
-    if (cap.fromHeld) return;
+    if (cap.dependsOnHeld) return;
     auto request = target.cap.holdRequest();
     request.setCap(cap.cap);
     track(kj::str(vat.name, ": hold(handle ", cap.id, ") on handle ", target.id),
@@ -3672,7 +3685,8 @@ private:
     uint64_t id = nextHandleId++;
     auto description = kj::str(vat.name, ": handle ", id, " = newObject() on handle ",
                                target.id);
-    trackCap(vat, id, false, false, kj::mv(description), target.cap.newObjectRequest().send());
+    trackCap(vat, id, false, target.dependsOnHeld, kj::mv(description),
+             target.cap.newObjectRequest().send());
   }
 
   void drop(FuzzVat& vat) {
@@ -3730,7 +3744,7 @@ private:
     } else if (op < 94) {
       toggleBlock();
     } else {
-      context.waitScope.poll();
+      poll();
     }
   }
 
@@ -3749,10 +3763,15 @@ private:
         if (vat.handles[i].delayed && vat.handles[i].nextSeq == 0) callSeq(vat, i);
       }
     }
-    for (uint i = 0; i < 4; i++) context.waitScope.poll();
+    for (uint i = 0; i < 4; i++) poll();
   }
 
   bool check() {
+    if (livelocked) {
+      KJ_FAIL_EXPECT("the event loop never went idle", MAX_POLL_TURNS);
+      return false;
+    }
+
     bool ok = true;
     uint stuck = 0;
     for (auto& call: calls) {
@@ -3785,7 +3804,7 @@ private:
     dropped.clear();
     for (auto& vat: vats) vat.handles.clear();
     tasks.clear();
-    context.waitScope.poll();
+    poll();
   }
 };
 
@@ -3816,7 +3835,7 @@ bool RpcFuzzRun::run(uint steps, bool dump) {
     }
   }
 
-  for (uint i = 0; i < steps; i++) {
+  for (uint i = 0; i < steps && !livelocked; i++) {
     step();
     for (uint yields = rng.below(3); yields > 0; yields--) {
       kj::yield().wait(context.waitScope);
