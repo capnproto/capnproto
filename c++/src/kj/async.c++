@@ -1902,6 +1902,12 @@ EventLoop::Id EventLoop::id() const { return Id(loopId); }
 
 EventLoop::Id EventLoop::Id::current() { return currentEventLoop().id(); }
 
+Maybe<EventLoop::Id> EventLoop::Id::tryCurrent() {
+  EventLoop* loop = threadLocalEventLoop;
+  if (loop == nullptr) return kj::none;
+  return loop->id();
+}
+
 void EventLoop::Id::assertCurrentEventLoop() const {
   EventLoop* loop = threadLocalEventLoop;
   KJ_ASSERT(loop != nullptr && loop->loopId == id);

@@ -1484,6 +1484,10 @@ public:
     // Obtain the id of the EventLoop currently running on this thread. Requires that an EventLoop
     // is running on the current thread.
 
+    static Maybe<Id> tryCurrent();
+    // Like current(), but returns none if no EventLoop is running on this thread. Never throws,
+    // and unlike tryGetCurrentThreadExecutor(), never allocates an Executor.
+
     inline bool operator==(const Id& other) const = default;
 
     void assertCurrentEventLoop() const;
