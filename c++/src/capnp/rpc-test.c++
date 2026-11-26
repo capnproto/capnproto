@@ -861,6 +861,37 @@ KJ_TEST("context.setPipeline") {
   KJ_EXPECT(!promise.poll(context.waitScope));
 }
 
+KJ_TEST("noPromisePipelining: call without capabilities in results has no pipeline") {
+  TestContext context;
+
+  auto client = context.connect();
+
+  // foo() results contain no capabilities, so the generated code sets noPromisePipelining.
+  auto request = client.fooRequest();
+  request.setI(123);
+  request.setJ(true);
+  auto promise = request.send();
+  KJ_EXPECT(PipelineHook::from(promise) == kj::none);
+
+  KJ_EXPECT(promise.wait(context.waitScope).getX() == "foo");
+}
+
+KJ_TEST("noPromisePipelining: pipelining on the result throws") {
+  TestContext context;
+
+  auto client = context.connect();
+
+  // getTestPipeline() returns a capability, so we have to force the hint with a typeless request.
+  auto promise = client.typelessRequest(typeId<test::TestInterface>(), 3, kj::none,
+      { .noPromisePipelining = true }).send();
+  KJ_EXPECT(PipelineHook::from(promise) == kj::none);
+  KJ_EXPECT_THROW_MESSAGE("noPromisePipelining", promise.getPointerField(0).asCap());
+
+  // The call itself still works.
+  auto response = promise.wait(context.waitScope);
+  KJ_EXPECT(response.getAs<test::TestInterface::GetTestPipelineResults>().hasCap());
+}
+
 KJ_TEST("release capability") {
   TestContext context;
 
