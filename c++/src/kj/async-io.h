@@ -223,6 +223,9 @@ public:
   // does nothing for backwards compatibilty. Existing implementations of AsyncOutputStream that
   // want to support this method should override it, existing implementations that don't need it
   // can just ignore it.
+  //
+  // The write end of a pipe also fails pending and future reads at the read end with the given
+  // exception, rather than letting them see EOF.
 };
 
 class AsyncIoStream: public AsyncInputStream, public AsyncOutputStream {
@@ -235,6 +238,11 @@ public:
   virtual void abortRead() {}
   // Similar to shutdownWrite, but this will shut down the read end of the stream, and should only
   // be called when an error has occurred.
+
+  virtual void abortRead(kj::Exception&& exception) { abortRead(); }
+  // Like abortRead(), but gives the error that caused it. One end of a two-way pipe fails pending
+  // and future writes at the other end with the given exception, rather than with a generic one.
+  // The default implementation calls abortRead().
 
   virtual void getsockopt(int level, int option, void* value, uint* length);
   virtual void setsockopt(int level, int option, const void* value, uint length);
