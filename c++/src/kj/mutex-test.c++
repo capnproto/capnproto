@@ -33,6 +33,9 @@
 #include "thread.h"
 #include <kj/compat/gtest.h>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
 #include <stdlib.h>
 
 #if _WIN32
@@ -55,6 +58,20 @@ inline void delay() { Sleep(10); }
 #else
 inline void delay() { usleep(10000); }
 #endif
+
+Duration platformTimedWait(Duration timeout) {
+  // Returns how long a plain std::condition_variable takes to time out a wait of `timeout` on this
+  // host right now. Some hosts, such as virtualized CI runners, overshoot such a wait by far more
+  // than a scheduler timeslice, so the precise-timing tests compare MutexGuarded::when() with this
+  // rather than with `timeout` alone.
+  std::mutex mutex;
+  std::condition_variable condvar;
+  std::unique_lock<std::mutex> lock(mutex);
+  auto& clock = systemPreciseMonotonicClock();
+  auto start = clock.now();
+  condvar.wait_for(lock, std::chrono::nanoseconds(timeout / NANOSECONDS), []() { return false; });
+  return clock.now() - start;
+}
 
 TEST(Mutex, MutexGuarded) {
   MutexGuarded<uint> value(123);
@@ -397,8 +414,11 @@ TEST(Mutex, WhenWithTimeoutPreciseTiming) {
   // Test that MutexGuarded::when() with a timeout sleeps for precisely the right amount of time.
 
   auto& clock = systemPreciseMonotonicClock();
+  Duration t = 0 * kj::NANOSECONDS;
+  Duration platformTime = 0 * kj::NANOSECONDS;
 
   for (uint retryCount = 0; retryCount < 20; retryCount++) {
+    platformTime = platformTimedWait(100 * kj::MILLISECONDS);
     MutexGuarded<uint> value(123);
 
     auto start = clock.now();
@@ -413,15 +433,16 @@ TEST(Mutex, WhenWithTimeoutPreciseTiming) {
 
     KJ_EXPECT(m == 456);
 
-    auto t = clock.now() - start;
+    t = clock.now() - start;
     KJ_EXPECT(t >= 100 * kj::MILLISECONDS);
-    // Provide a large margin of error here because some operating systems (e.g. Windows) can have
-    // long timeslices (13ms) and won't schedule more precisely than a timeslice.
-    if (t <= 120 * kj::MILLISECONDS) {
+    // On top of the time the platform itself took to time out the same wait, provide a large
+    // margin of error, because some operating systems (e.g. Windows) can have long timeslices
+    // (13ms) and won't schedule more precisely than a timeslice.
+    if (t <= platformTime + 20 * kj::MILLISECONDS) {
       return;
     }
   }
-  KJ_FAIL_ASSERT("time not within expected bounds even after retries");
+  KJ_FAIL_ASSERT("time not within expected bounds even after retries", t, platformTime);
 }
 
 TEST(Mutex, WhenWithTimeoutPreciseTimingAfterInterrupt) {
@@ -429,8 +450,11 @@ TEST(Mutex, WhenWithTimeoutPreciseTimingAfterInterrupt) {
   // even if the thread is spuriously woken in the middle.
 
   auto& clock = systemPreciseMonotonicClock();
+  Duration t = 0 * kj::NANOSECONDS;
+  Duration platformTime = 0 * kj::NANOSECONDS;
 
   for (uint retryCount = 0; retryCount < 20; retryCount++) {
+    platformTime = platformTimedWait(100 * kj::MILLISECONDS);
     MutexGuarded<uint> value(123);
 
     kj::Thread thread([&]() {
@@ -447,15 +471,16 @@ TEST(Mutex, WhenWithTimeoutPreciseTimingAfterInterrupt) {
 
     KJ_EXPECT(m == 456);
 
-    auto t = clock.now() - start;
+    t = clock.now() - start;
     KJ_EXPECT(t >= 100 * kj::MILLISECONDS, t / kj::MILLISECONDS);
-    // Provide a large margin of error here because some operating systems (e.g. Windows) can have
-    // long timeslices (13ms) and won't schedule more precisely than a timeslice.
-    if (t <= 120 * kj::MILLISECONDS) {
+    // On top of the time the platform itself took to time out the same wait, provide a large
+    // margin of error, because some operating systems (e.g. Windows) can have long timeslices
+    // (13ms) and won't schedule more precisely than a timeslice.
+    if (t <= platformTime + 20 * kj::MILLISECONDS) {
       return;
     }
   }
-  KJ_FAIL_ASSERT("time not within expected bounds even after retries");
+  KJ_FAIL_ASSERT("time not within expected bounds even after retries", t, platformTime);
 }
 
 KJ_TEST("wait()s wake each other") {
