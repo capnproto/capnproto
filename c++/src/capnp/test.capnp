@@ -842,6 +842,32 @@ interface TestTailCaller {
   foo @0 (i :Int32, callee :TestTailCallee) -> TestTailCallee.TailResult;
 }
 
+interface TestRpcFuzz {
+  # Used by the RPC tests in rpc-test.c++. Every object checks that the calls made
+  # through each of the test's references arrive in the order they were sent.
+
+  struct CapResult {
+    cap @0 :TestRpcFuzz;
+  }
+
+  seq @0 (handle :UInt64, seq :UInt32) -> ();
+  # An ordered call: `seq` counts up from zero for each `handle`, a reference held by the test.
+
+  echo @1 (cap :TestRpcFuzz, delayed :Bool, releaseHandle :UInt64) -> CapResult;
+  # Returns `cap`. If `delayed` is true, sets `cap` as the pipeline right away but only returns
+  # once a `seq` call for `releaseHandle` has arrived at some object.
+
+  tailEcho @2 (via :TestRpcFuzz, cap :TestRpcFuzz, delayed :Bool, releaseHandle :UInt64)
+      -> CapResult;
+  # Tail-calls `via.echo()` with the remaining parameters.
+
+  hold @3 (cap :TestRpcFuzz) -> ();
+  getHeld @4 () -> CapResult;
+  # Returns the capability last passed to `hold()`, or a new object if there is none.
+
+  newObject @5 () -> CapResult;
+}
+
 interface TestStreaming $Cxx.allowCancellation {
   doStreamI @0 (i :UInt32) -> stream;
   doStreamJ @1 (j :UInt32) -> stream;
