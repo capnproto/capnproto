@@ -1537,11 +1537,14 @@ KJ_TEST("Maximum turn count during wait scope poll is enforced") {
 }
 
 KJ_TEST("EventLoop::Id") {
+  KJ_ASSERT(EventLoop::Id::tryCurrent() == kj::none);
+
   EventLoop loop;
   WaitScope waitScope(loop);
 
   auto id1 = EventLoop::Id::current();
   id1.assertCurrentEventLoop();
+  KJ_ASSERT(KJ_ASSERT_NONNULL(EventLoop::Id::tryCurrent()) == id1);
 
   auto id2 = EventLoop::Id::current();
   KJ_ASSERT(id2 == id1);
@@ -1554,12 +1557,18 @@ KJ_TEST("EventLoop::Id") {
 
     auto id3 = EventLoop::Id::current();
     id3.assertCurrentEventLoop();
+    KJ_ASSERT(KJ_ASSERT_NONNULL(EventLoop::Id::tryCurrent()) == id3);
     KJ_ASSERT(id1 != id3);
     KJ_ASSERT(id2 != id3);
     KJ_ASSERT(loop2.id() == id3);
     KJ_ASSERT(loop.id() != id3);
 
     KJ_EXPECT_THROW_MESSAGE("loop->loopId == id", id1.assertCurrentEventLoop());
+  });
+
+  Thread threadWithoutLoop([&]() {
+    KJ_ASSERT(EventLoop::Id::tryCurrent() == kj::none);
+    KJ_EXPECT_THROW_MESSAGE("No event loop", EventLoop::Id::current());
   });
 }
 
