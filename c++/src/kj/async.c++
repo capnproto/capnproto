@@ -900,16 +900,17 @@ void XThreadEvent::ensureDoneOrCanceled() {
   if (kj::atomicLoad(&state, kj::AtomicMemoryOrder::ACQUIRE) != DONE) {
     auto lock = targetExecutor->impl->state.lockExclusive();
 
-    const EventLoop* loop;
+    const EventLoop* loop = nullptr;
     KJ_IF_SOME(l, lock->loop) {
       loop = &l;
     } else {
       // Target event loop is already dead, so we know it's already working on transitioning all
-      // events to the DONE state. We can just wait.
+      // events to the DONE state. We can just wait. The switch below then has nothing to do, but
+      // disconnect() queues a reply to this thread before marking the event DONE, so we must still
+      // remove the event from our reply queue afterwards.
       lock.wait([&](auto&) {
         return kj::atomicLoad(&state, kj::AtomicMemoryOrder::ACQUIRE) == DONE;
       });
-      return;
     }
 
     switch (state) {

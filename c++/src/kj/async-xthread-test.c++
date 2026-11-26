@@ -926,6 +926,55 @@ KJ_TEST("cross-thread event cancel requested while destination thread being dest
   })();
 }
 
+KJ_TEST("cross-thread event canceled while destination thread disconnects it") {
+  // The destination thread's event loop exits while our event is still executing there. Its
+  // disconnect() destroys the event's promise, then queues a reply back to us, then marks the event
+  // DONE. If we drop our promise before the event is DONE, ensureDoneOrCanceled() finds the loop
+  // gone and waits for DONE; it must then still remove the event from our reply queue, because our
+  // loop never got to dispatch the reply.
+
+  MutexGuarded<kj::Maybe<const Executor&>> executor;  // to get the Executor from the other thread
+  MutexGuarded<bool> destroyingPromise(false);
+  Own<PromiseFulfiller<void>> fulfiller;  // accessed only from the subthread
+
+  Thread thread([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    auto paf = newPromiseAndFulfiller<void>();
+    fulfiller = kj::mv(paf.fulfiller);
+
+    *executor.lockExclusive() = getCurrentThreadExecutor();
+
+    // Wait for the other thread's event to start, then exit the event loop with it still running.
+    paf.promise.wait(waitScope);
+  });
+
+  ([&]() noexcept {
+    KJ_XTHREAD_TEST_SETUP_LOOP;
+
+    Own<const Executor> exec;
+    {
+      auto lock = executor.lockExclusive();
+      lock.wait([&](kj::Maybe<const Executor&> value) { return value != kj::none; });
+      exec = KJ_ASSERT_NONNULL(*lock).addRef();
+    }
+
+    auto promise = exec->executeAsync([&]() -> Promise<void> {
+      fulfiller->fulfill();
+      return Promise<void>(kj::NEVER_DONE).attach(kj::defer([&]() {
+        // disconnect() runs this before it queues the reply and marks the event DONE. Give the
+        // other thread time to start canceling in between.
+        *destroyingPromise.lockExclusive() = true;
+        delay();
+      }));
+    });
+
+    // Don't turn our event loop, so the reply stays queued.
+    destroyingPromise.lockExclusive().wait([](bool value) { return value; });
+    promise = nullptr;
+  })();
+}
+
 KJ_TEST("cross-thread fulfiller") {
   MutexGuarded<Maybe<Own<PromiseFulfiller<int>>>> fulfillerMutex;
 
