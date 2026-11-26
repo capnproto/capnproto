@@ -5085,6 +5085,17 @@ KJ_TEST("HttpServer bad requests") {
     "Host: ", kj::strArray(kj::repeat("0", 1024 * 1024), ""), "\r\n",
     "\r\n");
 
+  // A head of exactly 150 KiB, and one byte over. The request line, "Host: ", and the two line
+  // breaks take 26 bytes.
+  static auto maxHeaderRequest = kj::str(
+    "GET / HTTP/1.1\r\n",
+    "Host: ", kj::strArray(kj::repeat("0", 150 * 1024 - 26), ""), "\r\n",
+    "\r\n");
+  static auto overMaxHeaderRequest = kj::str(
+    "GET / HTTP/1.1\r\n",
+    "Host: ", kj::strArray(kj::repeat("0", 150 * 1024 - 25), ""), "\r\n",
+    "\r\n");
+
   static TestCase testCases[] {
     {
       // bad request
@@ -5125,6 +5136,29 @@ KJ_TEST("HttpServer bad requests") {
     {
       // huge header shouldn't break the server
       .request = hugeHeaderRequest,
+      .expectedResponse =
+          "HTTP/1.1 431 Request Header Fields Too Large\r\n"
+          "Connection: close\r\n"
+          "Content-Length: 24\r\n"
+          "Content-Type: text/plain\r\n"
+          "\r\n"
+          "ERROR: header too large."_kj,
+      .expectWriteError = true,
+    },
+    {
+      // a head at the limit is accepted
+      .request = maxHeaderRequest,
+      .expectedResponse =
+          "HTTP/1.1 500 Internal Server Error\r\n"
+          "Connection: close\r\n"
+          "Content-Length: 51\r\n"
+          "Content-Type: text/plain\r\n"
+          "\r\n"
+          "ERROR: The HttpService did not generate a response."_kj,
+    },
+    {
+      // a head one byte over the limit is rejected
+      .request = overMaxHeaderRequest,
       .expectedResponse =
           "HTTP/1.1 431 Request Header Fields Too Large\r\n"
           "Connection: close\r\n"

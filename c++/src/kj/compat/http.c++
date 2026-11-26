@@ -1507,7 +1507,7 @@ private:
 // =======================================================================================
 
 static constexpr size_t MIN_BUFFER = 4096;
-static constexpr size_t MAX_BUFFER = 128 * 1024;
+static constexpr size_t MAX_BUFFER = 150 * 1024;
 static constexpr size_t MAX_CHUNK_HEADER_SIZE = 32;
 
 class HttpInputStreamImpl final: public HttpInputStream,
@@ -1918,8 +1918,8 @@ private:
     CHUNK
   };
 
-  void growHeaderBuffer() {
-    auto newBuffer = kj::heapArray<char>(headerBuffer.size() * 2);
+  void growHeaderBuffer(size_t newSize) {
+    auto newBuffer = kj::heapArray<char>(newSize);
     memcpy(newBuffer.begin(), headerBuffer.begin(), headerBuffer.size());
 
     // A non-empty leftover is consumed and cleared before we get here. An empty leftover may still
@@ -1982,7 +1982,8 @@ private:
                   .description = "header too large.",
                   .rawContent = nullptr };
             }
-            growHeaderBuffer();
+            // Double the buffer, but stop at MAX_BUFFER.
+            growHeaderBuffer(kj::min(headerBuffer.size() * 2, MAX_BUFFER));
           }
         }
 
@@ -2054,7 +2055,7 @@ private:
           if (type == HeaderType::MESSAGE) {
             if (headerBuffer.size() - newEnd < MAX_CHUNK_HEADER_SIZE) {
               // Ugh, there's not enough space for the secondary await buffer. Grow once more.
-              growHeaderBuffer();
+              growHeaderBuffer(headerBuffer.size() * 2);
             }
             messageHeaderEnd = endIndex;
           } else {
