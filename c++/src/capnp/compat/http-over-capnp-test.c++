@@ -577,6 +577,217 @@ KJ_TEST("HTTP-over-Cap'n-Proto E2E, with path shortening") {
   runEndToEndTests(timer, *headerTable, factory, factory, waitScope);
 }
 
+KJ_TEST("HTTP-over-Cap'n-Proto E2E at LEVEL_3, no path shortening") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+
+  ByteStreamFactory streamFactory1;
+  ByteStreamFactory streamFactory2;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory factory1(streamFactory1, tableBuilder, HttpOverCapnpFactory::LEVEL_3);
+  HttpOverCapnpFactory factory2(streamFactory2, tableBuilder, HttpOverCapnpFactory::LEVEL_3);
+  auto headerTable = tableBuilder.build();
+
+  runEndToEndTests(timer, *headerTable, factory1, factory2, waitScope);
+}
+
+KJ_TEST("HTTP-over-Cap'n-Proto E2E, LEVEL_3 server and LEVEL_2 client") {
+  // Receiving an inline body does not depend on the receiver's own level.
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+
+  ByteStreamFactory streamFactory1;
+  ByteStreamFactory streamFactory2;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory clientFactory(streamFactory1, tableBuilder, HttpOverCapnpFactory::LEVEL_2);
+  HttpOverCapnpFactory serverFactory(streamFactory2, tableBuilder, HttpOverCapnpFactory::LEVEL_3);
+  auto headerTable = tableBuilder.build();
+
+  runEndToEndTests(timer, *headerTable, clientFactory, serverFactory, waitScope);
+}
+
+class TwoPartBodyService final: public kj::HttpService {
+  // Responds with a body of `declaredSize`, written as `first`, then (after `pause`, if any)
+  // `second`.
+
+public:
+  TwoPartBodyService(const kj::HttpHeaderTable& headerTable, uint64_t declaredSize,
+                     kj::StringPtr first, kj::StringPtr second,
+                     kj::Maybe<kj::Promise<void>> pause)
+      : headerTable(headerTable), declaredSize(declaredSize), first(first), second(second),
+        pause(kj::mv(pause)) {}
+
+  kj::Promise<void> request(
+      kj::HttpMethod method, kj::StringPtr url, const kj::HttpHeaders& headers,
+      kj::AsyncInputStream& requestBody, Response& response) override {
+    kj::HttpHeaders responseHeaders(headerTable);
+    auto body = response.send(200, "OK", responseHeaders, declaredSize);
+    co_await body->write(first.asBytes());
+    KJ_IF_SOME(p, pause) {
+      co_await p;
+    }
+    if (second.size() > 0) {
+      co_await body->write(second.asBytes());
+    }
+  }
+
+private:
+  const kj::HttpHeaderTable& headerTable;
+  uint64_t declaredSize;
+  kj::StringPtr first;
+  kj::StringPtr second;
+  kj::Maybe<kj::Promise<void>> pause;
+};
+
+class RecordingClientRequestContext final
+    : public capnp::HttpService::ClientRequestContext::Server {
+  // Records how the response body arrived: inside startResponse(), or through the stream that
+  // startResponse() returned.
+
+public:
+  explicit RecordingClientRequestContext(ByteStreamFactory& streamFactory)
+      : streamFactory(streamFactory) {}
+
+  bool started = false;
+  uint64_t declaredSize = 0;
+  kj::Maybe<kj::String> inlineBody;
+  kj::Maybe<kj::Own<kj::AsyncInputStream>> streamedBody;
+
+  kj::Promise<void> startResponse(StartResponseContext context) override {
+    started = true;
+    auto response = context.getParams().getResponse();
+    declaredSize = response.getBodySize().getFixed();
+    if (response.hasInlineBody()) {
+      inlineBody = kj::str(response.getInlineBody().asChars());
+    } else {
+      auto pipe = kj::newOneWayPipe();
+      context.getResults().setBody(streamFactory.kjToCapnp(kj::mv(pipe.out)));
+      streamedBody = kj::mv(pipe.in);
+    }
+    return kj::READY_NOW;
+  }
+
+private:
+  ByteStreamFactory& streamFactory;
+};
+
+struct InlineBodyTest {
+  // One request to a TwoPartBodyService through kjToCapnp(), with the response recorded.
+
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope;
+  ByteStreamFactory streamFactory;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory factory;
+  kj::Own<kj::HttpHeaderTable> headerTable;
+  kj::Own<kj::PromiseFulfiller<void>> resume;
+  RecordingClientRequestContext* recorded = nullptr;
+  capnp::HttpService::ClientRequestContext::Client context = nullptr;
+  // Keeps `recorded` alive after the service has finished and dropped its reference.
+  kj::Promise<void> done = nullptr;
+
+  InlineBodyTest(HttpOverCapnpFactory::OptimizationLevel level, uint64_t declaredSize,
+                 kj::StringPtr first, kj::StringPtr second, bool pauseBetween)
+      : waitScope(eventLoop), factory(streamFactory, tableBuilder, level),
+        headerTable(tableBuilder.build()) {
+    kj::Maybe<kj::Promise<void>> pause;
+    if (pauseBetween) {
+      auto paf = kj::newPromiseAndFulfiller<void>();
+      pause = kj::mv(paf.promise);
+      resume = kj::mv(paf.fulfiller);
+    }
+    auto service = factory.kjToCapnp(kj::heap<TwoPartBodyService>(
+        *headerTable, declaredSize, first, second, kj::mv(pause)));
+    auto contextServer = kj::heap<RecordingClientRequestContext>(streamFactory);
+    recorded = contextServer;
+    context = kj::mv(contextServer);
+
+    auto req = service.requestRequest();
+    auto httpReq = req.initRequest();
+    httpReq.setMethod(capnp::HttpMethod::GET);
+    httpReq.setUrl("/");
+    httpReq.getBodySize().setFixed(0);
+    req.setContext(context);
+    done = req.send().ignoreResult().eagerlyEvaluate(nullptr);
+  }
+
+  kj::Promise<kj::String> readStreamedBody() {
+    // The service's writes do not finish until the stream is read, so start this before waiting
+    // for `done`.
+    return KJ_ASSERT_NONNULL(recorded->streamedBody)->readAllText();
+  }
+};
+
+KJ_TEST("HTTP-over-Cap'n-Proto LEVEL_3 sends a small body inside startResponse()") {
+  {
+    InlineBodyTest test(HttpOverCapnpFactory::LEVEL_3, 6, "foobar", "", false);
+    test.done.wait(test.waitScope);
+    test.waitScope.poll();
+    KJ_ASSERT(test.recorded->started);
+    KJ_EXPECT(test.recorded->declaredSize == 6);
+    KJ_EXPECT(KJ_ASSERT_NONNULL(test.recorded->inlineBody) == "foobar");
+  }
+
+  // Written in two pieces without waiting for anything in between.
+  {
+    InlineBodyTest test(HttpOverCapnpFactory::LEVEL_3, 6, "foo", "bar", false);
+    test.done.wait(test.waitScope);
+    test.waitScope.poll();
+    KJ_EXPECT(KJ_ASSERT_NONNULL(test.recorded->inlineBody) == "foobar");
+  }
+}
+
+KJ_TEST("HTTP-over-Cap'n-Proto LEVEL_3 streams a body that is not ready at once") {
+  InlineBodyTest test(HttpOverCapnpFactory::LEVEL_3, 6, "foo", "bar", true);
+
+  // The service is waiting, so the event loop goes idle. The head is sent without the body, and
+  // what has been written so far arrives through the stream.
+  KJ_EXPECT(!test.done.poll(test.waitScope));
+  KJ_ASSERT(test.recorded->started);
+  KJ_EXPECT(test.recorded->inlineBody == kj::none);
+  KJ_EXPECT(test.recorded->declaredSize == 6);
+
+  auto body = test.readStreamedBody();
+  test.resume->fulfill();
+  test.done.wait(test.waitScope);
+  KJ_EXPECT(body.wait(test.waitScope) == "foobar");
+}
+
+KJ_TEST("HTTP-over-Cap'n-Proto LEVEL_3 reports a body that ends early") {
+  // The service declares six bytes, writes three and returns.
+  InlineBodyTest test(HttpOverCapnpFactory::LEVEL_3, 6, "foo", "", false);
+  test.done.wait(test.waitScope);
+  test.waitScope.poll();
+  KJ_ASSERT(test.recorded->started);
+  KJ_EXPECT(test.recorded->declaredSize == 6);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(test.recorded->inlineBody) == "foo");
+}
+
+KJ_TEST("HTTP-over-Cap'n-Proto does not send inline bodies below LEVEL_3 or above the size limit") {
+  {
+    InlineBodyTest test(HttpOverCapnpFactory::LEVEL_2, 6, "foobar", "", false);
+    test.waitScope.poll();
+    KJ_ASSERT(test.recorded->started);
+    KJ_EXPECT(test.recorded->inlineBody == kj::none);
+    auto body = test.readStreamedBody();
+    test.done.wait(test.waitScope);
+    KJ_EXPECT(body.wait(test.waitScope) == "foobar");
+  }
+
+  {
+    auto big = kj::str(kj::repeat('x', HttpOverCapnpFactory::MAX_INLINE_BODY_SIZE + 1));
+    InlineBodyTest test(HttpOverCapnpFactory::LEVEL_3, big.size(), big, "", false);
+    test.waitScope.poll();
+    KJ_ASSERT(test.recorded->started);
+    KJ_EXPECT(test.recorded->inlineBody == kj::none);
+    auto body = test.readStreamedBody();
+    test.done.wait(test.waitScope);
+    KJ_EXPECT(body.wait(test.waitScope) == big);
+  }
+}
+
 KJ_TEST("HTTP-over-Cap'n-Proto 205 bug with HttpClientAdapter") {
   // Test that a 205 with a hanging body doesn't prevent headers from being delivered. (This was
   // a bug at one point. See, 205 responses are supposed to have empty bodies. But they must

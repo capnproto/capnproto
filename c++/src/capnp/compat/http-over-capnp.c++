@@ -400,6 +400,15 @@ public:
     auto bodyStream = kjResponse.send(rpcResponse.getStatusCode(), rpcResponse.getStatusText(),
         factory.capnpToKj(rpcResponse.getHeaders()), expectedSize);
 
+    if (rpcResponse.hasInlineBody()) {
+      // The whole body arrived with the head. If it is shorter than the promised size, writing it
+      // and dropping the stream reports the early end, as when a streamed body is cut short.
+      auto body = kj::heapArray<byte>(rpcResponse.getInlineBody());
+      auto write = bodyStream->write(body.asPtr());
+      responsePumpTask = write.attach(kj::mv(bodyStream), kj::mv(body));
+      return kj::READY_NOW;
+    }
+
     auto results = context.getResults(MessageSize { 16, 1 });
     if (hasBody) {
       auto pipe = kj::newOneWayPipe();
@@ -814,6 +823,114 @@ kj::Own<kj::HttpService> HttpOverCapnpFactory::capnpToKj(capnp::HttpService::Cli
 
 // =======================================================================================
 
+class HttpOverCapnpFactory::InlineResponseBody final: public kj::AsyncOutputStream {
+  // The body stream of a response that may be sent inside startResponse() (LEVEL_3).
+  //
+  // startResponse() is held back while the application writes the body. If the whole body has been
+  // written by the time the event loop goes idle, the call is sent with the body in it. Otherwise
+  // the call is sent as usual, and what was written so far, and everything after, goes through
+  // the ByteStream it returns. So the head of a response whose body is not ready at once is
+  // delayed by no more than the current batch of events.
+
+public:
+  using StartResponseRequest =
+      Request<capnp::HttpService::ClientRequestContext::StartResponseParams,
+              capnp::HttpService::ClientRequestContext::StartResponseResults>;
+
+  InlineResponseBody(HttpOverCapnpFactory& factory, StartResponseRequest request,
+                     uint64_t expectedSize)
+      : factory(factory), request(kj::mv(request)), expectedSize(expectedSize),
+        idleTask(kj::evalLast([this]() { startStreaming(); }).eagerlyEvaluate(nullptr)) {}
+
+  ~InlineResponseBody() noexcept(false) {
+    if (!sent) {
+      // Dropped with the body incomplete, before the loop went idle. Send what there is; the
+      // receiver sees a body that ends early, as it would with a stream.
+      sendInline();
+    } else KJ_IF_SOME(r, replay) {
+      // The caller was told that the buffered bytes were written. Let that write finish before
+      // the stream is dropped.
+      dontWait(r.addBranch().attach(kj::mv(stream)));
+    }
+  }
+
+  kj::Promise<void> write(kj::ArrayPtr<const byte> buffer) override {
+    KJ_IF_SOME(s, stream) {
+      return writeToStream(*s, buffer);
+    }
+    KJ_REQUIRE(!sent, "response body is longer than the size passed to send()");
+    buffered.addAll(buffer);
+    if (buffered.size() >= expectedSize) sendInline();
+    return kj::READY_NOW;
+  }
+
+  kj::Promise<void> write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
+    KJ_IF_SOME(s, stream) {
+      return writeToStream(*s, pieces);
+    }
+    KJ_REQUIRE(!sent, "response body is longer than the size passed to send()");
+    for (auto piece: pieces) buffered.addAll(piece);
+    if (buffered.size() >= expectedSize) sendInline();
+    return kj::READY_NOW;
+  }
+
+  kj::Promise<void> whenWriteDisconnected() override {
+    KJ_IF_SOME(s, stream) {
+      return s->whenWriteDisconnected();
+    }
+    // Nothing has been sent yet, so no disconnect could have been noticed. A response sent inline
+    // is finished as soon as it is sent.
+    return kj::NEVER_DONE;
+  }
+
+private:
+  HttpOverCapnpFactory& factory;
+  StartResponseRequest request;
+  bool sent = false;  // whether startResponse() has been sent
+  uint64_t expectedSize;
+  kj::Vector<byte> buffered;
+  kj::Maybe<kj::Own<kj::AsyncOutputStream>> stream;  // set once the body is being streamed
+  kj::Maybe<kj::ForkedPromise<void>> replay;  // the write of `buffered` to `stream`
+  kj::Promise<void> idleTask;
+
+  static void dontWait(kj::Promise<void> promise) {
+    // As HttpServiceResponseImpl::dontWaitForRpc().
+    promise.detach([](kj::Exception&& e) {
+      if (e.getType() == kj::Exception::Type::FAILED) {
+        KJ_LOG(ERROR, e);
+      }
+    });
+  }
+
+  void sendInline() {
+    sent = true;
+    request.getResponse().setInlineBody(buffered.asPtr());
+    dontWait(request.send().ignoreResult());
+    buffered = kj::Vector<byte>();
+    idleTask = nullptr;
+  }
+
+  void startStreaming() {
+    sent = true;
+    auto pipeline = request.send();
+    auto& s = *stream.emplace(factory.streamFactory.capnpToKj(pipeline.getBody()));
+    dontWait(pipeline.ignoreResult());
+    if (buffered.size() > 0) {
+      // Later writes have to wait for this one: the caller was told the buffered writes were
+      // done, so it may already be writing again.
+      replay = s.write(buffered.asPtr()).fork();
+    }
+  }
+
+  template <typename Buffers>
+  kj::Promise<void> writeToStream(kj::AsyncOutputStream& s, Buffers buffers) {
+    KJ_IF_SOME(r, replay) {
+      return r.addBranch().then([&s, buffers]() { return s.write(buffers); });
+    }
+    return s.write(buffers);
+  }
+};
+
 class HttpOverCapnpFactory::HttpServiceResponseImpl final
     : public kj::HttpService::Response {
 public:
@@ -850,6 +967,12 @@ public:
     KJ_IF_SOME(s, expectedBodySize) {
       rpcResponse.getBodySize().setFixed(s);
       hasBody = s > 0;
+    }
+
+    KJ_IF_SOME(s, expectedBodySize) {
+      if (factory.peerOptimizationLevel >= LEVEL_3 && s > 0 && s <= MAX_INLINE_BODY_SIZE) {
+        return kj::heap<InlineResponseBody>(factory, kj::mv(req), s);
+      }
     }
 
     if (hasBody) {

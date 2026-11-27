@@ -168,6 +168,14 @@ struct HttpResponse {
     unknown @3 :Void;   # e.g. due to transfer-encoding: chunked
     fixed @4 :UInt64;   # e.g. due to content-length
   }
+
+  inlineBody @5 :Data;
+  # If non-null, the response body. `startResponse()` then returns no `body` stream. `bodySize` is
+  # `fixed`; if `inlineBody` is shorter than that, the body ended early, as if the stream had been
+  # dropped at that point.
+  #
+  # Only sent in `startResponse()`, and only to a peer known to understand it: a peer that does
+  # not would return a stream and wait for a body that never comes.
 }
 
 enum HttpMethod {

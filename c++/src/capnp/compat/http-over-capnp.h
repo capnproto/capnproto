@@ -63,10 +63,19 @@ public:
     // LEVEL_2, then your clients will have to stick to Cap'n Proto 1.x until those servers are all
     // updated.
 
-    LEVEL_2
+    LEVEL_2,
     // Use request(). This is more efficient than startRequest() but won't work with old peers that
     // only implement startRequest().
+
+    LEVEL_3
+    // Send a response body of known, small size inside startResponse(), as
+    // `HttpResponse.inlineBody`, when the application has written all of it by the time the event
+    // loop next goes idle. This saves the calls that otherwise stream the body. Won't work with old
+    // peers, which don't know `inlineBody`. Receiving such responses works at every level.
   };
+
+  static constexpr size_t MAX_INLINE_BODY_SIZE = 16384;
+  // The largest response body that LEVEL_3 sends inline.
 
   HttpOverCapnpFactory(ByteStreamFactory& streamFactory, HeaderIdBundle headerIds,
                        OptimizationLevel peerOptimizationLevel);
@@ -83,6 +92,8 @@ public:
   // Returned headers may alias into `capnpHeaders`.
 
 private:
+  class InlineResponseBody;
+
   ByteStreamFactory& streamFactory;
   const kj::HttpHeaderTable& headerTable;
   OptimizationLevel peerOptimizationLevel;
