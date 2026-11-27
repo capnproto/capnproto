@@ -42,6 +42,68 @@ typedef VatNetwork<rpc::twoparty::VatId, rpc::twoparty::ThirdPartyCompletion,
     rpc::twoparty::ThirdPartyToAwait, rpc::twoparty::ThirdPartyToContact, rpc::twoparty::JoinResult>
     TwoPartyVatNetworkBase;
 
+class WriteBatchTrigger {
+  // Decides when a connection writes the outgoing messages it has queued. For VatNetwork
+  // implementations that queue messages in order to write several at once, as TwoPartyVatNetwork
+  // does.
+  //
+  // Such a connection writes its queue once the event loop goes idle, so that the messages sent
+  // in one burst of work take one write. A thread that stays busy therefore sends nothing until
+  // it has handled everything it has received, and meanwhile its peer has nothing to do: under
+  // load the two ends of a connection work in turn instead of at the same time.
+  //
+  // With a limit set (setLimit()), a queue is also written as soon as it holds `first` messages.
+  // Each time a connection's queue fills its limit doubles, up to `max`, and when the event loop
+  // next goes idle the limit returns to `first`. So a thread that is busy for a short while
+  // sends early, and one that stays busy, when writes are most expensive to it, sends in larger
+  // batches.
+  //
+  // To use: when a message joins an empty queue, schedule a write for when whenDue() resolves,
+  // after any write in progress has finished. When a message joins a queue that is already
+  // waiting, call queueGrew(). When the write takes the queue, call writeStarted().
+
+public:
+  WriteBatchTrigger() = default;
+  KJ_DISALLOW_COPY_AND_MOVE(WriteBatchTrigger);
+
+  struct Limit {
+    uint first = 0;
+    // Messages that make a queue full to begin with. At least 1 if `max` is not zero.
+
+    uint max = 0;
+    // The most a queue's limit grows to. Zero, the default, means queues are written only when
+    // the event loop goes idle.
+  };
+
+  static void setLimit(Limit limit);
+  static Limit getLimit();
+  // Applies to the entire process, and to connections created before and afterwards alike.
+
+  kj::Promise<void> whenDue(size_t queued);
+  // Resolves when a queue that now holds `queued` messages should be written: at once if it is
+  // full, otherwise when it fills or the event loop goes idle.
+
+  void queueGrew(size_t queued);
+  // The queue that the last whenDue() is waiting on now holds `queued` messages.
+
+  void writeStarted();
+  // The write has taken the queue.
+
+private:
+  uint doublings = 0;
+  // How many times this connection's limit has doubled from `first`.
+
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<void>>> full;
+  // Fulfilled if the queue fills while whenDue() waits for the event loop to go idle.
+
+  bool idleResetArmed = false;
+  kj::Promise<void> idleReset = nullptr;
+  // While armed, returns the limit to `first` when the event loop next goes idle.
+
+  size_t threshold() const;
+  void filled();
+};
+
 class TwoPartyVatNetwork: public TwoPartyVatNetworkBase,
                           private TwoPartyVatNetworkBase::Connection,
                           private RpcFlowController::WindowGetter {
@@ -144,6 +206,10 @@ private:
 
   kj::Vector<kj::Rc<OutgoingMessageImpl>> queuedMessages;
   size_t currentQueueSize = 0;
+
+  WriteBatchTrigger writeBatchTrigger;
+  // Decides when `queuedMessages` are written.
+
   const kj::MonotonicClock& clock;
   kj::TimePoint currentOutgoingMessageSendTime;
 

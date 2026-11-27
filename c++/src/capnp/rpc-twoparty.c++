@@ -87,6 +87,64 @@ void TwoPartyVatNetwork::useAdaptiveFlowControl() {
   adaptiveFlowControlEnabled = true;
 }
 
+static WriteBatchTrigger::Limit writeBatchLimit;
+
+void WriteBatchTrigger::setLimit(Limit limit) {
+  KJ_REQUIRE(limit.max == 0 || (limit.first >= 1 && limit.first <= limit.max),
+      "invalid write batch limit", limit.first, limit.max);
+  writeBatchLimit = limit;
+}
+
+WriteBatchTrigger::Limit WriteBatchTrigger::getLimit() {
+  return writeBatchLimit;
+}
+
+size_t WriteBatchTrigger::threshold() const {
+  return kj::min(static_cast<size_t>(writeBatchLimit.first) << doublings,
+      static_cast<size_t>(writeBatchLimit.max));
+}
+
+void WriteBatchTrigger::filled() {
+  if (threshold() < writeBatchLimit.max) {
+    ++doublings;
+  }
+  if (!idleResetArmed) {
+    idleResetArmed = true;
+    idleReset = kj::evalLast([this]() {
+      // The thread has got through all its work, so it is keeping up.
+      doublings = 0;
+      idleResetArmed = false;
+    }).eagerlyEvaluate(nullptr);
+  }
+}
+
+kj::Promise<void> WriteBatchTrigger::whenDue(size_t queued) {
+  if (writeBatchLimit.max == 0) {
+    return kj::evalLast([]() {});
+  }
+  if (queued >= threshold()) {
+    filled();
+    return kj::READY_NOW;
+  }
+  auto paf = kj::newPromiseAndFulfiller<void>();
+  full = kj::mv(paf.fulfiller);
+  return kj::evalLast([]() {}).exclusiveJoin(kj::mv(paf.promise));
+}
+
+void WriteBatchTrigger::queueGrew(size_t queued) {
+  KJ_IF_SOME(f, full) {
+    if (queued >= threshold()) {
+      f->fulfill();
+      full = kj::none;
+      filled();
+    }
+  }
+}
+
+void WriteBatchTrigger::writeStarted() {
+  full = kj::none;
+}
+
 MessageStream& TwoPartyVatNetwork::getStream() {
   KJ_SWITCH_ONEOF(stream) {
     KJ_CASE_ONEOF(s, MessageStream*) {
@@ -171,22 +229,26 @@ public:
     }
 
     // Instead of sending each new message as soon as possible, we attempt to batch together small
-    // messages by delaying when we send them using evalLast. This allows us to group together
-    // related small messages, reducing the number of syscalls we make.
+    // messages by delaying when we send them until the event loop goes idle or enough of them
+    // are waiting (see WriteBatchTrigger). This allows us to group together related small
+    // messages, reducing the number of syscalls we make.
     auto& previousWrite = KJ_ASSERT_NONNULL(network.previousWrite, "already shut down");
     bool alreadyPendingSend = !network.queuedMessages.empty();
     network.currentQueueSize += message.sizeInWords() * sizeof(word);
     network.queuedMessages.add(addRefToThis());
     if (alreadyPendingSend) {
-      // The first send sets up an evalLast that will clear out pendingMessages when it's sent.
+      // The first send sets up a delayed write that will clear out pendingMessages when it's sent.
       // If pendingMessages is non-empty, then there must already be a callback waiting to send
       // them.
+      network.writeBatchTrigger.queueGrew(network.queuedMessages.size());
       return;
     }
 
     // On the other hand, if pendingMessages was empty, then we should set up the delayed write.
     network.previousWrite = previousWrite.then([&network = network, sendTime]() {
-      return kj::evalLast([&network, sendTime]() -> kj::Promise<void> {
+      return network.writeBatchTrigger.whenDue(network.queuedMessages.size())
+          .then([&network, sendTime]() -> kj::Promise<void> {
+        network.writeBatchTrigger.writeStarted();
         network.currentOutgoingMessageSendTime = sendTime;
         // Swap out the connection's pending messages and write all of them together.
         auto ownMessages = kj::mv(network.queuedMessages);
