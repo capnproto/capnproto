@@ -30,7 +30,7 @@ $Cxx.allowCancellation;
 
 interface HttpService {
   request @1 (request :HttpRequest, context :ClientRequestContext)
-          -> (requestBody :ByteStream);
+          -> (requestBody :ByteStream, response :HttpResponse);
   # Perform an HTTP request.
   #
   # The client sends the request method/url/headers. The server responds with a `ByteStream` where
@@ -38,6 +38,10 @@ interface HttpService {
   # that request.bodySize.fixed == 0.
   #
   # The server will send a response by invoking a method on `callback`.
+  #
+  # Alternatively, if `response` is non-null in the results, it is the whole response, with its
+  # body in `inlineBody`, and the server made no call to `callback`. A server only does this for
+  # a client known to understand it: one that does not would report that no response was sent.
   #
   # `request()` does not return until the server is completely done processing the request,
   # including sending the response. The client therefore must use promise pipelining to send the

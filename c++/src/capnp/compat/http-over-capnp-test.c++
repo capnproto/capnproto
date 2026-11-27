@@ -686,6 +686,8 @@ struct InlineBodyTest {
   RecordingClientRequestContext* recorded = nullptr;
   capnp::HttpService::ClientRequestContext::Client context = nullptr;
   // Keeps `recorded` alive after the service has finished and dropped its reference.
+  kj::Maybe<kj::String> returnedBody;
+  // Set once `done` resolves, if the response came back as the result of request().
   kj::Promise<void> done = nullptr;
 
   InlineBodyTest(HttpOverCapnpFactory::OptimizationLevel level, uint64_t declaredSize,
@@ -710,7 +712,11 @@ struct InlineBodyTest {
     httpReq.setUrl("/");
     httpReq.getBodySize().setFixed(0);
     req.setContext(context);
-    done = req.send().ignoreResult().eagerlyEvaluate(nullptr);
+    done = req.send().then([this](capnp::Response<capnp::HttpService::RequestResults>&& results) {
+      if (results.hasResponse()) {
+        returnedBody = kj::str(results.getResponse().getInlineBody().asChars());
+      }
+    }).eagerlyEvaluate(nullptr);
   }
 
   kj::Promise<kj::String> readStreamedBody() {
@@ -763,6 +769,73 @@ KJ_TEST("HTTP-over-Cap'n-Proto LEVEL_3 reports a body that ends early") {
   KJ_ASSERT(test.recorded->started);
   KJ_EXPECT(test.recorded->declaredSize == 6);
   KJ_EXPECT(KJ_ASSERT_NONNULL(test.recorded->inlineBody) == "foo");
+}
+
+KJ_TEST("HTTP-over-Cap'n-Proto E2E at LEVEL_4, no path shortening") {
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+
+  ByteStreamFactory streamFactory1;
+  ByteStreamFactory streamFactory2;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory factory1(streamFactory1, tableBuilder, HttpOverCapnpFactory::LEVEL_4);
+  HttpOverCapnpFactory factory2(streamFactory2, tableBuilder, HttpOverCapnpFactory::LEVEL_4);
+  auto headerTable = tableBuilder.build();
+
+  runEndToEndTests(timer, *headerTable, factory1, factory2, waitScope);
+}
+
+KJ_TEST("HTTP-over-Cap'n-Proto E2E, LEVEL_4 server and LEVEL_2 client") {
+  // Receiving a response in the results of request() does not depend on the receiver's level.
+  kj::EventLoop eventLoop;
+  kj::WaitScope waitScope(eventLoop);
+  kj::TimerImpl timer(kj::origin<kj::TimePoint>());
+
+  ByteStreamFactory streamFactory1;
+  ByteStreamFactory streamFactory2;
+  kj::HttpHeaderTable::Builder tableBuilder;
+  HttpOverCapnpFactory clientFactory(streamFactory1, tableBuilder, HttpOverCapnpFactory::LEVEL_2);
+  HttpOverCapnpFactory serverFactory(streamFactory2, tableBuilder, HttpOverCapnpFactory::LEVEL_4);
+  auto headerTable = tableBuilder.build();
+
+  runEndToEndTests(timer, *headerTable, clientFactory, serverFactory, waitScope);
+}
+
+KJ_TEST("HTTP-over-Cap'n-Proto LEVEL_4 returns a small response as the result of request()") {
+  InlineBodyTest test(HttpOverCapnpFactory::LEVEL_4, 6, "foobar", "", false);
+  test.done.wait(test.waitScope);
+  test.waitScope.poll();
+  KJ_EXPECT(KJ_ASSERT_NONNULL(test.returnedBody) == "foobar");
+  KJ_EXPECT(!test.recorded->started);
+}
+
+KJ_TEST("HTTP-over-Cap'n-Proto LEVEL_4 calls startResponse() if the handler keeps running") {
+  // The service writes the whole body, then waits before it returns.
+  InlineBodyTest test(HttpOverCapnpFactory::LEVEL_4, 6, "foobar", "", true);
+
+  // The event loop goes idle with the handler still running, so the response is not held for it.
+  KJ_EXPECT(!test.done.poll(test.waitScope));
+  KJ_ASSERT(test.recorded->started);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(test.recorded->inlineBody) == "foobar");
+
+  test.resume->fulfill();
+  test.done.wait(test.waitScope);
+  KJ_EXPECT(test.returnedBody == kj::none);
+}
+
+KJ_TEST("HTTP-over-Cap'n-Proto LEVEL_4 streams a body that is not ready at once") {
+  InlineBodyTest test(HttpOverCapnpFactory::LEVEL_4, 6, "foo", "bar", true);
+
+  KJ_EXPECT(!test.done.poll(test.waitScope));
+  KJ_ASSERT(test.recorded->started);
+  KJ_EXPECT(test.recorded->inlineBody == kj::none);
+
+  auto body = test.readStreamedBody();
+  test.resume->fulfill();
+  test.done.wait(test.waitScope);
+  KJ_EXPECT(body.wait(test.waitScope) == "foobar");
+  KJ_EXPECT(test.returnedBody == kj::none);
 }
 
 KJ_TEST("HTTP-over-Cap'n-Proto does not send inline bodies below LEVEL_3 or above the size limit") {
