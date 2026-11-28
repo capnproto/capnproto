@@ -26,6 +26,8 @@
 #include <kj/test.h>
 #include <kj/encoding.h>
 #include <kj/vector.h>
+#include <kj/mutex.h>
+#include <kj/thread.h>
 #include <map>
 
 #if KJ_HTTP_TEST_USE_OS_PIPE
@@ -654,6 +656,485 @@ KJ_TEST("HttpHeaders serialization validation") {
   // Status text may legitimately contain spaces.
   KJ_EXPECT(headers.serializeResponse(418, "I'm a teapot") ==
       "HTTP/1.1 418 I'm a teapot\r\n\r\n");
+}
+
+KJ_TEST("HttpHeaders walks set headers in id order, in a table of any size") {
+  // More ids than the set-slot bits cover, so some headers are past them.
+  HttpHeaderTable::Builder builder;
+  kj::Vector<kj::String> names;  // The table refers to them.
+  kj::Vector<HttpHeaderId> ids;
+  for (auto i: kj::range(0, 300)) {
+    ids.add(builder.add(names.add(kj::str("X-H", i))));
+  }
+  auto table = builder.build();
+
+  HttpHeaders headers(*table);
+  headers.setPtr(ids[290], "d");
+  headers.setPtr(ids[3], "a");
+  headers.setPtr(ids[200], "c");
+  headers.addPtrPtr("x-h100", "b");
+  headers.setPtr(ids[250], "gone");
+  headers.unset(ids[250]);
+  headers.setPtr(ids[299], "gone");
+  headers.unset(ids[299]);
+  headers.setPtr(HttpHeaderId::HOST, "h");
+  headers.addPtrPtr("X-Other", "o");
+
+  auto expected =
+      "Host: h\r\nX-H3: a\r\nX-H100: b\r\nX-H200: c\r\nX-H290: d\r\nX-Other: o\r\n\r\n"_kj;
+  KJ_EXPECT(headers.toString() == expected, headers.toString());
+  KJ_EXPECT(headers.size() == 6);
+  KJ_EXPECT(headers.clone().toString() == expected);
+  KJ_EXPECT(headers.cloneShallow().toString() == expected);
+
+  kj::Vector<kj::String> seen;
+  headers.forEach(
+      [&](HttpHeaderId id, kj::StringPtr value) { seen.add(kj::str(id.toString(), "=", value)); },
+      [&](kj::StringPtr name, kj::StringPtr value) { seen.add(kj::str(name, "=", value)); });
+  KJ_EXPECT(kj::strArray(seen, " ") == "Host=h X-H3=a X-H100=b X-H200=c X-H290=d X-Other=o",
+      kj::strArray(seen, " "));
+
+  // The request line's connection headers stand in for the first ids.
+  kj::StringPtr connection[HttpHeaders::CONNECTION_HEADERS_COUNT];
+  connection[HttpHeaders::BuiltinIndices::CONTENT_LENGTH] = "0";
+  auto request = headers.serializeRequest(HttpMethod::GET, "/", connection);
+  KJ_EXPECT(request.startsWith("GET / HTTP/1.1\r\nContent-Length: 0\r\nHost: h\r\nX-H3: a\r\n"),
+      request);
+
+  headers.clear();
+  KJ_EXPECT(headers.size() == 0);
+  KJ_EXPECT(headers.toString() == "\r\n");
+  headers.setPtr(ids[290], "again");
+  KJ_EXPECT(headers.toString() == "X-H290: again\r\n\r\n");
+}
+
+KJ_TEST("HttpHeaders keeps any number of indexed headers, in id order") {
+  // More than the headers keep inline, set out of order, so they move to the heap mid-way.
+  HttpHeaderTable::Builder builder;
+  kj::Vector<kj::String> names;  // The table refers to them.
+  kj::Vector<HttpHeaderId> ids;
+  for (auto i: kj::range(0, 40)) {
+    ids.add(builder.add(names.add(kj::str("X-H", i))));
+  }
+  auto table = builder.build();
+
+  HttpHeaders headers(*table);
+  for (auto i: kj::range(0, 40)) {
+    uint id = (i * 7) % 40;  // Every id once, not in order.
+    headers.setPtr(ids[id], names[id]);
+  }
+  KJ_EXPECT(headers.size() == 40);
+  kj::Vector<kj::String> expected;
+  for (auto i: kj::range(0, 40)) {
+    KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(ids[i])) == names[i]);
+    expected.add(kj::str(names[i], ": ", names[i], "\r\n"));
+  }
+  KJ_EXPECT(headers.toString() == kj::str(kj::strArray(expected, ""), "\r\n"));
+
+  // Unset, replace, add to and empty some of them.
+  headers.unset(ids[0]);
+  headers.unset(ids[20]);
+  headers.unset(ids[20]);
+  headers.setPtr(ids[39], "last");
+  headers.addPtrPtr("x-h10", "more");
+  headers.setPtr(ids[30], "");
+  KJ_EXPECT(headers.get(ids[0]) == kj::none);
+  KJ_EXPECT(headers.get(ids[20]) == kj::none);
+  KJ_EXPECT(headers.get(ids[30]) == kj::none);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(ids[39])) == "last");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(ids[10])) == "X-H10, more");
+  KJ_EXPECT(headers.size() == 37);
+  KJ_EXPECT(headers.clone().toString() == headers.toString());
+  KJ_EXPECT(headers.cloneShallow().toString() == headers.toString());
+
+  // Cleared, they start over inline.
+  headers.clear();
+  KJ_EXPECT(headers.size() == 0);
+  headers.setPtr(ids[5], "b");
+  headers.setPtr(ids[2], "a");
+  headers.addPtrPtr("X-H2", "c");
+  KJ_EXPECT(headers.toString() == "X-H2: a, c\r\nX-H5: b\r\n\r\n", headers.toString());
+
+  // An empty value reads as unset, as it always has.
+  headers.setPtr(ids[5], "");
+  KJ_EXPECT(headers.get(ids[5]) == kj::none);
+  headers.addPtrPtr("X-H5", "d");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(ids[5])) == "d");
+}
+
+KJ_TEST("HttpHeaders moves leave the source empty") {
+  HttpHeaderTable::Builder builder;
+  kj::Vector<kj::String> names;  // The table refers to them.
+  kj::Vector<HttpHeaderId> ids;
+  for (auto i: kj::range(0, 40)) {
+    ids.add(builder.add(names.add(kj::str("X-H", i))));
+  }
+  auto table = builder.build();
+
+  // Once with the indexed headers inline, once with them spilled to the heap.
+  for (uint count: {3u, 30u}) {
+    HttpHeaders source(*table);
+    for (auto i: kj::range(0u, count)) {
+      source.set(ids[i], kj::str("v", i));
+    }
+    source.addPtrPtr("X-Other", "o");
+    auto expected = source.toString();
+
+    HttpHeaders moved(kj::mv(source));
+    KJ_EXPECT(moved.toString() == expected, count);
+    KJ_EXPECT(moved.size() == count + 1, count);
+    KJ_EXPECT(source.size() == 0, count);
+    KJ_EXPECT(source.toString() == "\r\n", count);
+    KJ_EXPECT(source.get(ids[0]) == kj::none, count);
+
+    // The moved-from object is usable again.
+    source.setPtr(ids[1], "again");
+    KJ_EXPECT(source.toString() == "X-H1: again\r\n\r\n", count);
+
+    // Assigning replaces what the target held.
+    HttpHeaders assigned(*table);
+    assigned.setPtr(ids[39], "old");
+    assigned.addPtrPtr("X-Stale", "s");
+    assigned = kj::mv(moved);
+    KJ_EXPECT(assigned.toString() == expected, count);
+    KJ_EXPECT(assigned.get(ids[39]) == kj::none, count);
+    KJ_EXPECT(moved.size() == 0, count);
+    KJ_EXPECT(moved.get(ids[0]) == kj::none, count);
+  }
+}
+
+KJ_TEST("HttpHeaderTable matches names case-insensitively, at any length") {
+  HttpHeaderTable::Builder builder;
+  kj::Vector<kj::String> names;  // The table refers to them.
+  kj::Vector<HttpHeaderId> ids;
+  // Lengths on both sides of each eight-byte word, and enough names to grow the table.
+  for (auto length: kj::range(1, 41)) {
+    auto name = kj::heapString(length);
+    for (auto i: kj::indices(name)) name[i] = "abcdefghijklmnopqrstuvwxyz"[(i + length) % 26];
+    ids.add(builder.add(name));
+    names.add(kj::mv(name));
+  }
+  for (auto i: kj::range(0, 100)) {
+    ids.add(builder.add(names.add(kj::str("X-Name-", i))));
+  }
+  auto caret = builder.add("X-Mark^");
+  auto tilde = builder.add("X-Mark~");
+  auto table = builder.build();
+
+  for (auto i: kj::indices(names)) {
+    auto& name = names[i];
+    KJ_EXPECT(KJ_ASSERT_NONNULL(table->stringToId(name)) == ids[i], name);
+
+    auto upper = kj::heapString(name);
+    for (auto& c: upper) if ('a' <= c && c <= 'z') c = c - 'a' + 'A';
+    KJ_EXPECT(KJ_ASSERT_NONNULL(table->stringToId(upper)) == ids[i], upper);
+
+    // Shorter, longer, and different in the last byte: no match. (The letter-only names are
+    // shifted by their length, so no two share a prefix.)
+    if (i < 40) {
+      KJ_EXPECT(table->stringToId(kj::heapString(name.first(name.size() - 1))) == kj::none, name);
+      KJ_EXPECT(table->stringToId(kj::str(name, "q")) == kj::none, name);
+    }
+    auto changed = kj::heapString(name);
+    changed[changed.size() - 1] = '!';
+    KJ_EXPECT(table->stringToId(changed) == kj::none, changed);
+  }
+
+  // Only letters fold: '^' and '~' differ in the same bit as a letter's case, but are two names.
+  KJ_EXPECT(caret != tilde);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table->stringToId("x-mark^")) == caret);
+  KJ_EXPECT(KJ_ASSERT_NONNULL(table->stringToId("X-MARK~")) == tilde);
+  // Likewise for characters that can't be in a name, which lookups don't check for.
+  KJ_EXPECT(table->stringToId("X-Mark@") == kj::none);
+  KJ_EXPECT(table->stringToId("X-Mark`") == kj::none);
+  KJ_EXPECT(table->stringToId("X-Mark>") == kj::none);
+
+  // Adding a name again, in any case, gives the same id.
+  HttpHeaderTable::Builder again;
+  auto first = again.add("X-Same");
+  KJ_EXPECT(again.add("x-same") == first);
+  KJ_EXPECT(again.add("X-SAME") == first);
+  KJ_EXPECT(again.add("Host") == HttpHeaderId::HOST);
+  auto built = again.build();
+  KJ_EXPECT(built->idCount() == HttpHeaderTable().idCount() + 1);
+  KJ_EXPECT(built->idToString(first) == "X-Same");
+}
+
+KJ_TEST("HttpHeaders parses header values of every length") {
+  HttpHeaderTable::Builder builder;
+  auto hValue = builder.add("X-Value");
+  auto table = builder.build();
+
+  for (auto length: kj::range(0, 50)) {
+    auto value = kj::heapString(length);
+    for (auto i: kj::indices(value)) value[i] = 'a' + (i % 26);
+
+    // Each line ending, and the header both last and followed by another.
+    for (kj::StringPtr ending: {"\r\n"_kj, "\n"_kj}) {
+      auto text = kj::str("GET / HTTP/1.1", ending, "X-Value: ", value, ending,
+          "X-Other: ", value, ending, "X-Value: ", value, ending, ending);
+      HttpHeaders headers(*table);
+      auto result = headers.tryParseRequest(text.asArray());
+      KJ_ASSERT(result.is<HttpHeaders::Request>(), length);
+      if (length == 0) {
+        // An empty value is no value.
+        KJ_EXPECT(headers.get(hValue) == kj::none, length);
+      } else {
+        KJ_EXPECT(KJ_ASSERT_NONNULL(headers.get(hValue)) == kj::str(value, ", ", value), length);
+      }
+      KJ_EXPECT(headers.size() == (length == 0 ? 1 : 2), length);
+    }
+
+    // Folding is still rejected wherever it falls.
+    auto folded = kj::str("GET / HTTP/1.1\r\nX-Value: ", value, "\r\n more\r\n\r\n");
+    HttpHeaders headers(*table);
+    KJ_EXPECT(headers.tryParseRequest(folded.asArray()).is<HttpHeaders::ProtocolError>(), length);
+
+    // So is a NUL in a value.
+    auto nul = kj::str("GET / HTTP/1.1\r\nX-Value: ", value, "x\r\n\r\n");
+    nul[nul.size() - 5] = '\0';
+    HttpHeaders headers2(*table);
+    KJ_EXPECT(headers2.tryParseRequest(nul.asArray()).is<HttpHeaders::ProtocolError>(), length);
+  }
+}
+
+KJ_TEST("HttpHeaders unset() by name") {
+  HttpHeaderTable::Builder builder;
+  auto hIndexed = builder.add("X-Indexed");
+  auto hSetCookie = builder.add("Set-Cookie");
+  auto table = builder.build();
+
+  HttpHeaders headers(*table);
+  headers.setPtr(hIndexed, "i");
+  headers.addPtrPtr("X-Plain", "p1");
+  headers.addPtrPtr("Set-Cookie", "a=1");
+  headers.addPtrPtr("X-Kept", "k");
+  headers.addPtrPtr("set-cookie", "b=2");
+  headers.addPtrPtr("x-plain", "p2");
+  KJ_EXPECT(headers.size() == 6);
+
+  headers.unset("x-INDEXED");
+  KJ_EXPECT(headers.get(hIndexed) == kj::none);
+  headers.unset("X-PLAIN");
+  headers.unset("X-Absent");
+  KJ_EXPECT(headers.toString() == "Set-Cookie: a=1\r\nX-Kept: k\r\nset-cookie: b=2\r\n\r\n",
+      headers.toString());
+
+  // Set-Cookie is indexed but its repeats aren't; unsetting by name removes them all.
+  headers.unset("SET-COOKIE");
+  KJ_EXPECT(headers.get(hSetCookie) == kj::none);
+  KJ_EXPECT(headers.toString() == "X-Kept: k\r\n\r\n", headers.toString());
+}
+
+KJ_TEST("HttpHeaders clone() owns copies of every string") {
+  HttpHeaderTable::Builder builder;
+  auto hIndexed = builder.add("X-Indexed");
+  auto table = builder.build();
+
+  kj::Maybe<HttpHeaders> copy;
+  kj::String expected;
+  {
+    // Strings that go away before the copy is read.
+    auto value = kj::str("indexed value");
+    auto name = kj::str("X-Unindexed");
+    auto value2 = kj::str("unindexed value");
+    HttpHeaders headers(*table);
+    headers.setPtr(hIndexed, value);
+    headers.addPtrPtr(name, value2);
+    headers.addPtrPtr("X-Empty", "");
+    expected = headers.toString();
+    copy = headers.clone();
+  }
+  auto& c = KJ_ASSERT_NONNULL(copy);
+  KJ_EXPECT(c.toString() == expected, c.toString());
+  KJ_EXPECT(KJ_ASSERT_NONNULL(c.get(hIndexed)) == "indexed value");
+  KJ_EXPECT(KJ_ASSERT_NONNULL(c.get(hIndexed)).cStr()[13] == '\0');
+
+  // An empty set copies without allocating anything.
+  HttpHeaders empty(*table);
+  KJ_EXPECT(empty.clone().size() == 0);
+}
+
+// A model of what a header set should hold, to check HttpHeaders against under random changes.
+struct HeaderModel {
+  const HttpHeaderTable& table;
+  struct Entry {
+    HttpHeaderId id;
+    kj::String value;
+  };
+  std::map<uint, Entry> indexed;
+  kj::Vector<std::pair<kj::String, kj::String>> unindexed;
+
+  explicit HeaderModel(const HttpHeaderTable& table): table(table) {}
+
+  HeaderModel copy() const {
+    HeaderModel result(table);
+    for (auto& entry: indexed) {
+      result.indexed.emplace(entry.first, Entry { entry.second.id, kj::str(entry.second.value) });
+    }
+    for (auto& entry: unindexed) {
+      result.unindexed.add(kj::str(entry.first), kj::str(entry.second));
+    }
+    return result;
+  }
+
+  static bool sameName(kj::StringPtr a, kj::StringPtr b) {
+    if (a.size() != b.size()) return false;
+    for (auto i: kj::indices(a)) {
+      char x = a[i], y = b[i];
+      if ('A' <= x && x <= 'Z') x = x - 'A' + 'a';
+      if ('A' <= y && y <= 'Z') y = y - 'A' + 'a';
+      if (x != y) return false;
+    }
+    return true;
+  }
+
+  void set(HttpHeaderId id, kj::StringPtr value) {
+    if (value.size() == 0) {
+      indexed.erase(id.hashCode());
+    } else {
+      indexed.insert_or_assign(id.hashCode(), Entry { id, kj::str(value) });
+    }
+  }
+  void add(kj::StringPtr name, kj::StringPtr value) {
+    KJ_IF_SOME(id, table.stringToId(name)) {
+      auto iter = indexed.find(id.hashCode());
+      if (iter == indexed.end()) {
+        set(id, value);
+      } else if (sameName(name, "set-cookie")) {
+        unindexed.add(kj::str(name), kj::str(value));
+      } else {
+        iter->second.value = kj::str(iter->second.value, ", ", value);
+      }
+    } else {
+      unindexed.add(kj::str(name), kj::str(value));
+    }
+  }
+  void unset(kj::StringPtr name) {
+    KJ_IF_SOME(id, table.stringToId(name)) {
+      indexed.erase(id.hashCode());
+    }
+    kj::Vector<std::pair<kj::String, kj::String>> kept;
+    for (auto& entry: unindexed) {
+      if (!sameName(entry.first, name)) kept.add(kj::mv(entry));
+    }
+    unindexed = kj::mv(kept);
+  }
+  kj::String toString() const {
+    kj::Vector<kj::String> lines;
+    for (auto& entry: indexed) {
+      lines.add(kj::str(table.idToString(entry.second.id), ": ", entry.second.value, "\r\n"));
+    }
+    for (auto& entry: unindexed) {
+      lines.add(kj::str(entry.first, ": ", entry.second, "\r\n"));
+    }
+    lines.add(kj::str("\r\n"));
+    return kj::strArray(lines, "");
+  }
+};
+
+KJ_TEST("HttpHeaders match a model under random changes") {
+  for (uint tableSize: {20u, 300u}) {
+    HttpHeaderTable::Builder builder;
+    kj::Vector<kj::String> names;  // The table refers to them.
+    kj::Vector<HttpHeaderId> ids;
+    for (auto i: kj::range(0u, tableSize)) {
+      ids.add(builder.add(names.add(kj::str("X-H", i))));
+    }
+    ids.add(builder.add("Set-Cookie"));
+    auto table = builder.build();
+
+    kj::Vector<kj::String> pool;  // Values and names the header sets refer to.
+    uint64_t state = 0x1234567 + tableSize;
+    auto next = [&](uint bound) {
+      state = state * 6364136223846793005ull + 1442695040888963407ull;
+      return static_cast<uint>((state >> 33) % bound);
+    };
+    auto someName = [&]() -> kj::StringPtr {
+      switch (next(4)) {
+        case 0: return pool.add(kj::str("x-h", next(tableSize)));
+        case 1: return pool.add(kj::str("X-Un", next(4)));
+        case 2: return next(2) ? "Set-Cookie"_kj : "set-cookie"_kj;
+        default: return pool.add(kj::str("X-H", next(tableSize)));
+      }
+    };
+    auto someValue = [&]() -> kj::StringPtr {
+      return next(8) == 0 ? ""_kj : pool.add(kj::str("v", next(1000)));
+    };
+
+    for (uint round = 0; round < 200; round++) {
+      HttpHeaders base(*table);
+      HeaderModel baseModel(*table);
+      auto change = [&](HttpHeaders& headers, HeaderModel& model) {
+        switch (next(5)) {
+          case 0: {
+            auto& id = ids[next(ids.size())];
+            auto value = someValue();
+            headers.setPtr(id, value);
+            model.set(id, value);
+            break;
+          }
+          case 1: {
+            auto& id = ids[next(ids.size())];
+            headers.unset(id);
+            model.indexed.erase(id.hashCode());
+            break;
+          }
+          case 2:
+          case 3: {
+            auto name = someName();
+            auto value = someValue();
+            headers.addPtrPtr(name, value);
+            model.add(name, value);
+            break;
+          }
+          case 4: {
+            auto name = someName();
+            headers.unset(name);
+            model.unset(name);
+            break;
+          }
+        }
+      };
+
+      for (uint i = next(60); i > 0; i--) {
+        change(base, baseModel);
+        KJ_ASSERT(base.toString() == baseModel.toString(), round, i);
+        KJ_ASSERT(base.size() == baseModel.indexed.size() + baseModel.unindexed.size(), round, i);
+      }
+
+      // Copies match, and keep matching after either side changes.
+      auto deep = base.clone();
+      auto shallow = base.cloneShallow();
+      KJ_ASSERT(deep.toString() == baseModel.toString(), round);
+      KJ_ASSERT(shallow.toString() == baseModel.toString(), round);
+      auto shallowModel = baseModel.copy();
+      for (uint i = next(20); i > 0; i--) change(shallow, shallowModel);
+      KJ_ASSERT(shallow.toString() == shallowModel.toString(), round);
+      KJ_ASSERT(base.toString() == baseModel.toString(), round);
+
+      // A deep copy doesn't need the strings the original refers to. (Drop every set that refers
+      // to `pool` first: debug builds check that no pointer into a string outlives it.)
+      auto deepModel = baseModel.copy();
+      base = HttpHeaders(*table);
+      shallow = HttpHeaders(*table);
+      pool.clear();
+      KJ_ASSERT(deep.toString() == deepModel.toString(), round);
+      auto moved = kj::mv(deep);
+      KJ_ASSERT(moved.toString() == deepModel.toString(), round);
+      KJ_ASSERT(deep.size() == 0, round);
+
+      for (auto& id: ids) {
+        auto expected = deepModel.indexed.find(id.hashCode());
+        KJ_IF_SOME(value, moved.get(id)) {
+          KJ_ASSERT(expected != deepModel.indexed.end() && expected->second.value == value,
+              round);
+        } else {
+          KJ_ASSERT(expected == deepModel.indexed.end(), round);
+        }
+      }
+    }
+  }
 }
 
 KJ_TEST("HttpHeaders Set-Cookie handling") {

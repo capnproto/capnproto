@@ -26,7 +26,6 @@
 #include <kj/hash.h>
 #include <kj/parse/char.h>
 #include <kj/string.h>
-#include <unordered_map>
 #include <stdlib.h>
 #include <kj/encoding.h>
 #include <deque>
@@ -636,37 +635,88 @@ kj::StringPtr HttpHeaderId::toString() const {
 
 namespace {
 
-struct HeaderNameHash {
-  size_t operator()(kj::StringPtr s) const {
-    size_t result = 5381;
-    for (byte b: s.asBytes()) {
-      // Masking bit 0x20 makes our hash case-insensitive while conveniently avoiding any
-      // collisions that would matter for header names.
-      result = ((result << 5) + result) ^ (b & ~0x20);
-    }
-    return result;
-  }
+// Header names are matched case-insensitively, a word of eight bytes at a time. All loads are of
+// a fixed size so that they compile to plain loads; the last word of a name overlaps the one
+// before it rather than reading past the name.
 
-  bool operator()(kj::StringPtr a, kj::StringPtr b) const {
-    // TODO(perf): I wonder if we can beat strcasecmp() by masking bit 0x20 from each byte. We'd
-    //   need to prohibit one of the technically-legal characters '^' or '~' from header names
-    //   since they'd otherwise be ambiguous, but otherwise there is no ambiguity.
-#if _MSC_VER
-    return _stricmp(a.cStr(), b.cStr()) == 0;
-#else
-    return strcasecmp(a.cStr(), b.cStr()) == 0;
-#endif
+inline uint64_t asciiToLower(uint64_t word) {
+  // Lowercases each byte of `word` that is an ASCII capital letter, leaving the others as they
+  // are. Adding 0x3f to a byte's low seven bits sets its top bit if it is at least 'A', and adding
+  // 0x25 sets it if it is above 'Z'. Neither sum can carry into the next byte. Bytes with the top
+  // bit set are not letters and are left alone.
+  constexpr uint64_t LOW7 = 0x7f7f7f7f7f7f7f7full;
+  constexpr uint64_t HIGH = 0x8080808080808080ull;
+  uint64_t low = word & LOW7;
+  uint64_t atLeastA = low + 0x3f3f3f3f3f3f3f3full;
+  uint64_t aboveZ = low + 0x2525252525252525ull;
+  uint64_t upper = atLeastA & ~aboveZ & ~word & HIGH;
+  return word | (upper >> 2);
+}
+
+inline uint64_t loadWord(const char* p) {
+  uint64_t word;
+  memcpy(&word, p, sizeof(word));
+  return word;
+}
+
+inline uint64_t loadShortName(const char* p, size_t size) {
+  // Packs a name of 1 to 7 bytes into a word that depends on every byte. Two names of the same
+  // size give equal words exactly when their bytes are equal.
+  if (size >= 4) {
+    uint32_t first, last;
+    memcpy(&first, p, sizeof(first));
+    memcpy(&last, p + size - 4, sizeof(last));
+    return uint64_t(first) | (uint64_t(last) << 32);
   }
-};
+  return uint64_t(static_cast<byte>(p[0])) |
+         (uint64_t(static_cast<byte>(p[size / 2])) << 8) |
+         (uint64_t(static_cast<byte>(p[size - 1])) << 16);
+}
+
+template <typename Func>
+inline void forEachNameWord(kj::StringPtr name, Func&& func) {
+  // Calls `func(word)` with words that together cover every byte of `name`, the same ones for
+  // any name of the same size.
+  const char* p = name.begin();
+  size_t size = name.size();
+  if (size < 8) {
+    if (size > 0) func(loadShortName(p, size));
+    return;
+  }
+  const char* last = p + size - 8;
+  for (; p < last; p += 8) {
+    func(loadWord(p));
+  }
+  func(loadWord(last));
+}
+
+uint32_t hashHeaderName(kj::StringPtr name) {
+  uint64_t hash = name.size() * 0x9e3779b97f4a7c15ull;
+  forEachNameWord(name, [&](uint64_t word) {
+    hash = (hash ^ asciiToLower(word)) * 0xbf58476d1ce4e5b9ull;
+  });
+  hash ^= hash >> 31;
+  return static_cast<uint32_t>(hash) ^ static_cast<uint32_t>(hash >> 32);
+}
+
+bool headerNamesEqual(kj::StringPtr a, kj::StringPtr b) {
+  size_t size = a.size();
+  if (size != b.size()) return false;
+  if (size < 8) {
+    return size == 0 ||
+        asciiToLower(loadShortName(a.begin(), size)) ==
+        asciiToLower(loadShortName(b.begin(), size));
+  }
+  const char* p = a.begin();
+  const char* q = b.begin();
+  const char* last = p + size - 8;
+  for (; p < last; p += 8, q += 8) {
+    if (asciiToLower(loadWord(p)) != asciiToLower(loadWord(q))) return false;
+  }
+  return asciiToLower(loadWord(last)) == asciiToLower(loadWord(b.begin() + size - 8));
+}
 
 }  // namespace
-
-struct HttpHeaderTable::IdsByNameMap {
-  // TODO(perf): If we were cool we could maybe use a perfect hash here, since our hashtable is
-  //   static once built.
-
-  std::unordered_map<kj::StringPtr, uint, HeaderNameHash, HeaderNameHash> map;
-};
 
 HttpHeaderTable::Builder::Builder()
     : table(kj::heap<HttpHeaderTable>()) {
@@ -676,29 +726,55 @@ HttpHeaderTable::Builder::Builder()
 HttpHeaderId HttpHeaderTable::Builder::add(kj::StringPtr name) {
   requireValidHeaderName(name);
 
-  auto insertResult = table->idsByName->map.insert(std::make_pair(name, table->namesById.size()));
-  if (insertResult.second) {
-    table->namesById.add(name);
+  KJ_IF_SOME(id, table->stringToId(name)) {
+    return id;
   }
-  return HttpHeaderId(table, insertResult.first->second);
+  uint id = table->namesById.size();
+  table->namesById.add(name);
+  table->addName(name, id);
+  return HttpHeaderId(table, id);
 }
 
-HttpHeaderTable::HttpHeaderTable()
-    : idsByName(kj::heap<IdsByNameMap>()) {
+void HttpHeaderTable::addName(kj::StringPtr name, uint id) {
+  if ((id + 1) * 2 > nameSlots.size()) {
+    // Keep the table at most half full, so that probes stay short. Re-adding every name puts
+    // them back in id order, as they were.
+    auto newSlots = kj::heapArray<NameSlot>(kj::max(nameSlots.size() * 2, size_t(64)));
+    for (auto& slot: newSlots) slot = { 0, 0 };
+    nameSlots = kj::mv(newSlots);
+    for (uint i = 0; i < id; i++) {
+      addName(namesById[i], i);
+    }
+  }
+
+  uint32_t hash = hashHeaderName(name);
+  size_t mask = nameSlots.size() - 1;
+  for (size_t i = hash & mask;; i = (i + 1) & mask) {
+    if (nameSlots[i].idPlusOne == 0) {
+      nameSlots[i] = { hash, id + 1 };
+      return;
+    }
+  }
+}
+
+HttpHeaderTable::HttpHeaderTable() {
 #define ADD_HEADER(id, name) \
   namesById.add(name); \
-  idsByName->map.insert(std::make_pair(name, HttpHeaders::BuiltinIndices::id));
+  addName(name, HttpHeaders::BuiltinIndices::id);
   KJ_HTTP_FOR_EACH_BUILTIN_HEADER(ADD_HEADER);
 #undef ADD_HEADER
 }
 HttpHeaderTable::~HttpHeaderTable() noexcept(false) {}
 
 kj::Maybe<HttpHeaderId> HttpHeaderTable::stringToId(kj::StringPtr name) const {
-  auto iter = idsByName->map.find(name);
-  if (iter == idsByName->map.end()) {
-    return kj::none;
-  } else {
-    return HttpHeaderId(this, iter->second);
+  uint32_t hash = hashHeaderName(name);
+  size_t mask = nameSlots.size() - 1;
+  for (size_t i = hash & mask;; i = (i + 1) & mask) {
+    auto& slot = nameSlots[i];
+    if (slot.idPlusOne == 0) return kj::none;
+    if (slot.hash == hash && headerNamesEqual(namesById[slot.idPlusOne - 1], name)) {
+      return HttpHeaderId(this, slot.idPlusOne - 1);
+    }
   }
 }
 
@@ -718,45 +794,198 @@ bool HttpHeaders::isValidHeaderValue(kj::StringPtr value) {
 }
 
 HttpHeaders::HttpHeaders(const HttpHeaderTable& table)
-    : table(&table),
-      indexedHeaders(kj::heapArray<kj::StringPtr>(table.idCount())) {
+    : table(&table) {
   KJ_ASSERT(
       table.isReady(), "HttpHeaders object was constructed from "
       "HttpHeaderTable that wasn't fully built yet at the time of construction");
 }
 
-void HttpHeaders::clear() {
-  for (auto& header: indexedHeaders) {
-    header = nullptr;
+HttpHeaders::HttpHeaders(HttpHeaders&& other) noexcept
+    : table(other.table),
+      ownedStrings(kj::mv(other.ownedStrings)),
+      unindexedHeaders(kj::mv(other.unindexedHeaders)) {
+  takeIndexed(other);
+}
+
+HttpHeaders& HttpHeaders::operator=(HttpHeaders&& other) noexcept {
+  if (this != &other) {
+    table = other.table;
+    ownedStrings = kj::mv(other.ownedStrings);
+    unindexedHeaders = kj::mv(other.unindexedHeaders);
+    takeIndexed(other);
   }
+  return *this;
+}
+
+void HttpHeaders::takeIndexed(HttpHeaders& other) {
+  // Copies only the inline entries in use, so neither the copy nor the uninitialized rest of the
+  // room is ever read.
+  inlineCount = other.inlineCount;
+  spilled = other.spilled;
+  for (uint i = 0; i < inlineCount; i++) {
+    inlineIndexed[i] = other.inlineIndexed[i];
+  }
+  spilledIndexed = kj::mv(other.spilledIndexed);
+  for (auto i: kj::indices(setBits)) {
+    setBits[i] = other.setBits[i];
+  }
+
+  other.inlineCount = 0;
+  other.spilled = false;
+  kj::memzero(other.setBits);
+}
+
+void HttpHeaders::copyIndexedFrom(const HttpHeaders& other) {
+  auto entries = other.indexed();
+  if (entries.size() <= INLINE_INDEXED) {
+    if (entries.size() > 0) {
+      memcpy(inlineIndexed, entries.begin(), entries.size() * sizeof(IndexedHeader));
+    }
+    inlineCount = entries.size();
+  } else {
+    spilledIndexed.clear();
+    spilledIndexed.reserve(entries.size());
+    spilledIndexed.addAll(entries);
+    spilled = true;
+  }
+  for (auto i: kj::indices(setBits)) {
+    setBits[i] = other.setBits[i];
+  }
+}
+
+void HttpHeaders::putIndexed(uint id, const char* value, uint32_t size) {
+  // Sets the entry for `id`, keeping the entries in id order.
+  IndexedHeader header { id, size, value };
+  size_t at;
+  if (id < SET_BITS) {
+    at = countBelow(id);
+    uint64_t& word = setBits[id / 64];
+    uint64_t bit = uint64_t(1) << (id % 64);
+    if (word & bit) {
+      indexedMut()[at] = header;
+      return;
+    }
+    word |= bit;
+  } else {
+    auto all = indexed();
+    at = countBelow(SET_BITS);
+    while (at < all.size() && all[at].id < id) ++at;
+    if (at < all.size() && all[at].id == id) {
+      indexedMut()[at] = header;
+      return;
+    }
+  }
+
+  if (!spilled) {
+    if (inlineCount < INLINE_INDEXED) {
+      // Shift the later entries up one. There are few, so a loop beats a call to memmove().
+      for (size_t i = inlineCount; i > at; i--) {
+        inlineIndexed[i] = inlineIndexed[i - 1];
+      }
+      inlineIndexed[at] = header;
+      ++inlineCount;
+      return;
+    }
+    // Too many for the inline room: all of them move to the vector, kept from now on. Room for
+    // twice as many makes the move a single allocation.
+    spilledIndexed.reserve(INLINE_INDEXED * 2);
+    spilledIndexed.addAll(inlineIndexed, inlineIndexed + inlineCount);
+    inlineCount = 0;
+    spilled = true;
+  }
+
+  spilledIndexed.add(header);
+  auto moved = spilledIndexed.begin() + at;
+  memmove(moved + 1, moved, (spilledIndexed.size() - 1 - at) * sizeof(IndexedHeader));
+  *moved = header;
+}
+
+void HttpHeaders::appendIndexed(uint id, kj::StringPtr value) {
+  // Callers add in id order, so this always lands at the end.
+  putIndexed(id, value.begin(), static_cast<uint32_t>(value.size()));
+}
+
+void HttpHeaders::eraseIndexed(size_t index) {
+  auto all = indexedMut();
+  uint id = all[index].id;
+  if (id < SET_BITS) {
+    setBits[id / 64] &= ~(uint64_t(1) << (id % 64));
+  }
+  memmove(all.begin() + index, all.begin() + index + 1,
+      (all.size() - index - 1) * sizeof(IndexedHeader));
+  if (spilled) {
+    spilledIndexed.removeLast();
+  } else {
+    --inlineCount;
+  }
+}
+
+void HttpHeaders::setIndexed(uint id, kj::StringPtr value) {
+  if (value == nullptr) {
+    // As a slot per id held: an empty value is no value.
+    unsetIndexed(id);
+    return;
+  }
+  KJ_REQUIRE(static_cast<uint32_t>(value.size()) == value.size(), "HTTP header value too long",
+      value.size());
+  putIndexed(id, value.begin(), static_cast<uint32_t>(value.size()));
+}
+
+void HttpHeaders::unsetIndexed(uint id) {
+  auto header = findIndexed(id);
+  if (header != nullptr) {
+    eraseIndexed(header - indexed().begin());
+  }
+}
+
+void HttpHeaders::clear() {
+  inlineCount = 0;
+  spilled = false;
+  spilledIndexed.clear();
+  kj::memzero(setBits);
 
   unindexedHeaders.clear();
 }
 
 size_t HttpHeaders::size() const {
-  size_t result = unindexedHeaders.size();
-  for (auto i: kj::indices(indexedHeaders)) {
-    if (indexedHeaders[i] != nullptr) {
-      ++result;
-    }
-  }
-  return result;
+  return indexed().size() + unindexedHeaders.size();
 }
 
 HttpHeaders HttpHeaders::clone() const {
   HttpHeaders result(*table);
 
-  for (auto i: kj::indices(indexedHeaders)) {
-    if (indexedHeaders[i] != nullptr) {
-      result.indexedHeaders[i] = result.cloneToOwn(indexedHeaders[i]);
-    }
-  }
+  // Copy every string into one allocation.
+  size_t total = 0;
+  size_t unindexedCount = 0;
+  forEachIndexed([&](uint, kj::StringPtr value) {
+    total += value.size() + 1;
+  });
+  forEachUnindexed([&](const Header& header) {
+    total += header.name.size() + header.value.size() + 2;
+    ++unindexedCount;
+  });
+  if (total == 0) return result;
 
-  result.unindexedHeaders.resize(unindexedHeaders.size());
-  for (auto i: kj::indices(unindexedHeaders)) {
-    result.unindexedHeaders[i].name = result.cloneToOwn(unindexedHeaders[i].name);
-    result.unindexedHeaders[i].value = result.cloneToOwn(unindexedHeaders[i].value);
-  }
+  auto storage = kj::heapArray<char>(total);
+  char* pos = storage.begin();
+  auto copy = [&](kj::StringPtr str) {
+    memcpy(pos, str.begin(), str.size());
+    pos[str.size()] = '\0';
+    kj::StringPtr copied(pos, str.size());
+    pos += str.size() + 1;
+    return copied;
+  };
+
+  forEachIndexed([&](uint id, kj::StringPtr value) {
+    result.appendIndexed(id, copy(value));
+  });
+  result.unindexedHeaders.reserve(unindexedCount);
+  forEachUnindexed([&](const Header& header) {
+    auto name = copy(header.name);
+    result.unindexedHeaders.add(Header { name, copy(header.value) });
+  });
+  KJ_ASSERT(pos == storage.end());
+  result.ownedStrings.add(kj::mv(storage));
 
   return result;
 }
@@ -764,15 +993,10 @@ HttpHeaders HttpHeaders::clone() const {
 HttpHeaders HttpHeaders::cloneShallow() const {
   HttpHeaders result(*table);
 
-  for (auto i: kj::indices(indexedHeaders)) {
-    if (indexedHeaders[i] != nullptr) {
-      result.indexedHeaders[i] = indexedHeaders[i];
-    }
-  }
-
-  result.unindexedHeaders.resize(unindexedHeaders.size());
-  for (auto i: kj::indices(unindexedHeaders)) {
-    result.unindexedHeaders[i] = unindexedHeaders[i];
+  result.copyIndexedFrom(*this);
+  if (unindexedHeaders.size() > 0) {
+    result.unindexedHeaders.reserve(unindexedHeaders.size());
+    result.unindexedHeaders.addAll(unindexedHeaders);
   }
 
   return result;
@@ -807,7 +1031,7 @@ void HttpHeaders::setPtr(HttpHeaderId id, kj::StringPtr value) {
   id.requireFrom(*table);
   requireValidHeaderValue(value, id);
 
-  indexedHeaders[id.id] = value;
+  setIndexed(id.id, value);
 }
 
 void HttpHeaders::set(HttpHeaderId id, kj::String&& value) {
@@ -843,8 +1067,9 @@ void HttpHeaders::add(kj::String&& name, kj::String&& value) {
 
 void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
   KJ_IF_SOME(id, table->stringToId(name)) {
-    if (indexedHeaders[id.id] == nullptr) {
-      indexedHeaders[id.id] = value;
+    auto existing = findIndexed(id.id);
+    if (existing == nullptr) {
+      setIndexed(id.id, value);
     } else {
       // Duplicate HTTP headers are equivalent to the values being separated by a comma.
 
@@ -858,14 +1083,30 @@ void HttpHeaders::addNoCheck(kj::StringPtr name, kj::StringPtr value) {
         // TODO(cleanup): Maybe HttpHeaders should just special-case set-cookie in general?
         unindexedHeaders.add(Header {name, value});
       } else {
-        auto concat = kj::str(indexedHeaders[id.id], ", ", value);
-        indexedHeaders[id.id] = concat;
+        auto concat = kj::str(existing->get(), ", ", value);
+        setIndexed(id.id, concat);
         ownedStrings.add(concat.releaseArray());
       }
     }
   } else {
     unindexedHeaders.add(Header {name, value});
   }
+}
+
+void HttpHeaders::unset(kj::StringPtr name) {
+  KJ_IF_SOME(id, table->stringToId(name)) {
+    unsetIndexed(id.id);
+  }
+
+  // Duplicate Set-Cookie headers are kept unindexed even though the name may be indexed, so look
+  // there too.
+  size_t kept = 0;
+  for (auto i: kj::indices(unindexedHeaders)) {
+    if (!headerNamesEqual(unindexedHeaders[i].name, name)) {
+      unindexedHeaders[kept++] = unindexedHeaders[i];
+    }
+  }
+  unindexedHeaders.truncate(kept);
 }
 
 void HttpHeaders::takeOwnership(kj::String&& string) {
@@ -983,14 +1224,37 @@ static kj::Maybe<uint64_t> consumeNumber64(const char*& ptr) {
   }
 }
 
-static kj::StringPtr consumeLine(char*& ptr, bool* sawFolding = nullptr) {
+static inline bool wordHasLineEnd(uint64_t word) {
+  // Whether any byte of `word` is '\0', '\r' or '\n'. A byte of `x` is zero exactly when the
+  // classic test below sets its top bit; it can set the top bit of a higher byte too, but only
+  // when a lower one is zero, so the result is still exact for "any".
+  constexpr uint64_t ONES = 0x0101010101010101ull;
+  constexpr uint64_t HIGH = 0x8080808080808080ull;
+  auto hasZero = [](uint64_t x) { return (x - ONES) & ~x & HIGH; };
+  return (hasZero(word) | hasZero(word ^ (ONES * '\r')) | hasZero(word ^ (ONES * '\n'))) != 0;
+}
+
+static kj::StringPtr consumeLine(char*& ptr, bool* sawFolding = nullptr,
+                                 const char* end = nullptr) {
   // If `sawFolding` is non-null, it is set to true if an obsolete "line folding" continuation was
   // encountered. Callers that parse header fields use this to reject the message (see
   // parseHeaders()).
+  //
+  // If `end` is non-null, it points to the '\0' that terminates the text, and the scan skips
+  // eight bytes at a time while none of them can end the line. It never reads past `end`.
   char* start = skipSpace(ptr);
   char* p = start;
 
   for (;;) {
+    if (end != nullptr) {
+      while (end - p >= 8) {
+        uint64_t word;
+        memcpy(&word, p, sizeof(word));
+        if (wordHasLineEnd(word)) break;
+        p += 8;
+      }
+    }
+
     switch (*p) {
       case '\0':
         ptr = p;
@@ -1144,7 +1408,7 @@ HttpHeaders::RequestConnectOrProtocolError HttpHeaders::tryParseRequestOrConnect
   }
 
   // Ignore rest of line. Don't care about "HTTP/1.1" or whatever.
-  consumeLine(ptr);
+  consumeLine(ptr, nullptr, end);
 
   if (!parseHeaders(ptr, end)) {
     return ProtocolError { 400, "Bad Request",
@@ -1204,7 +1468,7 @@ bool HttpHeaders::parseHeaders(char* ptr, char* end) {
   while (*ptr != '\0') {
     KJ_IF_SOME(name, consumeHeaderName(ptr)) {
       bool sawFolding = false;
-      kj::StringPtr line = consumeLine(ptr, &sawFolding);
+      kj::StringPtr line = consumeLine(ptr, &sawFolding, end);
       if (sawFolding) {
         // Obsolete line folding (a continuation line beginning with whitespace). RFC 9112 section
         // 7.1.4 says a server MUST either reject such a message with 400 (Bad Request) or replace
@@ -1258,16 +1522,26 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
   if (word1 != nullptr) {
     size += word1.size() + word2.size() + word3.size() + 4;
   }
-  KJ_ASSERT(connectionHeaders.size() <= indexedHeaders.size());
-  for (auto i: kj::indices(indexedHeaders)) {
-    kj::StringPtr value = i < connectionHeaders.size() ? connectionHeaders[i] : indexedHeaders[i];
-    if (value != nullptr) {
-      size += table->idToString(HttpHeaderId(table, i)).size() + value.size() + 4;
+  KJ_ASSERT(connectionHeaders.size() <= table->idCount());
+  // The connection headers stand in for the first ids' values; the set ones follow.
+  auto forEachValue = [&](auto&& func) {
+    for (auto i: kj::indices(connectionHeaders)) {
+      if (connectionHeaders[i] != nullptr) {
+        func(static_cast<uint>(i), connectionHeaders[i]);
+      }
     }
-  }
-  for (auto& header: unindexedHeaders) {
+    forEachIndexed([&](uint id, kj::StringPtr value) {
+      if (id >= connectionHeaders.size()) {
+        func(id, value);
+      }
+    });
+  };
+  forEachValue([&](uint i, kj::StringPtr value) {
+    size += table->idToString(HttpHeaderId(table, i)).size() + value.size() + 4;
+  });
+  forEachUnindexed([&](const Header& header) {
     size += header.name.size() + header.value.size() + 4;
-  }
+  });
 
   String result = heapString(size);
   char* ptr = result.begin();
@@ -1275,15 +1549,12 @@ kj::String HttpHeaders::serialize(kj::ArrayPtr<const char> word1,
   if (word1 != nullptr) {
     ptr = kj::_::fill(ptr, word1, space, word2, space, word3, newline);
   }
-  for (auto i: kj::indices(indexedHeaders)) {
-    kj::StringPtr value = i < connectionHeaders.size() ? connectionHeaders[i] : indexedHeaders[i];
-    if (value != nullptr) {
-      ptr = kj::_::fill(ptr, table->idToString(HttpHeaderId(table, i)), colon, value, newline);
-    }
-  }
-  for (auto& header: unindexedHeaders) {
+  forEachValue([&](uint i, kj::StringPtr value) {
+    ptr = kj::_::fill(ptr, table->idToString(HttpHeaderId(table, i)), colon, value, newline);
+  });
+  forEachUnindexed([&](const Header& header) {
     ptr = kj::_::fill(ptr, header.name, colon, header.value, newline);
-  }
+  });
   ptr = kj::_::fill(ptr, newline);
 
   KJ_ASSERT(ptr == result.end());
