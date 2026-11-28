@@ -1112,6 +1112,154 @@ KJ_TEST("promise cap resolves between starting request and sending it") {
   KJ_EXPECT(n2 == 1, n2);
 }
 
+void stayBusy(kj::WaitScope& waitScope) {
+  // Lets the event loop run for many turns without ever going idle.
+  for (auto i KJ_UNUSED: kj::zeroTo(64)) {
+    kj::yield().wait(waitScope);
+  }
+}
+
+struct DueWrite {
+  // Watches one WriteBatchTrigger::whenDue() promise.
+
+  bool due = false;
+  kj::Promise<void> task;
+
+  DueWrite(WriteBatchTrigger& trigger, size_t queued)
+      : task(trigger.whenDue(queued).then([this]() { due = true; }).eagerlyEvaluate(nullptr)) {}
+};
+
+KJ_TEST("WriteBatchTrigger without a limit is due only when the event loop goes idle") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+  KJ_ASSERT(WriteBatchTrigger::getLimit().max == 0);
+
+  WriteBatchTrigger trigger;
+  DueWrite write(trigger, 1);
+  trigger.queueGrew(1000);
+  stayBusy(waitScope);
+  KJ_EXPECT(!write.due);
+
+  waitScope.poll();
+  KJ_EXPECT(write.due);
+}
+
+KJ_TEST("WriteBatchTrigger with a limit is due when the queue fills, and adapts the limit") {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+  WriteBatchTrigger::setLimit({.first = 2, .max = 8});
+  KJ_DEFER(WriteBatchTrigger::setLimit({}));
+
+  WriteBatchTrigger trigger;
+
+  // Starts a write with `queued` messages waiting, lets the queue grow to `grownTo` while the
+  // loop stays busy, and checks that only the last message makes the write due.
+  auto expectFullAt = [&](size_t queued, size_t grownTo) {
+    KJ_CONTEXT(queued, grownTo);
+    DueWrite write(trigger, queued);
+    while (queued < grownTo) {
+      stayBusy(waitScope);
+      KJ_EXPECT(!write.due);
+      trigger.queueGrew(++queued);
+    }
+    stayBusy(waitScope);
+    KJ_EXPECT(write.due);
+    trigger.writeStarted();
+  };
+
+  // The limit starts at 2 and doubles each time a queue fills, up to 8.
+  expectFullAt(1, 2);
+  expectFullAt(1, 4);
+  expectFullAt(1, 8);
+  expectFullAt(1, 8);
+
+  // A queue that filled while the previous write was in progress is due at once.
+  expectFullAt(8, 8);
+
+  // Once the loop has gone idle, the limit is 2 again, whether or not a write was waiting.
+  waitScope.poll();
+  expectFullAt(1, 2);
+  {
+    DueWrite write(trigger, 3);
+    stayBusy(waitScope);
+    KJ_EXPECT(!write.due);
+    waitScope.poll();
+    KJ_EXPECT(write.due);
+    trigger.writeStarted();
+  }
+  expectFullAt(1, 2);
+
+  // Growth reported after a write has taken the queue belongs to no write.
+  trigger.queueGrew(100);
+  DueWrite write(trigger, 1);
+  stayBusy(waitScope);
+  KJ_EXPECT(!write.due);
+}
+
+KJ_TEST("TwoPartyVatNetwork writes a full queue before the event loop goes idle") {
+  KJ_DEFER(WriteBatchTrigger::setLimit({}));
+
+  for (bool limited: {false, true}) {
+    KJ_CONTEXT(limited);
+    WriteBatchTrigger::setLimit(
+        limited ? WriteBatchTrigger::Limit{.first = 2, .max = 4} : WriteBatchTrigger::Limit{});
+
+    kj::EventLoop loop;
+    kj::WaitScope waitScope(loop);
+    auto pipe = kj::newTwoWayPipe();
+
+    int callCount = 0;
+    TwoPartyClient client(*pipe.ends[0]);
+    TwoPartyClient server(*pipe.ends[1], kj::heap<TestInterfaceImpl>(callCount),
+        rpc::twoparty::Side::SERVER);
+
+    // Get the bootstrap exchange out of the way, and everything it queued written.
+    auto cap = client.bootstrap().castAs<test::TestInterface>();
+    cap.whenResolved().wait(waitScope);
+    waitScope.poll();
+
+    kj::Vector<kj::Promise<void>> calls;
+    auto call = [&](uint count) {
+      for (auto i KJ_UNUSED: kj::zeroTo(count)) {
+        auto request = cap.fooRequest();
+        request.setI(123);
+        request.setJ(true);
+        calls.add(request.send().ignoreResult());
+      }
+      stayBusy(waitScope);
+    };
+    // How many calls have reached the server, given how many would have with the limit.
+    auto expectDelivered = [&](int withLimit, int without) {
+      KJ_EXPECT(callCount == (limited ? withLimit : without), callCount, withLimit, without);
+    };
+
+    // One call is not a full queue, so it waits while the loop stays busy. The second fills it.
+    call(1);
+    expectDelivered(0, 0);
+    call(1);
+    expectDelivered(2, 0);
+
+    // That write started full, so the limit is now 4, where it stays.
+    call(3);
+    expectDelivered(2, 0);
+    call(1);
+    expectDelivered(6, 0);
+    call(3);
+    expectDelivered(6, 0);
+
+    // When the loop goes idle everything is written, and the limit is 2 again.
+    waitScope.poll();
+    expectDelivered(9, 9);
+    call(1);
+    expectDelivered(9, 9);
+    call(1);
+    expectDelivered(11, 9);
+
+    kj::joinPromises(calls.releaseAsArray()).wait(waitScope);
+    KJ_EXPECT(callCount == 11);
+  }
+}
+
 KJ_TEST("write error propagates to read error") {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
