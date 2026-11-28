@@ -359,6 +359,8 @@ public:
     return kj::none;
   };
 
+  kj::Maybe<capnp::WebSocket::Client> getOut() { return out; }
+
 private:
   kj::Maybe<kj::Own<kj::WebSocket>> in;   // One end of a WebSocketPipe, used only for receiving.
   kj::Maybe<capnp::WebSocket::Client> out;  // Used only for sending.
@@ -1099,6 +1101,28 @@ private:
 
 capnp::HttpService::Client HttpOverCapnpFactory::kjToCapnp(kj::Own<kj::HttpService> service) {
   return kj::heap<CapnpToKjHttpServiceAdapter>(*this, kj::mv(service));
+}
+
+kj::Maybe<capnp::WebSocket::Client> HttpOverCapnpFactory::tryGetDownSocket(
+    kj::WebSocket& webSocket) {
+  KJ_IF_SOME(adapter, kj::dynamicDowncastIfAvailable<KjToCapnpWebSocketAdapter>(webSocket)) {
+    return adapter.getOut();
+  }
+  return kj::none;
+}
+
+HttpOverCapnpFactory::ServerWebSocket HttpOverCapnpFactory::newServerWebSocket(
+    capnp::WebSocket::Client downSocket) {
+  // Mirrors HttpServiceResponseImpl::acceptWebSocket(), with `downSocket` already in hand.
+  auto pipe = kj::newWebSocketPipe();
+  auto shorteningPaf = kj::newPromiseAndFulfiller<kj::Promise<Capability::Client>>();
+  capnp::WebSocket::Client upSocket = kj::heap<CapnpToKjWebSocketAdapter>(
+      kj::mv(pipe.ends[0]), kj::mv(shorteningPaf.promise));
+  return ServerWebSocket {
+    .webSocket = kj::heap<KjToCapnpWebSocketAdapter>(
+        kj::mv(pipe.ends[1]), kj::mv(downSocket), kj::mv(shorteningPaf.fulfiller)),
+    .upSocket = kj::mv(upSocket),
+  };
 }
 
 // =======================================================================================

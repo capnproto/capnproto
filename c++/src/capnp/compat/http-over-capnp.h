@@ -82,6 +82,26 @@ public:
   kj::HttpHeaders capnpToKj(capnp::List<capnp::HttpHeader>::Reader capnpHeaders) const;
   // Returned headers may alias into `capnpHeaders`.
 
+  static kj::Maybe<capnp::WebSocket::Client> tryGetDownSocket(kj::WebSocket& webSocket);
+  // If `webSocket` was returned by `acceptWebSocket()` on the response of a request that arrived
+  // through `kjToCapnp()`, or by `newServerWebSocket()`, returns the capability it sends messages
+  // to: the `downSocket` that the client returned from `startWebSocket()`. Returns kj::none for
+  // any other WebSocket, including one wrapped by another implementation, and once the WebSocket
+  // has been disconnected.
+
+  struct ServerWebSocket {
+    kj::Own<kj::WebSocket> webSocket;
+    // Receives the messages the client sends to `upSocket`, and sends messages to `downSocket`.
+
+    capnp::WebSocket::Client upSocket;
+    // The capability the client sends its messages to.
+  };
+
+  static ServerWebSocket newServerWebSocket(capnp::WebSocket::Client downSocket);
+  // Creates the server end of a WebSocket carried over capnp, as `acceptWebSocket()` does for a
+  // response, but without a request: for example, to continue a WebSocket on a new server whose
+  // client already hosts `downSocket`. Hand `upSocket` to the client to complete it.
+
 private:
   ByteStreamFactory& streamFactory;
   const kj::HttpHeaderTable& headerTable;
