@@ -25,6 +25,18 @@ env:
     }
 
 jobs:
+  Bazel-labels:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: no self-references by module name
+        run: |
+          # Bazel files must use repository-relative labels so the repository also loads under
+          # another name, for example from http_archive.
+          if grep -rn --include='*.bazel' --include='*.bzl' '@capnp-cpp' c++; then
+            echo "Use repository-relative labels, not @capnp-cpp//" >&2
+            exit 1
+          fi
   Linux-musl:
     runs-on: ubuntu-26.04
     # We depend on both clang and libc++. We use Alpine Linux 3.23 which supports LLVM 21.
