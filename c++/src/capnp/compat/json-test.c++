@@ -216,6 +216,27 @@ KJ_TEST("null pointer field") {
   KJ_EXPECT(!root.hasTestBase64());
 }
 
+KJ_TEST("null pointer union member") {
+  // A null pointer field that is a union member must still select that member, so that decoding
+  // the encoder's output preserves which member was set.
+
+  JsonCodec json;
+  MallocMessageBuilder message;
+  auto root = message.initRoot<TestBase64Union>();
+  toDynamic(root).clear("bar");
+  KJ_ASSERT(root.isBar());
+  KJ_ASSERT(!root.hasBar());
+
+  auto encoded = json.encode(root);
+  KJ_EXPECT(encoded == "{\"bar\":null}", encoded);
+
+  MallocMessageBuilder message2;
+  auto root2 = message2.initRoot<TestBase64Union>();
+  json.decode(encoded, root2);
+  KJ_EXPECT(root2.isBar());
+  KJ_EXPECT(!root2.hasBar());
+}
+
 KJ_TEST("decode all types") {
   JsonCodec json;
   json.setHasMode(HasMode::NON_DEFAULT);
