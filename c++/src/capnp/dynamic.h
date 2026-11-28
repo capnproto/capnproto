@@ -32,6 +32,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include "schema.h"
 #include "layout.h"
 #include "any.h"
