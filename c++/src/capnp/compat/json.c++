@@ -516,6 +516,9 @@ Orphan<DynamicValue> JsonCodec::decode(
       }
     case schema::Type::ENUM:
       switch (input.which()) {
+        case JsonValue::NUMBER:
+          return DynamicEnum(type.asEnum(),
+              DynamicValue::Reader(input.getNumber()).as<uint16_t>());
         case JsonValue::STRING:
           return DynamicEnum(type.asEnum().getEnumerantByName(input.getString()));
         default:
