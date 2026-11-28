@@ -350,25 +350,38 @@ typedef unsigned char byte;
 
 namespace _ {  // private
 
-KJ_NORETURN(void inlineRequireFailure(
-    const char* file, int line, const char* expectation, const char* macroArgs,
-    const char* message = nullptr));
+struct PackedSite {
+  // Where a check is, packed into one string literal by KJ_PACKED_SITE_: the file, line, condition
+  // (empty if none) and the names of the macro's arguments, each followed by a NUL. The failure
+  // path passes one pointer rather than four arguments, and since the literal contains no
+  // pointers, it doesn't need to be relocated when the program is loaded, unlike a struct of
+  // pointers in static storage. All checks but the _AT macros of kj/debug.h use one.
+  //
+  // KJ_LOG, KJ_EXCEPTION and KJ_CONTEXT pass the file and line separately instead: they have no
+  // static struct to replace, and the literal would have its own copy of the file name (as it
+  // contains NULs, it isn't merged with `__FILE__`), costing more .rodata than it saves .text.
+  const char* text;
+};
 
+KJ_NORETURN(void inlineRequireFailure(PackedSite site, const char* message = nullptr));
+KJ_NORETURN(void inlineRequireFailure(PackedSite site, const char* message, size_t arg1));
 KJ_NORETURN(void inlineRequireFailure(
-    const char* file, int line, const char* expectation, const char* macroArgs,
-    const char* message, size_t arg1));
-
+    PackedSite site, const char* message, size_t arg1, size_t arg2));
 KJ_NORETURN(void inlineRequireFailure(
-    const char* file, int line, const char* expectation, const char* macroArgs,
-    const char* message, size_t arg1, size_t arg2));
-
-KJ_NORETURN(void inlineRequireFailure(
-    const char* file, int line, const char* expectation, const char* macroArgs,
-    const char* message, size_t arg1, size_t arg2, size_t arg3));
+    PackedSite site, const char* message, size_t arg1, size_t arg2, size_t arg3));
 
 KJ_NORETURN(void unreachable());
 
 }  // namespace _ (private)
+
+#define KJ_PACKED_SITE_(condition, macroArgs) \
+  (::kj::_::PackedSite { \
+    __FILE__ "\0" KJ_STRINGIZE_(__LINE__) "\0" condition "\0" macroArgs })
+// The location of a check as a kj::_::PackedSite. `condition` must be a string literal, empty if
+// there is none.
+
+#define KJ_STRINGIZE_(x) KJ_STRINGIZE_IMPL_(x)
+#define KJ_STRINGIZE_IMPL_(x) #x
 
 #if _MSC_VER && !defined(__clang__) && (!defined(_MSVC_TRADITIONAL) || _MSVC_TRADITIONAL)
 #define KJ_MSVC_TRADITIONAL_CPP 1
@@ -388,11 +401,11 @@ KJ_NORETURN(void unreachable());
 #if KJ_MSVC_TRADITIONAL_CPP
 #define KJ_IREQUIRE(condition, ...) \
     if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \
-        __FILE__, __LINE__, #condition, "" #__VA_ARGS__, __VA_ARGS__)
+        KJ_PACKED_SITE_(#condition, "" #__VA_ARGS__), __VA_ARGS__)
 #else
 #define KJ_IREQUIRE(condition, ...) \
     if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \
-        __FILE__, __LINE__, #condition, #__VA_ARGS__, ##__VA_ARGS__)
+        KJ_PACKED_SITE_(#condition, #__VA_ARGS__), ##__VA_ARGS__)
 #endif
 // Version of KJ_REQUIRE() which is safe to use in headers that are #included by users.  Used to
 // check preconditions inside inline methods.  Unlike KJ_REQUIRE(), it does not require including
