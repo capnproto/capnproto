@@ -41,14 +41,14 @@ def cc_capnp_library(
         outs = hdrs + srcs_cpp,
         src_prefix = src_prefix,
         visibility = visibility,
-        capnpc_plugin = "@capnp-cpp//src/capnp:capnpc-c++",
+        capnpc_plugin = Label("//src/capnp:capnpc-c++"),
         target_compatible_with = target_compatible_with,
     )
     cc_library(
         name = name,
         srcs = srcs_cpp,
         hdrs = hdrs,
-        deps = deps + ["@capnp-cpp//src/capnp:capnp_runtime"],
+        deps = deps + [Label("//src/capnp:capnp_runtime")],
         # Allows us to avoid building the library archive when using start_end_lib
         tags = tags,
         visibility = visibility,

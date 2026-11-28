@@ -1,8 +1,8 @@
 """Bazel rule to compile .capnp files into rust."""
 
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("@capnp-cpp//src/capnp:capnp_gen.bzl", "capnp_gen", _capnp_provider = "capnp_provider")
 load("@rules_rust//rust:defs.bzl", "rust_library")
+load(":capnp_gen.bzl", "capnp_gen", _capnp_provider = "capnp_provider")
 
 capnp_provider = _capnp_provider
 
